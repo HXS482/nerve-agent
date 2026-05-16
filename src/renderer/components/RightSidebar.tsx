@@ -218,58 +218,6 @@ function FlowView() {
   )
 }
 
-function formatSize(bytes: number): string {
-  if (bytes === 0) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-function formatTime(ms: number): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-}
-
-function FileIcon({ name, isDirectory }: { name: string; isDirectory: boolean }) {
-  if (isDirectory) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#3b82f6', flexShrink: 0 }}>
-        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-      </svg>
-    )
-  }
-  const ext = name.split('.').pop()?.toLowerCase()
-  const color = ext === 'ts' || ext === 'tsx' ? '#3178c6'
-    : ext === 'js' || ext === 'jsx' || ext === 'mjs' ? '#f7df1e'
-    : ext === 'json' ? '#5a5a5a'
-    : ext === 'css' || ext === 'scss' || ext === 'less' ? '#1572b6'
-    : ext === 'html' ? '#e34f26'
-    : ext === 'md' || ext === 'mdx' ? '#083fa1'
-    : ext === 'yml' || ext === 'yaml' ? '#6b6b6d'
-    : ext === 'toml' ? '#8bc34a'
-    : ext === 'svg' ? '#ffb13b'
-    : ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'gif' || ext === 'webp' ? '#c84b8b'
-    : ext === 'woff' || ext === 'woff2' || ext === 'ttf' || ext === 'otf' || ext === 'eot' ? '#46bdc6'
-    : ext === 'ps1' || ext === 'sh' || ext === 'bat' || ext === 'cmd' ? '#4eaa25'
-    : ext === 'lock' ? '#cb3837'
-    : undefined
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-      <polyline points="14,2 14,8 20,8" />
-    </svg>
-  )
-}
-
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.next', '.venv', 'venv', '__pycache__', '.idea', '.vscode', 'coverage', '.turbo', '.nx', 'out', 'target', '.gradle', 'build', '.cache'])
-
 function FolderView() {
   const config = useChatStore((s) => s.config)
   const [cwd, setCwd] = useState(config.cwd || '')
@@ -284,6 +232,7 @@ function FolderView() {
     try {
       const res = await (window as any).claude.listDir(dir)
       if (res.success) {
+        const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.next', '.venv', 'venv', '__pycache__', '.idea', '.vscode', 'coverage', '.turbo', '.nx', 'out', 'target', '.gradle', 'build', '.cache'])
         setEntries(res.entries.filter((e: DirEntry) => !e.isDirectory || !SKIP_DIRS.has(e.name)))
       } else {
         setError(res.error || 'Failed to read directory')
@@ -308,102 +257,215 @@ function FolderView() {
   const goBack = useCallback(() => {
     if (history.length === 0) return
     const prev = history[history.length - 1]
-    setHistory((prev) => prev.slice(0, -1))
+    setHistory((p) => p.slice(0, -1))
     setCwd(prev)
   }, [history])
+
+  const goHome = useCallback(() => {
+    setHistory([])
+    setCwd(config.cwd || '')
+  }, [config.cwd])
+
+  const refresh = useCallback(() => {
+    if (cwd) loadDir(cwd)
+  }, [cwd, loadDir])
 
   const openFile = useCallback((filePath: string) => {
     ;(window as any).claude.openInBrowser('file', filePath)
   }, [])
 
+  function formatSize(bytes: number): string {
+    if (bytes === 0) return ''
+    const units = ['B', 'KB', 'MB', 'GB']
+    let i = 0
+    let size = bytes
+    while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
+    return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  }
+
+  function formatTime(ms: number): string {
+    if (!ms) return ''
+    const d = new Date(ms)
+    const now = new Date()
+    const diff = now.getTime() - d.getTime()
+    if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  }
+
+  function FileIcon({ name, isDirectory }: { name: string; isDirectory: boolean }) {
+    if (isDirectory) {
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#3b82f6', flexShrink: 0, marginTop: -1 }}>
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+      )
+    }
+    const ext = name.split('.').pop()?.toLowerCase()
+    const color = ext === 'ts' || ext === 'tsx' ? '#3178c6'
+      : ext === 'js' || ext === 'jsx' || ext === 'mjs' ? '#f7df1e'
+      : ext === 'json' ? '#5a5a5a'
+      : ext === 'css' || ext === 'scss' || ext === 'less' ? '#1572b6'
+      : ext === 'html' ? '#e34f26'
+      : ext === 'md' || ext === 'mdx' ? '#083fa1'
+      : ext === 'yml' || ext === 'yaml' ? '#6b6b6d'
+      : ext === 'toml' ? '#8bc34a'
+      : ext === 'svg' ? '#ffb13b'
+      : ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'gif' || ext === 'webp' ? '#c84b8b'
+      : ext === 'woff' || ext === 'woff2' || ext === 'ttf' || ext === 'otf' || ext === 'eot' ? '#46bdc6'
+      : ext === 'ps1' || ext === 'sh' || ext === 'bat' || ext === 'cmd' ? '#4eaa25'
+      : ext === 'lock' ? '#cb3837'
+      : undefined
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: -1 }}>
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <polyline points="14,2 14,8 20,8" />
+      </svg>
+    )
+  }
+
   const rootParts = cwd.split(/[\\/]/).filter(Boolean)
   const hasDrive = cwd.match(/^[A-Za-z]:/)
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 shrink-0">
-        <div className="text-[11px] uppercase tracking-wider text-[var(--text-outline-variant)] font-medium">Explorer</div>
-        {history.length > 0 && (
+    <div className="flex flex-col h-full" style={{ minHeight: 0 }}>
+      {/* Header row — matches FlowView pattern */}
+      <div className="flex items-center justify-between px-3 py-1.5 shrink-0" style={{ minHeight: 32 }}>
+        <div className="flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+          </svg>
+          <span className="text-[11px] uppercase tracking-wider font-medium" style={{ color: 'var(--text-outline-variant)' }}>Explorer</span>
+        </div>
+        <div className="flex items-center gap-0.5">
           <button
-            onClick={goBack}
-            className="text-[11px] text-[var(--text-outline-variant)] hover:text-[var(--text-on-surface)] transition-colors"
+            onClick={refresh}
+            className="flex items-center justify-center w-[22px] h-[22px] rounded hover:bg-[var(--bg-surface-container)] transition-colors"
+            style={{ color: 'var(--text-outline-variant)' }}
+            title="Refresh"
           >
-            Back
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+            </svg>
           </button>
-        )}
+          <button
+            onClick={goHome}
+            className="flex items-center justify-center w-[22px] h-[22px] rounded hover:bg-[var(--bg-surface-container)] transition-colors"
+            style={{ color: 'var(--text-outline-variant)' }}
+            title="Project root"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Breadcrumb */}
-      <div className="px-3 pb-2 shrink-0">
-        <div
-          className="flex items-center gap-1 overflow-x-auto scrollbar-hide text-[11px]"
-          style={{ color: 'var(--text-outline-variant)' }}
+      {/* Navigation + breadcrumb bar */}
+      <div className="flex items-center gap-1 px-2.5 pb-2 shrink-0">
+        <button
+          onClick={goBack}
+          disabled={history.length === 0}
+          className="flex items-center justify-center w-[22px] h-[22px] rounded transition-colors shrink-0"
+          style={{
+            color: history.length === 0 ? 'var(--text-outline-variant)' : 'var(--text-on-surface)',
+            opacity: history.length === 0 ? 0.3 : 1,
+          }}
+          title="Back"
         >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+        <div className="flex-1 flex items-center gap-0.5 overflow-x-auto scrollbar-hide text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
           {hasDrive && (
-            <button
-              onClick={() => { setHistory([]); setCwd(hasDrive[0] + ':\\') }}
-              className="hover:text-[var(--text-on-surface)] transition-colors shrink-0 font-medium"
-            >
-              {hasDrive[0]}
-            </button>
+            <span className="flex items-center gap-0.5 shrink-0">
+              <button
+                onClick={() => { setHistory([]); setCwd(hasDrive[0] + ':\\') }}
+                className="hover:text-[var(--text-on-surface)] transition-colors font-medium whitespace-nowrap"
+              >
+                {hasDrive[0]}
+              </button>
+              <span style={{ opacity: 0.3 }}>/</span>
+            </span>
           )}
           {rootParts.slice(hasDrive ? 1 : 0).map((part, i) => {
             const pathUpTo = hasDrive
               ? hasDrive[0] + ':\\' + rootParts.slice(2, i + 2).join('\\')
               : rootParts.slice(0, i + 1).join('/')
             return (
-              <span key={i} className="flex items-center gap-1 min-w-0">
-                <span style={{ opacity: 0.4, flexShrink: 0 }}>/</span>
+              <span key={i} className="flex items-center gap-0.5 min-w-0">
                 <button
                   onClick={() => { setHistory([]); setCwd(pathUpTo) }}
-                  className="hover:text-[var(--text-on-surface)] transition-colors truncate"
+                  className="hover:text-[var(--text-on-surface)] transition-colors truncate whitespace-nowrap"
                 >
                   {part}
                 </button>
+                {i < rootParts.slice(hasDrive ? 1 : 0).length - 1 && (
+                  <span style={{ opacity: 0.3, flexShrink: 0 }}>/</span>
+                )}
               </span>
             )
           })}
         </div>
       </div>
 
+      {/* Entry count */}
+      {!loading && !error && entries.length > 0 && (
+        <div className="px-3 pb-1" style={{ color: 'var(--text-outline-variant)' }}>
+          <div className="text-[10px] opacity-50">{entries.length} item{entries.length !== 1 ? 's' : ''}</div>
+        </div>
+      )}
+
       {/* File list */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide">
+      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 4px 4px' }}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-[11px] text-[var(--text-outline-variant)] animate-pulse">Loading...</div>
+            <div className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                <path d="M21 12a9 9 0 11-6.219-8.56" />
+              </svg>
+              Loading...
+            </div>
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center h-full p-3">
-            <div className="text-[11px] text-red-400 text-center break-words">{error}</div>
+          <div className="flex flex-col items-center justify-center h-full gap-2 p-4">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <div className="text-[11px] text-center leading-relaxed" style={{ color: '#ef4444' }}>{error}</div>
           </div>
         ) : entries.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-[11px] text-[var(--text-outline-variant)] opacity-60">Empty directory</div>
+          <div className="flex flex-col items-center justify-center h-full gap-1.5">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-outline-variant)', opacity: 0.3 }}>
+              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" /><polyline points="13 2 13 9 20 9" />
+            </svg>
+            <div className="text-[11px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.5 }}>Empty directory</div>
           </div>
         ) : (
-          <div className="flex flex-col py-1">
+          <div className="flex flex-col">
             {entries.map((entry) => (
               <button
                 key={entry.path}
                 onClick={() => entry.isDirectory ? enterDir(entry.path) : openFile(entry.path)}
-                className="flex items-center gap-2 px-3 py-1.5 w-full text-left transition-colors hover:bg-[var(--bg-surface-container)]"
-                style={{ minHeight: 28 }}
+                className="flex items-center gap-2 w-full text-left transition-colors rounded-[6px] hover:bg-[var(--bg-surface-container)] active:bg-[var(--bg-surface-container-high)]"
+                style={{ padding: '5px 8px', minHeight: 28 }}
                 title={entry.path}
               >
                 <FileIcon name={entry.name} isDirectory={entry.isDirectory} />
-                <span
-                  className="text-[12px] truncate flex-1"
-                  style={{ color: 'var(--text-on-surface)' }}
-                >
+                <span className="text-[12px] truncate flex-1" style={{ color: 'var(--text-on-surface)' }}>
                   {entry.name}
                 </span>
-                <span className="text-[10px] shrink-0" style={{ color: 'var(--text-outline-variant)' }}>
-                  {entry.isDirectory ? '' : formatSize(entry.size)}
-                </span>
-                <span className="text-[10px] shrink-0" style={{ color: 'var(--text-outline-variant)', width: 36, textAlign: 'right' }}>
-                  {entry.isDirectory ? '' : formatTime(entry.mtimeMs)}
-                </span>
+                {!entry.isDirectory && (
+                  <>
+                    <span className="text-[10px] shrink-0 tabular-nums" style={{ color: 'var(--text-outline-variant)', opacity: 0.6 }}>
+                      {formatSize(entry.size)}
+                    </span>
+                    <span className="text-[10px] shrink-0 tabular-nums" style={{ color: 'var(--text-outline-variant)', opacity: 0.4, width: 32, textAlign: 'right' }}>
+                      {formatTime(entry.mtimeMs)}
+                    </span>
+                  </>
+                )}
               </button>
             ))}
           </div>
