@@ -1,0 +1,17 @@
+{
+  "appId": "com.claude.desktop",
+  "productName": "Claude Code Desktop",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "win": {
+    "target": "nsis"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}
