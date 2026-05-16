@@ -1,4 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
+import { readdirSync, statSync } from 'fs'
+import { join, relative } from 'path'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
@@ -184,9 +186,48 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     return readBrainFile(filePath)
   })
 
+  // File explorer
+  ipcMain.handle(IPC_CHANNELS.LIST_DIR, async (_event, dirPath: string) => {
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true })
+      const result = entries
+        .filter((e) => !e.name.startsWith('.'))
+        .map((e) => {
+          const fullPath = join(dirPath, e.name)
+          try {
+            const st = statSync(fullPath)
+            return {
+              name: e.name,
+              path: fullPath,
+              isDirectory: e.isDirectory(),
+              size: e.isFile() ? st.size : 0,
+              mtimeMs: st.mtimeMs,
+            }
+          } catch {
+            return {
+              name: e.name,
+              path: fullPath,
+              isDirectory: e.isDirectory(),
+              size: 0,
+              mtimeMs: 0,
+            }
+          }
+        })
+        .sort((a, b) => {
+          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+          return a.name.localeCompare(b.name)
+        })
+      return { success: true, entries: result, cwd: dirPath }
+    } catch (err: any) {
+      return { success: false, error: err.message, entries: [], cwd: dirPath }
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.OPEN_IN_BROWSER, async (_event, { type, content }: { type: string; content: string }) => {
     if (type === 'image') {
       shell.openExternal(content)
+    } else if (type === 'file') {
+      shell.openPath(content)
     } else {
       const { writeFile } = await import('fs/promises')
       const { join } = await import('path')

@@ -125,6 +125,7 @@ const api = {
     ipcRenderer.send(IPC_CHANNELS.FLOW_ITEM, { type, content, meta }),
   openInBrowser: (type: string, content: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_IN_BROWSER, { type, content }),
+  listDir: (dirPath: string) => ipcRenderer.invoke(IPC_CHANNELS.LIST_DIR, dirPath),
 }
 
 contextBridge.exposeInMainWorld('claude', api)

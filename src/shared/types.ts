@@ -64,6 +64,8 @@ export const IPC_CHANNELS = {
   // Flow
   FLOW_ITEM: 'nerve:flow-item',
   OPEN_IN_BROWSER: 'nerve:open-in-browser',
+  // File explorer
+  LIST_DIR: 'nerve:list-dir',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations
