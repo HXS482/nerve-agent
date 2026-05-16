@@ -330,7 +330,7 @@ function FolderView() {
   return (
     <div className="flex flex-col h-full" style={{ minHeight: 0 }}>
       {/* Header row — matches FlowView pattern */}
-      <div className="flex items-center justify-between px-4 py-1.5 shrink-0" style={{ minHeight: 32 }}>
+      <div className="flex items-center justify-between px-6 py-1.5 shrink-0" style={{ minHeight: 32 }}>
         <div className="flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
@@ -362,7 +362,7 @@ function FolderView() {
       </div>
 
       {/* Navigation + breadcrumb bar */}
-      <div className="flex items-center gap-1 px-4 pb-2 shrink-0">
+      <div className="flex items-center gap-1 px-6 pb-2 shrink-0">
         <button
           onClick={goBack}
           disabled={history.length === 0}
@@ -412,13 +412,13 @@ function FolderView() {
 
       {/* Entry count */}
       {!loading && !error && entries.length > 0 && (
-        <div className="px-4 pb-1" style={{ color: 'var(--text-outline-variant)' }}>
+        <div className="px-6 pb-1" style={{ color: 'var(--text-outline-variant)' }}>
           <div className="text-[10px] opacity-50">{entries.length} item{entries.length !== 1 ? 's' : ''}</div>
         </div>
       )}
 
       {/* File list */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 6px 4px' }}>
+      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 8px 4px' }}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
@@ -449,7 +449,7 @@ function FolderView() {
                 key={entry.path}
                 onClick={() => entry.isDirectory ? enterDir(entry.path) : openFile(entry.path)}
                 className="flex items-center gap-2 w-full text-left transition-colors rounded-[6px] hover:bg-[var(--bg-surface-container)] active:bg-[var(--bg-surface-container-high)]"
-                style={{ padding: '5px 10px', minHeight: 28 }}
+                style={{ padding: '5px 12px', minHeight: 28 }}
                 title={entry.path}
               >
                 <FileIcon name={entry.name} isDirectory={entry.isDirectory} />
