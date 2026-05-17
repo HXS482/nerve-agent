@@ -400,45 +400,83 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     GitCommit: {
-      description: 'Stage all changes and commit them with a message. Use this instead of Bash for git commits — it auto-refreshes the Git panel UI.',
+      description: 'Stage all changes, commit, pull --rebase, then push. Single operation — use this for all commits to avoid sync issues.',
       input_schema: zodToInputSchema(z.object({
         message: z.string().describe('Commit message'),
       })),
       execute: async ({ message }: { message: string }) => {
         try {
           const git = simpleGit({ baseDir: effectiveCwd })
+          const steps: string[] = []
+          const warnings: string[] = []
+
+          // 1. Stage all
           await git.add('.')
+          steps.push('staged')
+
+          // 2. Commit
+          const statusBefore = await git.status()
+          if (statusBefore.staged.length === 0 && statusBefore.created.length === 0 && statusBefore.modified.length === 0 && statusBefore.not_added.length === 0 && statusBefore.deleted.length === 0 && statusBefore.renamed.length === 0) {
+            return { success: true, message: 'Nothing to commit — working tree clean.' }
+          }
           await git.commit(message)
+          steps.push('committed')
+
+          // 3. Pull --rebase (safe: skip if no remote)
+          try {
+            const remotes = await git.getRemotes()
+            if (remotes.length > 0) {
+              await git.pull(['--rebase'])
+              steps.push('synced')
+            } else {
+              warnings.push('no remote configured, skipped sync')
+            }
+          } catch (pullErr: any) {
+            const msg = pullErr?.message || ''
+            if (msg.includes('merge')) {
+              // Rebase conflict — abort rebase, user needs to resolve manually
+              await git.raw(['rebase', '--abort']).catch(() => {})
+              warnings.push('pull --rebase conflict, manual resolution needed')
+            } else {
+              warnings.push(`pull skipped: ${msg.slice(0, 120)}`)
+            }
+          }
+
+          // 4. Push (only if we have a remote and pull succeeded)
+          const hasRemote = (await git.getRemotes()).length > 0
+          if (hasRemote && !warnings.some(w => w.includes('conflict'))) {
+            try {
+              await git.push()
+              steps.push('pushed')
+            } catch (pushErr: any) {
+              const msg = pushErr?.message || ''
+              if (msg.includes('rejected')) {
+                warnings.push('push rejected — remote diverged, force push needed')
+              } else {
+                warnings.push(`push skipped: ${msg.slice(0, 120)}`)
+              }
+            }
+          }
+
           gitNotify?.refresh()
-          return { success: true, message: `Committed: ${message}` }
+          const result = `Committed: ${message} [${steps.join(' → ')}]`
+          return warnings.length > 0
+            ? { success: true, message: result, warnings }
+            : { success: true, message: result }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Commit failed' }
         }
       },
     },
-    GitPush: {
-      description: 'Push commits to the remote tracking branch. Use this instead of Bash for git push — it auto-refreshes the Git panel UI.',
-      input_schema: zodToInputSchema(z.object({})),
-      execute: async () => {
-        try {
-          const git = simpleGit({ baseDir: effectiveCwd })
-          await git.push()
-          gitNotify?.refresh()
-          return { success: true, message: 'Pushed to remote.' }
-        } catch (err: any) {
-          return { error: err.message?.slice(0, 2000) || 'Push failed' }
-        }
-      },
-    },
     GitPull: {
-      description: 'Pull latest changes from the remote tracking branch. Use this instead of Bash for git pull — it auto-refreshes the Git panel UI.',
+      description: 'Pull latest changes from the remote tracking branch (pull --rebase).',
       input_schema: zodToInputSchema(z.object({})),
       execute: async () => {
         try {
           const git = simpleGit({ baseDir: effectiveCwd })
-          await git.pull()
+          await git.pull(['--rebase'])
           gitNotify?.refresh()
-          return { success: true, message: 'Pulled from remote.' }
+          return { success: true, message: 'Pulled from remote with rebase.' }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Pull failed' }
         }
