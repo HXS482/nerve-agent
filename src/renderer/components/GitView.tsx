@@ -77,18 +77,11 @@ export function GitView() {
   // Listen for git refresh notifications from main process
   useEffect(() => {
     const unsub = (window as any).claude.onGitRefresh?.(() => {
-      useGitStore.getState().refresh(cwd)
+      // Use getState() for latest cwd — avoids stale closure
+      const dir = useGitStore.getState().cwd
+      if (dir) useGitStore.getState().refresh(dir)
     })
     return () => unsub?.()
-  }, [cwd])
-
-  // Polling fallback: refresh every 5s when view is active
-  useEffect(() => {
-    if (!cwd) return
-    const interval = setInterval(() => {
-      useGitStore.getState().refresh(cwd)
-    }, 5000)
-    return () => clearInterval(interval)
   }, [cwd])
 
   const handleToggleStage = (filePath: string, isStaged: boolean) => {
