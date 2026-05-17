@@ -82,6 +82,15 @@ export function GitView() {
     return () => unsub?.()
   }, [cwd])
 
+  // Polling fallback: refresh every 5s when view is active
+  useEffect(() => {
+    if (!cwd) return
+    const interval = setInterval(() => {
+      useGitStore.getState().refresh(cwd)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [cwd])
+
   const handleToggleStage = (filePath: string, isStaged: boolean) => {
     if (isStaged) {
       unstageFiles([filePath], cwd)
