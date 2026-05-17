@@ -66,6 +66,19 @@ export const IPC_CHANNELS = {
   OPEN_IN_BROWSER: 'nerve:open-in-browser',
   // File explorer
   LIST_DIR: 'nerve:list-dir',
+  // Git
+  GIT_STATUS: 'git:status',
+  GIT_STAGE: 'git:stage',
+  GIT_UNSTAGE: 'git:unstage',
+  GIT_COMMIT: 'git:commit',
+  GIT_PUSH: 'git:push',
+  GIT_PULL: 'git:pull',
+  GIT_LOG: 'git:log',
+  GIT_BRANCH_LIST: 'git:branch-list',
+  GIT_CHECKOUT: 'git:checkout',
+  GIT_DIFF: 'git:diff',
+  GIT_INIT: 'git:init',
+  GIT_CREATE_BRANCH: 'git:create-branch',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations
@@ -255,4 +268,41 @@ export interface BrainFileContent {
   path: string
   content: string
   frontmatter?: Record<string, unknown>
+}
+
+// Git types
+export interface GitFile {
+  path: string
+  index: string
+  working_dir: string
+}
+
+export interface GitStatus {
+  current: string
+  tracking: string
+  ahead: number
+  behind: number
+  files: GitFile[]
+  staged: string[]
+  conflicts: string[]
+  created: string[]
+  deleted: string[]
+  modified: string[]
+  renamed: string[]
+  not_added: string[]
+}
+
+export interface GitBranch {
+  name: string
+  current: boolean
+  commit?: string
+  label?: string
+}
+
+export interface GitCommit {
+  hash: string
+  date: string
+  message: string
+  author_name: string
+  author_email: string
 }

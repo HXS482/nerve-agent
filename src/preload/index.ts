@@ -126,6 +126,26 @@ const api = {
   openInBrowser: (type: string, content: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_IN_BROWSER, { type, content }),
   listDir: (dirPath: string) => ipcRenderer.invoke(IPC_CHANNELS.LIST_DIR, dirPath),
+  // Git
+  gitStatus: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, cwd),
+  gitStage: (files: string[], cwd: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, files, cwd),
+  gitUnstage: (files: string[], cwd: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, files, cwd),
+  gitCommit: (message: string, cwd: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, message, cwd),
+  gitPush: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, cwd),
+  gitPull: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL, cwd),
+  gitLog: (cwd: string, maxCount?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, cwd, maxCount),
+  gitListBranches: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_LIST, cwd),
+  gitCheckout: (branch: string, cwd: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_CHECKOUT, branch, cwd),
+  gitDiff: (files: string[] | undefined, cwd: string, staged?: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, files, cwd, staged),
+  gitInit: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_INIT, cwd),
+  gitCreateBranch: (branch: string, cwd: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_CREATE_BRANCH, branch, cwd),
 }
 
 contextBridge.exposeInMainWorld('claude', api)

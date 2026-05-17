@@ -7,8 +7,9 @@ import { PetSkinManager } from './pet-skins'
 import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
 import { scanBrain, readBrainFile } from './brain'
+import { GitService } from './git'
 
-export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager) {
+export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService) {
   ipcMain.handle(IPC_CHANNELS.SEND_MESSAGE, async (_event, payload: SendMessagePayload) => {
     await claude.sendMessage(payload)
   })
@@ -221,6 +222,55 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     } catch (err: any) {
       return { success: false, error: err.message, entries: [], cwd: dirPath }
     }
+  })
+
+  // Git
+  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_event, cwd: string) => {
+    return gitService.getStatus(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE, async (_event, files: string[], cwd: string) => {
+    return gitService.stageFiles(cwd, files)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, async (_event, files: string[], cwd: string) => {
+    return gitService.unstageFiles(cwd, files)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_event, message: string, cwd: string) => {
+    return gitService.commit(cwd, message)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PUSH, async (_event, cwd: string) => {
+    return gitService.push(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (_event, cwd: string) => {
+    return gitService.pull(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_event, cwd: string, maxCount?: number) => {
+    return gitService.getLog(cwd, maxCount)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_event, cwd: string) => {
+    return gitService.listBranches(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CHECKOUT, async (_event, branch: string, cwd: string) => {
+    return gitService.checkout(cwd, branch)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF, async (_event, files: string[] | undefined, cwd: string, staged?: boolean) => {
+    return gitService.getDiff(cwd, files, staged)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_INIT, async (_event, cwd: string) => {
+    return gitService.init(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CREATE_BRANCH, async (_event, branch: string, cwd: string) => {
+    return gitService.checkoutNewBranch(cwd, branch)
   })
 
   ipcMain.handle(IPC_CHANNELS.OPEN_IN_BROWSER, async (_event, { type, content }: { type: string; content: string }) => {

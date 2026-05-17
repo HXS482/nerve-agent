@@ -4,6 +4,7 @@ import { homedir } from 'os'
 
 import { is } from '@electron-toolkit/utils'
 import { ClaudeService } from './claude'
+import { GitService } from './git'
 import { PetSkinManager } from './pet-skins'
 import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
@@ -248,12 +249,13 @@ app.whenReady().then(() => {
   const { petWin, setMainWindow } = createPetWindow()
   setMainWindow(mainWindow)
 
-  // Setup Claude service and IPC
+  // Setup Claude service, Git service, and IPC
   const projectDir = process.cwd()
   const claude = new ClaudeService(mainWindow, projectDir)
   const skinManager = new PetSkinManager()
+  const gitService = new GitService()
   claude.setPetWindow(petWin)
-  setupIPC(mainWindow, claude, skinManager)
+  setupIPC(mainWindow, claude, skinManager, gitService)
 
   // Handle pet-sprite:// protocol for serving local spritesheets
   const petsDir = join(homedir(), '.nerve', 'pets')
@@ -277,8 +279,9 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const newWindow = createWindow()
+      const gitService = new GitService()
       claude.setWindow(newWindow)
-      setupIPC(newWindow, claude, skinManager)
+      setupIPC(newWindow, claude, skinManager, gitService)
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         newWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
         newWindow.webContents.openDevTools()

@@ -1,6 +1,8 @@
 import { useChatStore } from '../stores/chatStore'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCallback, useRef, useEffect, useState } from 'react'
+import { GitView } from './GitView'
+import { DiffView } from './DiffView'
 
 // Lazy render hook — only render children when element is in viewport
 function useLazyRender(ref: React.RefObject<HTMLDivElement | null>) {
@@ -330,54 +332,46 @@ function FolderView() {
   return (
     <div className="flex flex-col h-full" style={{ minHeight: 0 }}>
       {/* Header row — matches FlowView pattern */}
-      <div className="flex items-center justify-between px-6 py-1.5 shrink-0" style={{ minHeight: 32 }}>
-        <div className="flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+      <div className="flex items-center gap-1 px-6 py-1.5 shrink-0" style={{ minHeight: 38, paddingLeft: 18, paddingRight: 17, color: 'white' }}>
+        <div className="flex items-center gap-1.5" style={{ flex: 1 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
           </svg>
-          <span className="text-[11px] uppercase tracking-wider font-medium" style={{ color: 'var(--text-outline-variant)' }}>Explorer</span>
         </div>
         <div className="flex items-center gap-0.5">
           <button
+            onClick={goBack}
+            disabled={history.length === 0}
+            className="flex items-center justify-center w-[26px] h-[26px] rounded transition-colors shrink-0"
+            style={{ opacity: history.length === 0 ? 0.3 : 1 }}
+            title="Back"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+            </svg>
+          </button>
+          <button
             onClick={refresh}
-            className="flex items-center justify-center w-[22px] h-[22px] rounded hover:bg-[var(--bg-surface-container)] transition-colors"
-            style={{ color: 'var(--text-outline-variant)' }}
+            className="flex items-center justify-center w-[26px] h-[26px] rounded hover:bg-[var(--bg-surface-container-high)] transition-colors"
             title="Refresh"
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
             </svg>
           </button>
           <button
             onClick={goHome}
-            className="flex items-center justify-center w-[22px] h-[22px] rounded hover:bg-[var(--bg-surface-container)] transition-colors"
-            style={{ color: 'var(--text-outline-variant)' }}
+            className="flex items-center justify-center w-[26px] h-[26px] rounded hover:bg-[var(--bg-surface-container-high)] transition-colors"
             title="Project root"
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
             </svg>
           </button>
         </div>
       </div>
-
-      {/* Navigation + breadcrumb bar */}
-      <div className="flex items-center gap-1 px-6 pb-2 shrink-0">
-        <button
-          onClick={goBack}
-          disabled={history.length === 0}
-          className="flex items-center justify-center w-[22px] h-[22px] rounded transition-colors shrink-0"
-          style={{
-            color: history.length === 0 ? 'var(--text-outline-variant)' : 'var(--text-on-surface)',
-            opacity: history.length === 0 ? 0.3 : 1,
-          }}
-          title="Back"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
-          </svg>
-        </button>
-        <div className="flex-1 flex items-center gap-0.5 overflow-x-auto scrollbar-hide text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
+      {/* Breadcrumb bar */}
+      <div className="flex items-center gap-1 shrink-0" style={{ margin: '0 10px 6px', padding: '6px 12px', fontSize: 12, color: 'var(--text-outline-variant)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
           {hasDrive && (
             <span className="flex items-center gap-0.5 shrink-0">
               <button
@@ -407,15 +401,7 @@ function FolderView() {
               </span>
             )
           })}
-        </div>
       </div>
-
-      {/* Entry count */}
-      {!loading && !error && entries.length > 0 && (
-        <div className="px-6 pb-1" style={{ color: 'var(--text-outline-variant)' }}>
-          <div className="text-[10px] opacity-50">{entries.length} item{entries.length !== 1 ? 's' : ''}</div>
-        </div>
-      )}
 
       {/* File list */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 8px 4px' }}>
@@ -475,27 +461,8 @@ function FolderView() {
   )
 }
 
-function GitView() {
-  return (
-    <div className="flex flex-col gap-3 p-3">
-      <div className="text-[11px] uppercase tracking-wider text-[var(--text-outline-variant)] font-medium">Git</div>
-      <div className="rounded-lg p-3 text-[12px] text-[var(--text-outline-variant)]" style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}>
-        <div className="text-[11px] opacity-60">Git integration coming soon...</div>
-      </div>
-    </div>
-  )
-}
 
-function DiffView() {
-  return (
-    <div className="flex flex-col gap-3 p-3">
-      <div className="text-[11px] uppercase tracking-wider text-[var(--text-outline-variant)] font-medium">Changes</div>
-      <div className="rounded-lg p-3 text-[12px] text-[var(--text-outline-variant)]" style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}>
-        <div className="text-[11px] opacity-60">Diff viewer coming soon...</div>
-      </div>
-    </div>
-  )
-}
+
 
 const VIEW_COMPONENTS: Record<RightSidebarView, React.FC> = {
   flow: FlowView,
