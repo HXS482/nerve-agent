@@ -224,29 +224,43 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     }
   })
 
+  const notifyGitRefresh = () => {
+    try { window.webContents.send(IPC_CHANNELS.GIT_REFRESH) } catch { /* window may be closing */ }
+  }
+
   // Git
   ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_event, cwd: string) => {
     return gitService.getStatus(cwd)
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_STAGE, async (_event, files: string[], cwd: string) => {
-    return gitService.stageFiles(cwd, files)
+    const r = await gitService.stageFiles(cwd, files)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, async (_event, files: string[], cwd: string) => {
-    return gitService.unstageFiles(cwd, files)
+    const r = await gitService.unstageFiles(cwd, files)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_event, message: string, cwd: string) => {
-    return gitService.commit(cwd, message)
+    const r = await gitService.commit(cwd, message)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_PUSH, async (_event, cwd: string) => {
-    return gitService.push(cwd)
+    const r = await gitService.push(cwd)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (_event, cwd: string) => {
-    return gitService.pull(cwd)
+    const r = await gitService.pull(cwd)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_event, cwd: string, maxCount?: number) => {
@@ -258,7 +272,9 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_CHECKOUT, async (_event, branch: string, cwd: string) => {
-    return gitService.checkout(cwd, branch)
+    const r = await gitService.checkout(cwd, branch)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_DIFF, async (_event, files: string[] | undefined, cwd: string, staged?: boolean) => {
@@ -266,11 +282,15 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_INIT, async (_event, cwd: string) => {
-    return gitService.init(cwd)
+    const r = await gitService.init(cwd)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_CREATE_BRANCH, async (_event, branch: string, cwd: string) => {
-    return gitService.checkoutNewBranch(cwd, branch)
+    const r = await gitService.checkoutNewBranch(cwd, branch)
+    notifyGitRefresh()
+    return r
   })
 
   ipcMain.handle(IPC_CHANNELS.OPEN_IN_BROWSER, async (_event, { type, content }: { type: string; content: string }) => {
