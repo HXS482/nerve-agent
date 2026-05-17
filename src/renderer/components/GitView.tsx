@@ -74,6 +74,14 @@ export function GitView() {
     }
   }, [cwd, fetchStatus, fetchBranches, fetchLog])
 
+  // Listen for git refresh notifications from main process
+  useEffect(() => {
+    const unsub = (window as any).claude.onGitRefresh?.(() => {
+      useGitStore.getState().refresh(cwd)
+    })
+    return () => unsub?.()
+  }, [cwd])
+
   const handleToggleStage = (filePath: string, isStaged: boolean) => {
     if (isStaged) {
       unstageFiles([filePath], cwd)
@@ -90,6 +98,10 @@ export function GitView() {
 
   const handleCommit = async () => {
     if (!commitMsg.trim()) return
+    // Stage all first, then commit
+    try {
+      await (window as any).claude.gitStage(['.'], cwd)
+    } catch { /* no unstaged changes is fine */ }
     await commit(commitMsg.trim(), cwd)
     setCommitMsg('')
   }
@@ -98,6 +110,10 @@ export function GitView() {
     if (!commitMsg.trim()) return
     setSyncing('push')
     try {
+      // Stage all first, then commit, then push
+      try {
+        await (window as any).claude.gitStage(['.'], cwd)
+      } catch { /* no unstaged changes is fine */ }
       await commit(commitMsg.trim(), cwd)
       await push(cwd)
     } finally {
@@ -295,7 +311,7 @@ export function GitView() {
         </div>
 
         {/* Commit area */}
-        {stagedFiles.length > 0 && (
+        {totalChanges > 0 && (
           <div className="rounded-lg p-2.5 mb-2" style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}>
             <input
               type="text"

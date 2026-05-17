@@ -274,7 +274,13 @@ export class ClaudeService {
       })
 
       // Build tools in native format
-      const builtinTools = getBuiltinTools(this.projectDir)
+      const builtinTools = getBuiltinTools(this.projectDir, {
+        refresh: () => {
+          if (!this.window.isDestroyed()) {
+            this.window.webContents.send(IPC_CHANNELS.GIT_REFRESH)
+          }
+        },
+      })
       const allToolDefs = [
         ...Object.entries(builtinTools).map(([name, tool]) => ({
           name,

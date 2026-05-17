@@ -146,6 +146,11 @@ const api = {
   gitInit: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_INIT, cwd),
   gitCreateBranch: (branch: string, cwd: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_CREATE_BRANCH, branch, cwd),
+  onGitRefresh: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.GIT_REFRESH, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_REFRESH, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('claude', api)

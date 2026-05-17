@@ -6,6 +6,7 @@ import { promisify } from 'util'
 import { z } from 'zod'
 import { zodToInputSchema } from './tool-schema'
 import { saveImage, getImagesDir } from './images'
+import simpleGit from 'simple-git'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'])
 
@@ -68,7 +69,7 @@ function matchGlob(pattern: string, filePath: string): boolean {
   return regex.test(filePath)
 }
 
-export function getBuiltinTools(cwd: string): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
 
   const bashSchema = z.object({
@@ -382,6 +383,79 @@ export function getBuiltinTools(cwd: string): Record<string, { description: stri
           return { success: true, galleryPath: result.galleryPath, message: `Moved to gallery: ${result.galleryPath}` }
         }
         return { error: result.error || 'Failed to move image' }
+      },
+    },
+    GitStageAll: {
+      description: 'Stage all changes (git add -A) in the current repository. Call this before commit.',
+      input_schema: zodToInputSchema(z.object({})),
+      execute: async () => {
+        try {
+          const git = simpleGit({ baseDir: effectiveCwd })
+          await git.add('.')
+          gitNotify?.refresh()
+          return { success: true, message: 'All changes staged.' }
+        } catch (err: any) {
+          return { error: err.message?.slice(0, 2000) || 'Stage failed' }
+        }
+      },
+    },
+    GitCommit: {
+      description: 'Stage all changes and commit them with a message. Use this instead of Bash for git commits — it auto-refreshes the Git panel UI.',
+      input_schema: zodToInputSchema(z.object({
+        message: z.string().describe('Commit message'),
+      })),
+      execute: async ({ message }: { message: string }) => {
+        try {
+          const git = simpleGit({ baseDir: effectiveCwd })
+          await git.add('.')
+          await git.commit(message)
+          gitNotify?.refresh()
+          return { success: true, message: `Committed: ${message}` }
+        } catch (err: any) {
+          return { error: err.message?.slice(0, 2000) || 'Commit failed' }
+        }
+      },
+    },
+    GitPush: {
+      description: 'Push commits to the remote tracking branch. Use this instead of Bash for git push — it auto-refreshes the Git panel UI.',
+      input_schema: zodToInputSchema(z.object({})),
+      execute: async () => {
+        try {
+          const git = simpleGit({ baseDir: effectiveCwd })
+          await git.push()
+          gitNotify?.refresh()
+          return { success: true, message: 'Pushed to remote.' }
+        } catch (err: any) {
+          return { error: err.message?.slice(0, 2000) || 'Push failed' }
+        }
+      },
+    },
+    GitPull: {
+      description: 'Pull latest changes from the remote tracking branch. Use this instead of Bash for git pull — it auto-refreshes the Git panel UI.',
+      input_schema: zodToInputSchema(z.object({})),
+      execute: async () => {
+        try {
+          const git = simpleGit({ baseDir: effectiveCwd })
+          await git.pull()
+          gitNotify?.refresh()
+          return { success: true, message: 'Pulled from remote.' }
+        } catch (err: any) {
+          return { error: err.message?.slice(0, 2000) || 'Pull failed' }
+        }
+      },
+    },
+    GitInit: {
+      description: 'Initialize a git repository in the current directory.',
+      input_schema: zodToInputSchema(z.object({})),
+      execute: async () => {
+        try {
+          const git = simpleGit({ baseDir: effectiveCwd })
+          await git.init()
+          gitNotify?.refresh()
+          return { success: true, message: 'Git repository initialized.' }
+        } catch (err: any) {
+          return { error: err.message?.slice(0, 2000) || 'Init failed' }
+        }
       },
     },
   }

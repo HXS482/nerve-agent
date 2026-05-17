@@ -25,6 +25,7 @@ interface GitState {
   fetchDiff: (files?: string[], staged?: boolean, cwd?: string) => Promise<void>
   init: (cwd?: string) => Promise<void>
   createBranch: (branch: string, cwd?: string) => Promise<void>
+  refresh: (cwd?: string) => Promise<void>
 }
 
 export const useGitStore = create<GitState>()((set, get) => ({
@@ -184,5 +185,15 @@ export const useGitStore = create<GitState>()((set, get) => ({
     } catch (err: any) {
       set({ error: err.message || 'Failed to create branch' })
     }
+  },
+
+  refresh: async (cwd) => {
+    const dir = cwd ?? get().cwd
+    if (!dir) return
+    await Promise.all([
+      get().fetchStatus(dir),
+      get().fetchBranches(dir),
+      get().fetchLog(dir),
+    ])
   },
 }))

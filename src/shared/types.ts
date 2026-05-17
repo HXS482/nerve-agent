@@ -79,6 +79,8 @@ export const IPC_CHANNELS = {
   GIT_DIFF: 'git:diff',
   GIT_INIT: 'git:init',
   GIT_CREATE_BRANCH: 'git:create-branch',
+  // Git UI refresh notification (main → renderer)
+  GIT_REFRESH: 'git:refresh',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations
