@@ -576,28 +576,6 @@ export function RightSidebar() {
                 </button>
               ))}
               </nav>
-
-            {/* Close button */}
-            <div
-              className={`p-1.5 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
-              style={{
-                borderRadius: 8,
-                background: theme === 'aurora' ? undefined : 'rgba(30, 30, 32, 0.6)',
-                backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid rgba(255,255,255,0.08)',
-                boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
-              }}
-            >
-              <button
-                onClick={() => setOpen(false)}
-                className="text-[#6b6b6d] hover:text-[var(--text-on-surface)] transition-colors"
-              >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-              </button>
-            </div>
           </div>
 
           {/* Content */}

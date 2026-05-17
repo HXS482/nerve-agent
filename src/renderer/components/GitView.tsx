@@ -84,6 +84,16 @@ export function GitView() {
     return () => unsub?.()
   }, [cwd])
 
+  // Local poll: refresh git status every 3s while this view is mounted
+  // Catches filesystem changes not triggered by git operations
+  useEffect(() => {
+    if (!cwd) return
+    const interval = setInterval(() => {
+      useGitStore.getState().refresh(cwd)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [cwd])
+
   const handleToggleStage = (filePath: string, isStaged: boolean) => {
     if (isStaged) {
       unstageFiles([filePath], cwd)
