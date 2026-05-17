@@ -44,9 +44,11 @@ const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
     label: 'Flow',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2v6" /><path d="M12 16v6" />
-        <path d="M4.93 4.93l4.24 4.24" /><path d="M14.83 14.83l4.24 4.24" />
-        <circle cx="12" cy="12" r="3" />
+        <circle cx="12" cy="5" r="2.5" />
+        <circle cx="5" cy="19" r="2.5" />
+        <circle cx="19" cy="19" r="2.5" />
+        <line x1="9.5" y1="7" x2="6.5" y2="16.5" />
+        <line x1="14.5" y1="7" x2="17.5" y2="16.5" />
       </svg>
     ),
   },
@@ -64,10 +66,10 @@ const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
     label: 'Git',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="18" cy="6" r="3" />
-        <circle cx="6" cy="18" r="3" />
-        <path d="M13 6h3a2 2 0 012 2v7" />
-        <path d="M6 9v9" />
+        <line x1="6" y1="3" x2="6" y2="17" />
+        <circle cx="6" cy="19" r="2" />
+        <circle cx="18" cy="5" r="2" />
+        <path d="M18 7a11 11 0 01-11 11" />
       </svg>
     ),
   },
@@ -76,13 +78,10 @@ const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
     label: 'Changes',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3v18" />
-        <path d="M3 8h4" />
-        <path d="M3 12h4" />
-        <path d="M3 16h4" />
-        <path d="M17 8h4" />
-        <path d="M17 12h4" />
-        <path d="M17 16h4" />
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="10" y1="12" x2="14" y2="12" />
+        <line x1="12" y1="10" x2="12" y2="14" />
       </svg>
     ),
   },
