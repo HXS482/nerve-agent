@@ -112,9 +112,9 @@ const api = {
   listImages: () => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LIST),
   deleteImage: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_DELETE, filename),
   getImagePath: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_GET_PATH, filename),
-  // Brain
+  // Memory Browser (replaces Brain)
   brainScan: () => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_SCAN),
-  brainReadFile: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_READ_FILE, filePath),
+  brainReadFile: (type: string, id: string) => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_READ_FILE, type, id),
   // Flow
   onFlowItem: (callback: (data: { type: string; content: string; meta?: Record<string, any> }) => void) => {
     const handler = (_event: any, data: any) => callback(data)

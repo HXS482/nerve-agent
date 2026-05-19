@@ -6,7 +6,7 @@ import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, tra
 import { PetSkinManager } from './pet-skins'
 import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
-import { scanBrain, readBrainFile } from './brain'
+import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
 
 export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService) {
@@ -178,13 +178,13 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     return getImagePath(filename)
   })
 
-  // Brain
+  // Memory Browser (replaces Brain)
   ipcMain.handle(IPC_CHANNELS.BRAIN_SCAN, () => {
-    return scanBrain()
+    return scanMemoryBrowser()
   })
 
-  ipcMain.handle(IPC_CHANNELS.BRAIN_READ_FILE, (_event, filePath: string) => {
-    return readBrainFile(filePath)
+  ipcMain.handle(IPC_CHANNELS.BRAIN_READ_FILE, (_event, type: string, id: string) => {
+    return readMemoryContent(type, id)
   })
 
   // File explorer

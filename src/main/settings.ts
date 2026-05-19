@@ -33,6 +33,13 @@ export interface ClaudeSettings {
   providers?: Record<string, { type: 'anthropic' | 'openai' | 'google'; baseURL: string; authToken: string; models?: string[] }>
   defaultProvider?: string
   extraction?: { baseURL: string; authToken: string; model: string }
+  memoryTDAI?: {
+    enabled: boolean
+    embedding?: { provider: string; baseUrl: string; apiKey: string; model: string; dimensions: number }
+    extraction?: { model?: string }
+    recall?: { strategy: 'embedding' | 'keyword' | 'hybrid'; maxResults: number }
+    offload?: { enabled: boolean; model?: string }
+  }
 }
 
 // Sync version — used by ClaudeService constructor (can't be async)

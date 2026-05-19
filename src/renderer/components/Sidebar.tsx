@@ -4,7 +4,7 @@ import { SessionList } from './SessionList'
 import { PetPixelArt, ColorScheme } from './PetPixelArt'
 import { PetSkin } from '../../shared/types'
 import { GradientButtonGroup } from './GradientButtonGroup'
-import { BrainPanel } from './BrainPanel'
+import { MemoryBrowser } from './MemoryBrowser'
 
 interface SidebarProps {
   onNewChat: () => void
@@ -34,6 +34,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [petVisible, setPetVisible] = useState(true)
   const resizing = useRef(false)
+  const customizeRef = useRef<HTMLDivElement>(null)
 
   // Load available skins (refresh when customize panel opens)
   useEffect(() => {
@@ -417,7 +418,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       )}
 
       {/* Brain panel */}
-      <BrainPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
+      <MemoryBrowser open={memoryOpen} onClose={() => setMemoryOpen(false)} />
 
       {/* Resize handle */}
       <div

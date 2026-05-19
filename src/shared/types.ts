@@ -272,6 +272,45 @@ export interface BrainFileContent {
   frontmatter?: Record<string, unknown>
 }
 
+// Memory Browser (TencentDB 4-layer architecture)
+export interface MemoryAtom {
+  id: string
+  content: string
+  type: string
+  priority: string
+  scene_name: string
+  tags: string[]
+  created: string
+  access_count: number
+}
+
+export interface SceneBlock {
+  filename: string
+  summary: string
+  heat: number
+  updated: string
+}
+
+export interface PersonaCard {
+  content: string
+  updated: string
+}
+
+export interface ConvEntry {
+  id: string
+  session_key: string
+  role: string
+  content: string
+  created: string
+}
+
+export interface MemoryBrowserData {
+  L0: ConvEntry[]
+  L1: MemoryAtom[]
+  L2: SceneBlock[]
+  L3: PersonaCard
+}
+
 // Git types
 export interface GitFile {
   path: string

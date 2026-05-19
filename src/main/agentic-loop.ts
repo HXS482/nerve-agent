@@ -22,6 +22,8 @@ export interface AgenticLoopParams {
   onThinkingDelta?: (thinking: string) => void
   onToolCall?: (id: string, name: string, input: unknown) => void
   onToolResult?: (id: string, content: string, isError?: boolean) => void
+  onBeforeStep?: (messages: Array<{ role: string; content: unknown }>) => Promise<void>
+  onAfterToolCall?: (toolName: string, toolCallId: string, params: unknown, result: unknown) => void
 }
 
 export interface AgenticLoopResult {
@@ -57,7 +59,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // --- Anthropic streaming + non-streaming fallback ---
 
 async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
-  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onThinkingDelta, onToolCall, onToolResult } = params
+  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onThinkingDelta, onToolCall, onToolResult, onBeforeStep, onAfterToolCall } = params
   const maxSteps = params.maxSteps ?? 50
   const anthropic = client as Anthropic
 
@@ -66,6 +68,9 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
 
   for (let step = 0; step < maxSteps; step++) {
     if (abortSignal?.aborted) break
+
+    // Offload: compress old messages before LLM call
+    await onBeforeStep?.(messages)
 
     const anthropicTools = tools.map(t => ({
       name: t.name,
@@ -148,6 +153,7 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr.slice(0, 50000) })
         onToolResult?.(block.id, resultStr.slice(0, 50000))
+        onAfterToolCall?.(block.name, block.id, block.input, result)
       } catch (err: any) {
         const errMsg = err.message || 'Tool execution failed'
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: errMsg, is_error: true })
@@ -383,7 +389,7 @@ async function callNonStreaming(
 // --- OpenAI streaming loop ---
 
 async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
-  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onToolCall, onToolResult } = params
+  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onToolCall, onToolResult, onBeforeStep, onAfterToolCall } = params
   const maxSteps = params.maxSteps ?? 50
   const openai = client as OpenAI
 
@@ -391,6 +397,10 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
   let totalOutput = 0
 
   for (let step = 0; step < maxSteps; step++) {
+    if (abortSignal?.aborted) break
+
+    // Offload: compress old messages before LLM call
+    await onBeforeStep?.(messages)
     if (abortSignal?.aborted) break
 
     const openaiTools = tools.map(t => ({
@@ -548,6 +558,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: resultStr.slice(0, 50000) })
         onToolResult?.(acc.id, resultStr.slice(0, 50000))
+        onAfterToolCall?.(acc.name, acc.id, input, result)
       } catch (err: any) {
         const errMsg = err.message || 'Tool execution failed'
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: errMsg })

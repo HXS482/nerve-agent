@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useBrainStore } from '../stores/brainStore'
 import { useChatStore } from '../stores/chatStore'
 import type { BrainNode } from '../../shared/types'
@@ -31,69 +31,13 @@ export function BrainPanel({ open, onClose }: BrainPanelProps) {
   const theme = useChatStore(s => s.theme)
   const isDark = theme !== 'light'
   const { graphData, selectedNode, selectedFile, loading, scan, selectNode } = useBrainStore()
-  const [graphLoaded, setGraphLoaded] = useState(false)
-  const [hoveredNode, setHoveredNode] = useState<BrainNode | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const graphRef = useRef<any>(null)
-  const [size, setSize] = useState({ width: 800, height: 600 })
-
-  // Load graph library on demand
-  useEffect(() => {
-    if (!open || graphRef.current) return
-    import('react-force-graph-3d').then(mod => {
-      graphRef.current = mod.default || mod.ForceGraph3D || Object.values(mod)[0]
-      setGraphLoaded(true)
-    })
-  }, [open])
 
   // Scan brain on open
   useEffect(() => {
     if (open) scan()
   }, [open, scan])
 
-  // Resize observer
-  useEffect(() => {
-    if (!containerRef.current || !open) return
-    const ro = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect
-      if (width > 0 && height > 0) setSize({ width, height })
-    })
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [open])
-
-  // Node click handler
-  const handleNodeClick = useCallback((node: any) => {
-    console.log('[Brain] node clicked:', node?.id, node?.name, !!node)
-    selectNode(node as BrainNode)
-  }, [selectNode])
-
-  // Node hover handler
-  const handleNodeHover = useCallback((node: any) => {
-    setHoveredNode(node as BrainNode | null)
-  }, [])
-
-  // 3D node label
-  const nodeLabel = useCallback((node: any) => {
-    return `<div style="
-      background: ${isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)'};
-      color: ${isDark ? '#e5e5e5' : '#333'};
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-family: Inter, sans-serif;
-      border: 1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'};
-    ">
-      <div style="font-weight:600">${node.name || node.id}</div>
-      <div style="opacity:0.6;font-size:10px">${TYPE_LABELS[node.type] || node.type}</div>
-    </div>`
-  }, [isDark])
-
-  const graphDataMemo = useMemo(() => graphData, [graphData])
-
   if (!open) return null
-
-  const GraphComp = graphRef.current
 
   return (
     <>
@@ -158,64 +102,45 @@ export function BrainPanel({ open, onClose }: BrainPanelProps) {
 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Graph area */}
-          <div ref={containerRef} className="flex-1 relative" style={{ minHeight: 0 }}>
-            {graphLoaded && GraphComp && graphData.nodes.length > 0 && (
-              <GraphComp
-                graphData={graphDataMemo}
-                width={size.width}
-                height={size.height}
-                backgroundColor={isDark ? '#121214' : '#ffffff'}
-                nodeLabel={nodeLabel}
-                nodeColor={(n: any) => TYPE_COLORS[n.type] || TYPE_COLORS.unknown}
-                nodeVal={(n: any) => 4 + (n.size ? Math.min(n.size / 1000, 8) : 0)}
-                nodeRelSize={6}
-                linkColor={() => isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'}
-                linkWidth={1}
-                linkDirectionalParticles={1}
-                linkDirectionalParticleSpeed={0.003}
-                linkDirectionalParticleWidth={1.5}
-                linkDirectionalParticleColor={() => isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)'}
-                onNodeClick={handleNodeClick}
-                onNodeHover={handleNodeHover}
-                showNavInfo={true}
-                d3AlphaDecay={0.02}
-                d3VelocityDecay={0.3}
-                warmupTicks={50}
-                cooldownTicks={100}
-              />
-            )}
-
-            {/* Empty state */}
-            {!loading && graphData.nodes.length === 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                <svg width="48" height="48" viewBox="0 0 1024 1024" fill="var(--text-outline)" opacity={0.3}>
-                  <path d="M358.4 621.226667c-6.826667 0-167.253333-3.413333-187.733333-102.4-54.613333-3.413333-92.16-13.653333-116.053334-37.546667-10.24-10.24-17.066667-23.893333-20.48-30.72-10.24-6.826667-23.893333-17.066667-30.72-40.96-3.413333-17.066667-3.413333-37.546667-3.413333-44.373333 0-17.066667 6.826667-174.08 215.04-256 208.213333-78.506667 436.906667-47.786667 525.653333 34.133333 95.573333 3.413333 170.666667 95.573333 177.493334 180.906667 6.826667 75.093333-37.546667 167.253333-174.08 191.146666-47.786667 58.026667-150.186667 68.266667-242.346667 75.093334-54.613333 6.826667-109.226667 10.24-136.533333 23.893333 0 3.413333-3.413333 6.826667-6.826667 6.826667z" />
-                </svg>
-                <span className="text-[13px]" style={{ color: 'var(--text-outline)' }}>
-                  No brain files found
-                </span>
-                <span className="text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
-                  Place .md files in ~/.nerve/_brain/
-                </span>
+          {/* Node list */}
+          <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+            {loading && (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-[12px]" style={{ color: 'var(--text-outline)' }}>scanning...</span>
               </div>
             )}
 
-            {/* Hover tooltip */}
-            {hoveredNode && !selectedNode && (
-              <div
-                className="absolute bottom-4 left-4 rounded-xl px-3 py-2"
-                style={{
-                  background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
-                  border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)',
-                  backdropFilter: 'blur(20px)',
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ background: TYPE_COLORS[hoveredNode.type] }} />
-                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-on-surface)' }}>{hoveredNode.name}</span>
-                  <span className="text-[10px]" style={{ color: 'var(--text-outline)' }}>{TYPE_LABELS[hoveredNode.type] || hoveredNode.type}</span>
-                </div>
+            {!loading && graphData.nodes.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <svg width="48" height="48" viewBox="0 0 1024 1024" fill="var(--text-outline)" opacity={0.3}>
+                  <path d="M358.4 621.226667c-6.826667 0-167.253333-3.413333-187.733333-102.4-54.613333-3.413333-92.16-13.653333-116.053334-37.546667-10.24-10.24-17.066667-23.893333-20.48-30.72-10.24-6.826667-23.893333-17.066667-30.72-40.96-3.413333-17.066667-3.413333-37.546667-3.413333-44.373333 0-17.066667 6.826667-174.08 215.04-256 208.213333-78.506667 436.906667-47.786667 525.653333 34.133333 95.573333 3.413333 170.666667 95.573333 177.493334 180.906667 6.826667 75.093333-37.546667 167.253333-174.08 191.146666-47.786667 58.026667-150.186667 68.266667-242.346667 75.093334-54.613333 6.826667-109.226667 10.24-136.533333 23.893333 0 3.413333-3.413333 6.826667-6.826667 6.826667z" />
+                </svg>
+                <span className="text-[13px]" style={{ color: 'var(--text-outline)' }}>No brain files found</span>
+                <span className="text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>Place .md files in ~/.nerve/_brain/</span>
+              </div>
+            )}
+
+            {!loading && graphData.nodes.length > 0 && (
+              <div className="p-3 flex flex-col gap-1">
+                {graphData.nodes.map(node => (
+                  <button
+                    key={node.id}
+                    onClick={() => selectNode(node)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors cursor-pointer"
+                    style={{
+                      background: selectedNode?.id === node.id
+                        ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)')
+                        : 'transparent',
+                      border: 'none',
+                    }}
+                    onMouseEnter={e => { if (selectedNode?.id !== node.id) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}
+                    onMouseLeave={e => { if (selectedNode?.id !== node.id) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: TYPE_COLORS[node.type] || TYPE_COLORS.unknown }} />
+                    <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface)' }}>{node.name}</span>
+                    <span className="text-[10px] ml-auto flex-shrink-0" style={{ color: 'var(--text-outline)' }}>{TYPE_LABELS[node.type] || node.type}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>

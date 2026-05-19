@@ -9,6 +9,9 @@ import { PetSkinManager } from './pet-skins'
 import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
+import { MemoryTdaiCore } from './memory-tdai'
+import { OffloadBridge } from './offload-bridge'
+import OpenAI from 'openai'
 
 // Suppress noisy AI SDK warnings (MiMo reasoning metadata not recognized by Anthropic SDK)
 process.env.AI_SDK_LOG_WARNINGS = 'false'
@@ -255,6 +258,33 @@ app.whenReady().then(() => {
   const skinManager = new PetSkinManager()
   const gitService = new GitService()
   claude.setPetWindow(petWin)
+
+  // Initialize TencentDB memory system
+  const memoryCore = new MemoryTdaiCore(projectDir, claude.getSettings())
+  memoryCore.initialize().catch((err) => console.error('[Nerve] MemoryTdaiCore init failed:', err))
+  claude.setMemoryCore(memoryCore)
+
+  // Initialize OffloadBridge (context compression for long conversations)
+  const offloadSettings = claude.getSettings()
+  if (offloadSettings.extraction?.baseURL && offloadSettings.extraction?.authToken) {
+    try {
+      const offloadClient = new OpenAI({
+        baseURL: offloadSettings.extraction.baseURL.replace(/\/v1$/, ''),
+        apiKey: offloadSettings.extraction.authToken,
+      })
+      const offloadBridge = new OffloadBridge({
+        client: offloadClient,
+        model: offloadSettings.extraction.model || 'deepseek-chat',
+        contextWindow: 128_000,
+        compressRatio: 0.6,
+      })
+      claude.setOffloadBridge(offloadBridge)
+      console.log('[Nerve] OffloadBridge initialized')
+    } catch (err) {
+      console.error('[Nerve] OffloadBridge init failed:', err)
+    }
+  }
+
   setupIPC(mainWindow, claude, skinManager, gitService)
 
   // Handle pet-sprite:// protocol for serving local spritesheets
@@ -293,6 +323,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', async () => {
+  await memoryCore.destroy().catch(() => {})
   await claude.close()
   if (process.platform !== 'darwin') {
     app.quit()

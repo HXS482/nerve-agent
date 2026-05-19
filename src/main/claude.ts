@@ -8,12 +8,12 @@ import { FileSessionStore } from './session-store'
 import { loadSettings, NERVE_DIR, ClaudeSettings } from './settings'
 import { getBuiltinTools } from './tools'
 import { getSkills } from './skills'
-import { needsCompaction, compactMessages } from './compactor'
 import { ProviderRegistry } from './provider-registry'
 import { McpPool } from './mcp-pool'
 import { getOrchestratorTools } from './orchestrator'
-import { buildMemoryContext, extractMemory } from './memory'
 import { runAgenticLoop } from './agentic-loop'
+import { MemoryTdaiCore } from './memory-tdai'
+import { OffloadBridge } from './offload-bridge'
 
 export { testConnection, fetchModels } from './provider'
 export { transcribeAudio } from './stt'
@@ -50,6 +50,8 @@ export class ClaudeService {
   private mcpPool: McpPool
   private pendingToolCalls = new Map<string, { name: string; input: any }>()
   private flowContentHashes = new Set<string>()
+  private memoryCore: MemoryTdaiCore | null = null
+  private offloadBridge: OffloadBridge | null = null
 
   constructor(window: BrowserWindow, projectDir: string) {
     this.window = window
@@ -83,6 +85,14 @@ export class ClaudeService {
 
   setPetWindow(petWin: BrowserWindow) {
     this.petWindow = petWin
+  }
+
+  setMemoryCore(core: MemoryTdaiCore) {
+    this.memoryCore = core
+  }
+
+  setOffloadBridge(bridge: OffloadBridge) {
+    this.offloadBridge = bridge
   }
 
   private send(channel: string, data: unknown) {
@@ -197,14 +207,20 @@ export class ClaudeService {
         systemPrompt += '\n\n## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
       }
 
-      // Memory: L1 Identity + L2 Procedural → system prompt, L3 Episodic → messages
-      const { systemPrompt: memSystemPrompt, episodicMessage } = await buildMemoryContext(
-        systemPrompt,
-        payload.prompt,
-      )
-      systemPrompt = memSystemPrompt
-      if (episodicMessage) {
-        messages.push({ role: 'user', content: episodicMessage })
+      // Memory recall via TencentDB (500ms timeout to avoid blocking user input)
+      if (this.memoryCore) {
+        try {
+          const recall = await Promise.race([
+            this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
+            new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) =>
+              setTimeout(() => r({}), 500),
+            ),
+          ])
+          if (recall.appendSystemContext) systemPrompt += '\n\n' + recall.appendSystemContext
+          if (recall.prependContext) messages.push({ role: 'user', content: recall.prependContext })
+        } catch (err) {
+          console.warn('[Nerve] memory recall failed:', err)
+        }
       }
       messages.push({ role: 'user', content: payload.prompt })
 
@@ -363,6 +379,12 @@ export class ClaudeService {
               },
             })
           },
+          onBeforeStep: async (msgs) => {
+            await this.offloadBridge?.onBeforeStep(msgs)
+          },
+          onAfterToolCall: (toolName, toolCallId, params, result) => {
+            this.offloadBridge?.onAfterToolCall(toolName, toolCallId, params, result)
+          },
         })
 
         allUsage.inputTokens = result.usage.inputTokens
@@ -412,12 +434,19 @@ export class ClaudeService {
           this.send(IPC_CHANNELS.DONE, { sessionId, cost, maxContextTokens })
           this.sendPetState('happy')
 
-          // Memory extraction even on partial response
+          // Memory capture even on partial response
           const fullTextForExtraction = textDeltas.join('')
-          if (fullTextForExtraction && payload.prompt.length > 3) {
-            extractMemory(payload.prompt, fullTextForExtraction, this.settings).catch((err) =>
-              console.error('[Memory] extraction failed:', err),
-            )
+          if (fullTextForExtraction && this.memoryCore) {
+            this.memoryCore.handleTurnCommitted({
+              userText: payload.prompt,
+              assistantText: fullTextForExtraction,
+              messages: [
+                { role: 'user', content: payload.prompt },
+                { role: 'assistant', content: fullTextForExtraction },
+              ],
+              sessionKey: sessionId,
+              sessionId,
+            }).catch((err) => console.error('[TDAI] capture failed:', err))
           }
           return
         }
@@ -470,20 +499,18 @@ export class ClaudeService {
 
         await store.append({ sessionId }, [{ type: 'tag', tag: 'gui' }])
 
-        // Memory extraction (fire-and-forget, before compaction)
-        if (fullText && payload.prompt.length > 3) {
-          extractMemory(payload.prompt, fullText, this.settings).catch((err) =>
-            console.error('[Memory] extraction failed:', err),
-          )
-        }
-
-        // Context compaction: check after each turn
-        const allEntries = await store.load({ sessionId })
-        if (allEntries && needsCompaction(allEntries, modelId)) {
-          const result = await compactMessages(allEntries, modelId, this.settings)
-          if (result) {
-            await store.replace({ sessionId }, result.compacted)
-          }
+        // Memory capture via TencentDB (fire-and-forget)
+        if (fullText && this.memoryCore) {
+          this.memoryCore.handleTurnCommitted({
+            userText: payload.prompt,
+            assistantText: fullText,
+            messages: [
+              { role: 'user', content: payload.prompt },
+              { role: 'assistant', content: fullText },
+            ],
+            sessionKey: sessionId,
+            sessionId,
+          }).catch((err) => console.error('[TDAI] capture failed:', err))
         }
 
         const costPerToken: Record<string, { input: number; output: number }> = {
@@ -602,6 +629,10 @@ export class ClaudeService {
     return { ...this.config }
   }
 
+  getSettings(): ClaudeSettings {
+    return { ...this.settings }
+  }
+
   getSourceDir(): string {
     return this.sourceDir
   }
@@ -692,6 +723,9 @@ export class ClaudeService {
   }
 
   async close() {
+    if (this.memoryCore) {
+      await this.memoryCore.destroy().catch((err) => console.error('[TDAI] destroy failed:', err))
+    }
     await this.mcpPool.close()
   }
 }
