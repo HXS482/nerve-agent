@@ -16,29 +16,46 @@ in vec3 position;
 in vec3 normal;
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
+uniform mat4 modelMatrix;
 uniform float uTime;
 uniform float uMorph;
 out vec3 vNormal;
-out vec3 vPosition;
+out vec3 vWorldPos;
+out vec3 vViewPos;
 out float vFresnel;
+out float vFresnelWide;
+
+// Simplex-style noise for smooth morph
+float snoise(vec3 p) {
+  return sin(p.x * 1.1 + p.y * 0.7) * cos(p.y * 1.3 - p.z * 0.9) * sin(p.z * 0.8 + p.x * 1.2);
+}
 
 void main() {
   vec3 pos = position;
+  vec3 n = normal;
 
-  // Morph distortion
-  float noise = sin(pos.x * 3.0 + uTime * 2.0) * cos(pos.y * 2.5 + uTime * 1.8) * sin(pos.z * 2.8 + uTime * 1.5);
-  pos += normal * noise * uMorph * 0.15;
+  // Multi-layer morph distortion — organic, not mechanical
+  float n1 = snoise(pos * 2.0 + uTime * 0.8) * uMorph;
+  float n2 = snoise(pos * 4.0 - uTime * 1.2) * uMorph * 0.3;
+  pos += n * (n1 * 0.12 + n2 * 0.04);
 
-  // Breathing pulse
-  float pulse = sin(uTime * 1.5) * 0.03;
-  pos *= 1.0 + pulse;
+  // Gentle breathing — very subtle
+  float breath = sin(uTime * 0.8) * 0.015 + sin(uTime * 1.6) * 0.005;
+  pos *= 1.0 + breath;
 
+  vec4 worldPos = modelMatrix * vec4(pos, 1.0);
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-  vPosition = mvPosition.xyz;
-  vNormal = normalize((modelViewMatrix * vec4(normal, 0.0)).xyz);
+  vWorldPos = worldPos.xyz;
+  vViewPos = mvPosition.xyz;
+  vNormal = normalize((modelViewMatrix * vec4(n, 0.0)).xyz);
 
-  vec3 viewDir = normalize(-vPosition.xyz);
-  vFresnel = pow(1.0 - max(dot(viewDir, vNormal), 0.0), 2.5);
+  vec3 viewDir = normalize(-vViewPos);
+  float NdotV = max(dot(viewDir, vNormal), 0.0);
+
+  // Sharp Fresnel for crisp rim
+  vFresnel = pow(1.0 - NdotV, 3.0);
+  // Wide Fresnel for soft outer glow
+  vFresnelWide = pow(1.0 - NdotV, 1.2);
 
   gl_Position = projectionMatrix * mvPosition;
 }
@@ -47,53 +64,130 @@ void main() {
 const fragment = `#version 300 es
 precision highp float;
 uniform float uTime;
-uniform float uState; // 0=idle, 1=active, 2=thinking, 3=morphing
+uniform float uState;
 uniform vec3 uColor1;
 uniform vec3 uColor2;
 uniform float uOpacity;
 in vec3 vNormal;
-in vec3 vPosition;
+in vec3 vWorldPos;
+in vec3 vViewPos;
 in float vFresnel;
+in float vFresnelWide;
 out vec4 fragColor;
+
+// High-quality hash noise
+float hash(vec3 p) {
+  p = fract(p * vec3(443.897, 441.423, 437.195));
+  p += dot(p, p.yzx + 19.19);
+  return fract((p.x + p.y) * p.z);
+}
+
+float noise3D(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f); // smoothstep
+
+  return mix(
+    mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+        mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+    mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+        mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y),
+    f.z
+  );
+}
+
+float fbm(vec3 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noise3D(p);
+    p *= 2.1;
+    a *= 0.5;
+  }
+  return v;
+}
 
 void main() {
   float t = uTime;
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(-vViewPos);
 
-  // Base color blend between two theme colors
-  float blend = sin(t * 0.5) * 0.5 + 0.5;
-  vec3 baseColor = mix(uColor1, uColor2, blend);
+  // === 1. SUBSURFACE SCATTERING SIMULATION ===
+  // Light wrapping around the sphere edges (translucent material)
+  vec3 lightDir1 = normalize(vec3(0.6, 0.8, 0.5));
+  vec3 lightDir2 = normalize(vec3(-0.4, 0.3, 0.8));
+  float sss1 = pow(max(dot(V, -lightDir1 + N * 0.4), 0.0), 2.0) * 0.5;
+  float sss2 = pow(max(dot(V, -lightDir2 + N * 0.3), 0.0), 2.5) * 0.3;
+  vec3 sssColor = mix(uColor1, uColor2, 0.5) * (sss1 + sss2);
 
-  // Fresnel rim glow
-  vec3 rimColor = uColor1 * 1.5;
-  vec3 col = mix(baseColor * 0.4, rimColor, vFresnel);
+  // === 2. MULTI-LAYER FRESNEL ===
+  // Sharp bright rim
+  vec3 rimSharp = uColor1 * 1.8 * vFresnel;
+  // Soft wide halo
+  vec3 rimSoft = mix(uColor1, uColor2, 0.3) * vFresnelWide * 0.4;
 
-  // Inner glow layers
-  float innerGlow = pow(max(dot(vNormal, normalize(vec3(sin(t * 0.3), cos(t * 0.4), 0.5))), 0.0), 3.0);
-  col += uColor2 * innerGlow * 0.3;
+  // === 3. BASE BODY COLOR ===
+  // Subtle color gradient based on surface angle
+  float bodyBlend = dot(N, vec3(0.0, 1.0, 0.0)) * 0.5 + 0.5;
+  vec3 bodyColor = mix(uColor1 * 0.15, uColor2 * 0.2, bodyBlend);
 
-  // State-specific effects
+  // === 4. INTERNAL ENERGY FLOW ===
+  // Noise-based patterns moving inside the orb
+  vec3 noiseCoord = vWorldPos * 2.5 + vec3(t * 0.15, t * 0.1, -t * 0.12);
+  float energy = fbm(noiseCoord);
+  float energyPulse = sin(t * 1.2 + energy * 6.0) * 0.5 + 0.5;
+  vec3 energyColor = mix(uColor1, uColor2, energy) * energyPulse * 0.25;
+
+  // === 5. DUAL SPECULAR HIGHLIGHTS ===
+  // Key light — sharp, bright
+  vec3 R1 = reflect(-lightDir1, N);
+  float spec1 = pow(max(dot(R1, V), 0.0), 64.0);
+  // Fill light — soft, wide
+  vec3 R2 = reflect(-lightDir2, N);
+  float spec2 = pow(max(dot(R2, V), 0.0), 16.0);
+  vec3 specular = vec3(1.0) * spec1 * 0.7 + uColor1 * spec2 * 0.2;
+
+  // === 6. ENVIRONMENT REFLECTION (fake) ===
+  // Subtle environment-like reflection for depth
+  vec3 envReflect = reflect(-V, N);
+  float envNoise = fbm(envReflect * 3.0 + t * 0.05);
+  vec3 envColor = mix(uColor1, uColor2, envNoise) * 0.08;
+
+  // === 7. COMPOSE ===
+  vec3 col = bodyColor + sssColor + rimSharp + rimSoft + energyColor + specular + envColor;
+
+  // === 8. STATE EFFECTS ===
   if (uState > 1.5 && uState < 2.5) {
-    // Thinking: pulsing energy rings
-    float ring = sin(vPosition.y * 12.0 - t * 3.0) * 0.5 + 0.5;
-    col += uColor1 * ring * 0.2;
+    // Thinking: flowing energy bands
+    float band = sin(vWorldPos.y * 8.0 - t * 2.0 + fbm(vWorldPos * 3.0) * 2.0);
+    band = smoothstep(0.3, 1.0, band * 0.5 + 0.5);
+    col += uColor1 * band * 0.3;
+    // Extra inner pulse
+    float pulse = sin(t * 2.5) * 0.5 + 0.5;
+    col += uColor2 * pulse * vFresnel * 0.15;
   }
   if (uState > 2.5) {
-    // Morphing: faster, more distortion color shift
-    float morph = sin(t * 4.0 + vPosition.x * 5.0) * 0.5 + 0.5;
-    col = mix(col, uColor1 * 1.2, morph * 0.3);
+    // Morphing: chaotic energy, faster internal movement
+    float chaos = fbm(vWorldPos * 4.0 + t * 0.8);
+    col += uColor1 * chaos * 0.3;
+    // Prismatic edge shift
+    float prism = sin(vWorldPos.y * 15.0 + t * 5.0) * 0.5 + 0.5;
+    col = mix(col, uColor2 * 1.5, prism * vFresnel * 0.3);
   }
 
-  // Subtle specular highlight
-  vec3 lightDir = normalize(vec3(0.5, 0.8, 1.0));
-  float spec = pow(max(dot(reflect(-lightDir, vNormal), normalize(-vPosition)), 0.0), 16.0);
-  col += vec3(1.0) * spec * 0.4;
+  // === 9. TONE MAPPING (soft HDR) ===
+  // Prevent harsh clamping, keep glow natural
+  col = col / (col + 0.5); // Reinhard-like
+  col = pow(col, vec3(0.9)); // Slight gamma lift
 
-  col = clamp(col, 0.0, 1.0);
-  fragColor = vec4(col, uOpacity);
+  // Final opacity: base + rim boost
+  float alpha = uOpacity + vFresnelWide * 0.15;
+  alpha = clamp(alpha, 0.0, 1.0);
+
+  fragColor = vec4(col, alpha);
 }
 `
 
-// Theme color palettes
 const THEMES: Record<string, { c1: string; c2: string }> = {
   dark:   { c1: '#8EE3C8', c2: '#5227FF' },
   light:  { c1: '#6BA3FE', c2: '#A855F7' },
@@ -107,29 +201,29 @@ const hexToFloat = (hex: string): [number, number, number] => {
 }
 
 const STATE_SPEEDS: Record<OrbState, number> = {
-  idle: 0.3,
-  active: 0.6,
-  thinking: 1.0,
-  morphing: 2.5,
+  idle: 0.25,
+  active: 0.5,
+  thinking: 0.9,
+  morphing: 2.0,
 }
 
 const STATE_MORPH: Record<OrbState, number> = {
   idle: 0,
-  active: 0.1,
-  thinking: 0.2,
+  active: 0.05,
+  thinking: 0.15,
   morphing: 1.0,
 }
 
 const STATE_OPACITY: Record<OrbState, number> = {
-  idle: 0.85,
-  active: 0.9,
-  thinking: 0.95,
-  morphing: 0.8,
+  idle: 0.92,
+  active: 0.95,
+  thinking: 0.98,
+  morphing: 0.88,
 }
 
 const ctxMap = new WeakMap<HTMLElement, { renderer: any; program: any; mesh: any; camera: any; scene: any }>()
 
-export function NerveOrb({ state = 'idle', theme = 'dark', size = 40, className = '' }: Props) {
+export function NerveOrb({ state = 'idle', theme = 'dark', size = 56, className = '' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -139,7 +233,6 @@ export function NerveOrb({ state = 'idle', theme = 'dark', size = 40, className 
     return { c1: hexToFloat(t.c1), c2: hexToFloat(t.c2) }
   }, [theme])
 
-  // Effect 1: Build WebGL context once
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -158,12 +251,14 @@ export function NerveOrb({ state = 'idle', theme = 'dark', size = 40, className 
     canvas.style.display = 'block'
     container.appendChild(canvas)
 
-    const camera = new Camera(gl, { fov: 35 })
-    camera.position.set(0, 0, 4)
+    // Slightly closer FOV for more presence
+    const camera = new Camera(gl, { fov: 32 })
+    camera.position.set(0, 0, 3.5)
 
     const scene = new Transform()
 
-    const geometry = new Sphere(gl, { widthSegments: 48, heightSegments: 48 })
+    // High subdivision for smooth sphere
+    const geometry = new Sphere(gl, { widthSegments: 64, heightSegments: 64 })
 
     const colors = getThemeColors()
     const program = new Program(gl, {
@@ -175,7 +270,7 @@ export function NerveOrb({ state = 'idle', theme = 'dark', size = 40, className 
         uColor1: { value: new Float32Array(colors.c1) },
         uColor2: { value: new Float32Array(colors.c2) },
         uMorph: { value: 0 },
-        uOpacity: { value: 0.85 },
+        uOpacity: { value: 0.92 },
       },
     })
 
@@ -186,35 +281,31 @@ export function NerveOrb({ state = 'idle', theme = 'dark', size = 40, className 
 
     let raf = 0
     const t0 = performance.now()
-    let targetSpeed = STATE_SPEEDS[stateRef.current]
-    let currentSpeed = targetSpeed
-    let targetMorph = STATE_MORPH[stateRef.current]
-    let currentMorph = targetMorph
-    let targetOpacity = STATE_OPACITY[stateRef.current]
-    let currentOpacity = targetOpacity
+    let curSpeed = STATE_SPEEDS[stateRef.current]
+    let curMorph = STATE_MORPH[stateRef.current]
+    let curOpacity = STATE_OPACITY[stateRef.current]
 
     const loop = (t: number) => {
       const elapsed = (t - t0) * 0.001
 
-      // Smooth interpolation for state transitions
-      targetSpeed = STATE_SPEEDS[stateRef.current]
-      targetMorph = STATE_MORPH[stateRef.current]
-      targetOpacity = STATE_OPACITY[stateRef.current]
-      currentSpeed += (targetSpeed - currentSpeed) * 0.05
-      currentMorph += (targetMorph - currentMorph) * 0.05
-      currentOpacity += (targetOpacity - currentOpacity) * 0.08
+      // Smooth lerp for buttery state transitions
+      const tgtSpeed = STATE_SPEEDS[stateRef.current]
+      const tgtMorph = STATE_MORPH[stateRef.current]
+      const tgtOpacity = STATE_OPACITY[stateRef.current]
+      curSpeed += (tgtSpeed - curSpeed) * 0.04
+      curMorph += (tgtMorph - curMorph) * 0.04
+      curOpacity += (tgtOpacity - curOpacity) * 0.06
 
-      program.uniforms.uTime.value = elapsed * currentSpeed
-      program.uniforms.uMorph.value = currentMorph
-      program.uniforms.uOpacity.value = currentOpacity
+      program.uniforms.uTime.value = elapsed * curSpeed
+      program.uniforms.uMorph.value = curMorph
+      program.uniforms.uOpacity.value = curOpacity
 
-      // Map state to numeric
       const stateMap: Record<OrbState, number> = { idle: 0, active: 1, thinking: 2, morphing: 3 }
       program.uniforms.uState.value = stateMap[stateRef.current]
 
-      // Gentle rotation
-      mesh.rotation.y += 0.005 * currentSpeed
-      mesh.rotation.x += 0.002 * currentSpeed
+      // Slow, elegant rotation
+      mesh.rotation.y += 0.003 * curSpeed
+      mesh.rotation.x += 0.001 * curSpeed
 
       renderer.render({ scene, camera })
       raf = requestAnimationFrame(loop)
@@ -229,7 +320,6 @@ export function NerveOrb({ state = 'idle', theme = 'dark', size = 40, className 
     }
   }, [size, getThemeColors])
 
-  // Effect 2: Sync theme colors
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
