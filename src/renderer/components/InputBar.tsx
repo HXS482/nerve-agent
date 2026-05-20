@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useVoiceInput } from '../hooks/useVoiceInput'
+import { useChatStore } from '../stores/chatStore'
 
 interface Props {
   onSend: (prompt: string) => void
@@ -17,11 +18,26 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
   const [input, setInput] = useState('')
   const [hasVoice, setHasVoice] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const setOrbState = useChatStore((s) => s.setOrbState)
 
   const voice = useVoiceInput((text) => {
     setHasVoice(true)
     setInput((prev) => (prev ? prev + ' ' + text : text))
   })
+
+  // Sync orb state with loading
+  useEffect(() => {
+    if (isLoading) {
+      setOrbState('thinking')
+      // After 10s of loading, switch to morphing
+      const timer = setTimeout(() => {
+        setOrbState('morphing')
+      }, 10000)
+      return () => clearTimeout(timer)
+    } else {
+      setOrbState('idle')
+    }
+  }, [isLoading, setOrbState])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -31,6 +47,7 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
     if (!input.trim() || isLoading) return
     if (voice.isRecording) voice.stop()
     const prompt = hasVoice ? `[语音指令] ${input.trim()}` : input.trim()
+    setOrbState('active')
     onSend(prompt)
     setInput('')
     setHasVoice(false)

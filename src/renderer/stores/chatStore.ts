@@ -51,6 +51,10 @@ interface ChatState {
   petColorScheme: string
   petSkinId: string
 
+  // Orb state
+  orbState: 'idle' | 'active' | 'thinking' | 'morphing'
+  orbMorphTimer: number | null
+
   // Right sidebar
   rightSidebarOpen: boolean
   rightSidebarWidth: number
@@ -92,6 +96,9 @@ interface ChatState {
   // Pet actions
   setPetColorScheme: (scheme: string) => void
   setPetSkinId: (id: string) => void
+
+  // Orb actions
+  setOrbState: (state: 'idle' | 'active' | 'thinking' | 'morphing') => void
 
   // Right sidebar actions
   setRightSidebarOpen: (open: boolean) => void
@@ -142,6 +149,10 @@ export const useChatStore = create<ChatState>()(
       // Pet customization
       petColorScheme: 'purple',
       petSkinId: 'default',
+
+      // Orb state
+      orbState: 'idle',
+      orbMorphTimer: null,
 
       // Right sidebar
       rightSidebarOpen: false,
@@ -216,6 +227,19 @@ export const useChatStore = create<ChatState>()(
       // Pet actions
       setPetColorScheme: (scheme) => set({ petColorScheme: scheme }),
       setPetSkinId: (id) => set({ petSkinId: id }),
+
+      // Orb actions
+      setOrbState: (orbState) => {
+        if (orbState === 'active') {
+          // Start morph timer when entering active state
+          const orbMorphTimer = Date.now()
+          set({ orbState, orbMorphTimer })
+        } else if (orbState === 'idle') {
+          set({ orbState, orbMorphTimer: null })
+        } else {
+          set({ orbState })
+        }
+      },
 
       // Right sidebar actions
       setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),

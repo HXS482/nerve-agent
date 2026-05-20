@@ -9,6 +9,7 @@ import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import Grainient from './components/Grainient'
+import { NerveOrb } from './components/NerveOrb'
 import { useState, useEffect } from 'react'
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const toggleRightSidebar = useChatStore((s) => s.toggleRightSidebar)
   const theme = useChatStore((s) => s.theme)
+  const orbState = useChatStore((s) => s.orbState)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
 
@@ -113,9 +115,9 @@ export default function App() {
             />
           </div>
 
-          {/* Center: Nerve */}
-          <div className="flex-1 flex justify-center">
-            <span className="text-[13px] font-semibold text-[var(--text-on-surface)] select-none">Nerve</span>
+          {/* Center: Nerve Orb */}
+          <div className="flex-1 flex justify-center items-center">
+            <NerveOrb state={orbState} theme={theme} size={36} />
           </div>
 
           {/* Right: toggle sidebar + settings + cmd */}
