@@ -293,6 +293,56 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     return r
   })
 
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_LIST, async (_event, cwd: string) => {
+    return gitService.listStashes(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_PUSH, async (_event, cwd: string, message?: string, includeUntracked?: boolean) => {
+    const r = await gitService.stashPush(cwd, message, includeUntracked)
+    notifyGitRefresh()
+    return r
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_POP, async (_event, cwd: string, index?: number) => {
+    const r = await gitService.stashPop(cwd, index)
+    notifyGitRefresh()
+    return r
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_APPLY, async (_event, cwd: string, index?: number) => {
+    const r = await gitService.stashApply(cwd, index)
+    notifyGitRefresh()
+    return r
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_DROP, async (_event, cwd: string, index: number) => {
+    const r = await gitService.stashDrop(cwd, index)
+    notifyGitRefresh()
+    return r
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DELETE_BRANCH, async (_event, cwd: string, branch: string, force?: boolean) => {
+    const r = await gitService.deleteBranch(cwd, branch, force)
+    notifyGitRefresh()
+    return r
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DISCARD, async (_event, cwd: string, files: string[], tracked: boolean) => {
+    const r = await gitService.discardChanges(cwd, files, tracked)
+    notifyGitRefresh()
+    return r
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_SHOW_DIFF, async (_event, cwd: string, hash: string) => {
+    return gitService.getCommitDiff(cwd, hash)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_FETCH, async (_event, cwd: string) => {
+    const r = await gitService.fetch(cwd)
+    notifyGitRefresh()
+    return r
+  })
+
   ipcMain.handle(IPC_CHANNELS.OPEN_IN_BROWSER, async (_event, { type, content }: { type: string; content: string }) => {
     if (type === 'image') {
       shell.openExternal(content)

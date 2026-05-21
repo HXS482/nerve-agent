@@ -146,6 +146,22 @@ const api = {
   gitInit: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_INIT, cwd),
   gitCreateBranch: (branch: string, cwd: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_CREATE_BRANCH, branch, cwd),
+  gitStashList: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_LIST, cwd),
+  gitStashPush: (cwd: string, message?: string, includeUntracked?: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_PUSH, cwd, message, includeUntracked),
+  gitStashPop: (cwd: string, index?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_POP, cwd, index),
+  gitStashApply: (cwd: string, index?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_APPLY, cwd, index),
+  gitStashDrop: (cwd: string, index: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_DROP, cwd, index),
+  gitDeleteBranch: (cwd: string, branch: string, force?: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_DELETE_BRANCH, cwd, branch, force),
+  gitDiscard: (cwd: string, files: string[], tracked: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, cwd, files, tracked),
+  gitShowDiff: (cwd: string, hash: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_SHOW_DIFF, cwd, hash),
+  gitFetch: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_FETCH, cwd),
   onGitRefresh: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.GIT_REFRESH, handler)

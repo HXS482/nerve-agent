@@ -79,6 +79,15 @@ export const IPC_CHANNELS = {
   GIT_DIFF: 'git:diff',
   GIT_INIT: 'git:init',
   GIT_CREATE_BRANCH: 'git:create-branch',
+  GIT_STASH_LIST: 'git:stash-list',
+  GIT_STASH_PUSH: 'git:stash-push',
+  GIT_STASH_POP: 'git:stash-pop',
+  GIT_STASH_APPLY: 'git:stash-apply',
+  GIT_STASH_DROP: 'git:stash-drop',
+  GIT_DELETE_BRANCH: 'git:delete-branch',
+  GIT_DISCARD: 'git:discard',
+  GIT_SHOW_DIFF: 'git:show-diff',
+  GIT_FETCH: 'git:fetch',
   // Git UI refresh notification (main → renderer)
   GIT_REFRESH: 'git:refresh',
 } as const
@@ -346,4 +355,11 @@ export interface GitCommit {
   message: string
   author_name: string
   author_email: string
+}
+
+export interface GitStashEntry {
+  hash: string
+  message: string
+  date: string
+  index: number
 }
