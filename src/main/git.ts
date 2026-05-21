@@ -1,5 +1,5 @@
 import simpleGit from 'simple-git'
-import { GitStatus, GitBranch, GitCommit } from '../shared/types'
+import { GitStatus, GitBranch, GitCommit, GitStashEntry } from '../shared/types'
 
 export class GitService {
   async getStatus(cwd: string): Promise<GitStatus> {
@@ -90,5 +90,65 @@ export class GitService {
   async init(cwd: string): Promise<void> {
     const git = simpleGit({ baseDir: cwd })
     await git.init()
+  }
+
+  async listStashes(cwd: string): Promise<GitStashEntry[]> {
+    const git = simpleGit({ baseDir: cwd })
+    const result = await git.stashList({ maxCount: 50 })
+    return result.all.map((entry, i) => ({
+      hash: entry.hash.slice(0, 7),
+      message: entry.message,
+      date: entry.date,
+      index: i,
+    }))
+  }
+
+  async stashPush(cwd: string, message?: string, includeUntracked?: boolean): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    const args = ['stash', 'push']
+    if (includeUntracked) args.push('-u')
+    if (message) args.push('-m', message)
+    await git.raw(args)
+  }
+
+  async stashPop(cwd: string, index?: number): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    const ref = index != null ? `stash@{${index}}` : undefined
+    await git.raw(['stash', 'pop', ...(ref ? [ref] : [])])
+  }
+
+  async stashApply(cwd: string, index?: number): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    const ref = index != null ? `stash@{${index}}` : undefined
+    await git.raw(['stash', 'apply', ...(ref ? [ref] : [])])
+  }
+
+  async stashDrop(cwd: string, index: number): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    await git.raw(['stash', 'drop', `stash@{${index}}`])
+  }
+
+  async discardChanges(cwd: string, files: string[], tracked: boolean): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    if (tracked) {
+      await git.checkout(['--', ...files])
+    } else {
+      await git.raw(['clean', '-f', ...files])
+    }
+  }
+
+  async deleteBranch(cwd: string, branchName: string, force?: boolean): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    await git.deleteLocalBranch(branchName, force)
+  }
+
+  async getCommitDiff(cwd: string, hash: string): Promise<string> {
+    const git = simpleGit({ baseDir: cwd })
+    return git.show([hash])
+  }
+
+  async fetch(cwd: string): Promise<void> {
+    const git = simpleGit({ baseDir: cwd })
+    await git.fetch()
   }
 }
