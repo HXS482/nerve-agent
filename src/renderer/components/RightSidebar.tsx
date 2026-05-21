@@ -4,6 +4,13 @@ import { useCallback, useRef, useEffect, useState } from 'react'
 import { GitView } from './GitView'
 import { DiffView } from './DiffView'
 
+const VIEW_TRANSITION = {
+  initial: { opacity: 0, x: 20, filter: 'blur(4px)' },
+  animate: { opacity: 1, x: 0, filter: 'blur(0px)' },
+  exit: { opacity: 0, x: -20, filter: 'blur(4px)' },
+  transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] } as const,
+}
+
 // Lazy render hook — only render children when element is in viewport
 function useLazyRender(ref: React.RefObject<HTMLDivElement | null>) {
   const [visible, setVisible] = useState(false)
@@ -579,8 +586,19 @@ export function RightSidebar() {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto scrollbar-hide">
-            <ViewContent />
+          <div className="flex-1 overflow-y-auto scrollbar-hide relative">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={view}
+                className="h-full"
+                initial={VIEW_TRANSITION.initial}
+                animate={VIEW_TRANSITION.animate}
+                exit={VIEW_TRANSITION.exit}
+                transition={VIEW_TRANSITION.transition}
+              >
+                <ViewContent />
+              </motion.div>
+            </AnimatePresence>
           </div>
         </motion.div>
       )}
