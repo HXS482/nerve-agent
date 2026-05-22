@@ -545,7 +545,7 @@ export function GitView() {
 
       {/* Branch bar */}
       {branch && (
-        <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 mx-3 mt-2 shrink-0" style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}>
+        <div className="inline-flex items-center gap-2 rounded px-4 py-1.5 mx-3 mt-2 shrink-0 self-center" style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}>
           <span style={{ color: 'var(--accent-primary)' }}><I.Branch s={13} /></span>
           <span className="text-[12px] font-medium truncate" style={{ color: 'var(--text-on-surface)' }}>{branch}</span>
           {(status!.ahead > 0 || status!.behind > 0) && (
@@ -559,7 +559,7 @@ export function GitView() {
 
       <TabBar active={tab} onChange={setTab} />
 
-      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 8px 4px' }}>
+      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 12px 8px' }}>
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.12 }}>
             {tab === 'files' && <FilesTab />}

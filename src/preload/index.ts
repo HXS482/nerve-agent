@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS } from '../shared/types'
+import { IPC_CHANNELS, FileAttachment } from '../shared/types'
 
 const api = {
-  sendMessage: (prompt: string, sessionId?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId }),
+  sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files }),
   cancel: () => ipcRenderer.invoke(IPC_CHANNELS.CANCEL),
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_MODEL, model),
   setEffort: (effort: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_EFFORT, effort),
@@ -12,6 +12,7 @@ const api = {
   setPermissionMode: (mode: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_PERMISSION_MODE, mode),
   pickDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.PICK_DIRECTORY),
+  pickAndReadFiles: (): Promise<FileAttachment[]> => ipcRenderer.invoke(IPC_CHANNELS.PICK_AND_READ_FILES),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
   getModels: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MODELS),
   listSessions: () => ipcRenderer.invoke(IPC_CHANNELS.LIST_SESSIONS),

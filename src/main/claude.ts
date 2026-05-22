@@ -3,7 +3,31 @@ import { join } from 'path'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
-import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, PetState, SessionUsage, ProviderInfo } from '../shared/types'
+import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, PetState, SessionUsage, ProviderInfo, ContentBlock, FileAttachment } from '../shared/types'
+
+function buildUserContentBlocks(payload: SendMessagePayload): ContentBlock[] {
+  const blocks: ContentBlock[] = []
+  for (const file of payload.files!) {
+    if (file.isImage) {
+      blocks.push({
+        type: 'image',
+        src: `data:${file.mimeType};base64,${file.data}`,
+        mimeType: file.mimeType,
+        fileName: file.name,
+        fileSize: file.size,
+      })
+    } else {
+      blocks.push({
+        type: 'file',
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.mimeType,
+      })
+    }
+  }
+  blocks.push({ type: 'text', text: payload.prompt })
+  return blocks
+}
 import { FileSessionStore } from './session-store'
 import { loadSettings, NERVE_DIR, ClaudeSettings } from './settings'
 import { getBuiltinTools } from './tools'
@@ -142,8 +166,25 @@ export class ClaudeService {
         if (typeof content === 'string') {
           messages.push({ role: 'user', content })
         } else if (Array.isArray(content)) {
-          const textBlock = content.find((c: any) => c.type === 'text')
-          if (textBlock) messages.push({ role: 'user', content: textBlock.text })
+          const apiBlocks: any[] = []
+          for (const block of content) {
+            if (block.type === 'text' && block.text) {
+              apiBlocks.push({ type: 'text', text: block.text })
+            } else if (block.type === 'image' && block.src) {
+              const match = block.src.match(/^data:([^;]+);base64,(.+)$/)
+              if (match) {
+                apiBlocks.push({
+                  type: 'image',
+                  source: { type: 'base64', media_type: match[1], data: match[2] },
+                })
+              }
+            }
+          }
+          if (apiBlocks.length === 1 && apiBlocks[0].type === 'text') {
+            messages.push({ role: 'user', content: apiBlocks[0].text })
+          } else if (apiBlocks.length > 0) {
+            messages.push({ role: 'user', content: apiBlocks })
+          }
         }
       } else if (e.type === 'assistant') {
         const content = e.message?.content
@@ -191,8 +232,11 @@ export class ClaudeService {
 
       const store = await this.ensureSessionStore()
 
+      const userContent = (payload.files && payload.files.length > 0)
+        ? buildUserContentBlocks(payload)
+        : payload.prompt
       await store.append({ sessionId }, [
-        { type: 'user', message: { content: payload.prompt }, timestamp: new Date().toISOString() },
+        { type: 'user', message: { content: userContent }, timestamp: new Date().toISOString() },
       ])
 
       const messages = [...history]
@@ -222,7 +266,31 @@ export class ClaudeService {
           console.warn('[Nerve] memory recall failed:', err)
         }
       }
-      messages.push({ role: 'user', content: payload.prompt })
+      if (payload.files && payload.files.length > 0) {
+        const contentBlocks: Array<Record<string, unknown>> = []
+        for (const file of payload.files) {
+          if (file.isImage) {
+            contentBlocks.push({
+              type: 'image',
+              source: { type: 'base64', media_type: file.mimeType, data: file.data },
+            })
+          } else if (file.mimeType === 'application/pdf') {
+            contentBlocks.push({
+              type: 'document',
+              source: { type: 'base64', media_type: file.mimeType, data: file.data },
+            })
+          } else {
+            contentBlocks.push({
+              type: 'text',
+              text: `[File: ${file.name}]\n\`\`\`\n${file.data}\n\`\`\``,
+            })
+          }
+        }
+        contentBlocks.push({ type: 'text', text: payload.prompt })
+        messages.push({ role: 'user', content: contentBlocks })
+      } else {
+        messages.push({ role: 'user', content: payload.prompt })
+      }
 
       const modelId = this.resolveModel(this.config.model)
       console.log('[Nerve] send model:', this.config.model, '→', modelId, 'provider:', this.config.provider || '(auto)')

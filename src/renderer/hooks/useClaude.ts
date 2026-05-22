@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
-import { ContentBlock, ClaudeConfig, ChatMessage } from '../../shared/types'
+import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment } from '../../shared/types'
 
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
 
@@ -482,7 +482,7 @@ export function useClaude() {
   }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions])
 
   const send = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, files?: FileAttachment[]) => {
       if (!prompt.trim() || isLoading) return
 
       const store = useChatStore.getState()
@@ -505,10 +505,31 @@ export function useClaude() {
         pendingTempSessionId.current = null
       }
 
+      const userContent: ContentBlock[] = []
+      if (files && files.length > 0) {
+        for (const file of files) {
+          if (file.isImage) {
+            userContent.push({
+              type: 'image',
+              src: `data:${file.mimeType};base64,${file.data}`,
+              mimeType: file.mimeType,
+            })
+          } else {
+            userContent.push({
+              type: 'file',
+              fileName: file.name,
+              fileSize: file.size,
+              mimeType: file.mimeType,
+            })
+          }
+        }
+      }
+      userContent.push({ type: 'text', text: prompt })
+
       addMessage({
         id: `user-${Date.now()}`,
         role: 'user',
-        content: [{ type: 'text', text: prompt }],
+        content: userContent,
         timestamp: Date.now(),
         sessionId: sid,
       })
@@ -532,7 +553,7 @@ export function useClaude() {
       }, 180000)
       try {
         // Only pass sessionId to backend if it's a real (persisted) session
-        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined)
+        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files)
         clearTimeout(safetyTimer)
       } catch (err: unknown) {
         clearTimeout(safetyTimer)

@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
-import { readdirSync, statSync } from 'fs'
-import { join, relative } from 'path'
-import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig } from '../shared/types'
+import { readdirSync, statSync, readFileSync } from 'fs'
+import { join, relative, extname, basename } from 'path'
+import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
 import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels } from './settings'
@@ -47,6 +47,67 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       return result.filePaths[0]
     }
     return null
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PICK_AND_READ_FILES, async () => {
+    const MIME_MAP: Record<string, string> = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain', '.md': 'text/markdown', '.csv': 'text/csv',
+      '.log': 'text/plain',
+      '.js': 'text/javascript', '.ts': 'text/typescript', '.tsx': 'text/typescript',
+      '.jsx': 'text/javascript', '.py': 'text/x-python', '.go': 'text/x-go',
+      '.rs': 'text/x-rust', '.java': 'text/x-java', '.c': 'text/x-c',
+      '.cpp': 'text/x-c++', '.h': 'text/x-c', '.cs': 'text/x-csharp',
+      '.rb': 'text/x-ruby', '.php': 'text/x-php', '.swift': 'text/x-swift',
+      '.kt': 'text/x-kotlin', '.sh': 'text/x-shellscript', '.bash': 'text/x-shellscript',
+      '.json': 'application/json', '.xml': 'application/xml',
+      '.yaml': 'text/yaml', '.yml': 'text/yaml', '.toml': 'text/plain',
+      '.ini': 'text/plain',
+    }
+    const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'])
+    const MAX_IMAGE = 10 * 1024 * 1024
+    const MAX_DOC = 50 * 1024 * 1024
+
+    const result = await dialog.showOpenDialog(window, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] },
+        { name: 'Documents', extensions: ['pdf', 'txt', 'md', 'csv'] },
+        { name: 'Code', extensions: ['js', 'ts', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'cs', 'rb', 'php', 'swift', 'kt', 'sh'] },
+        { name: 'Data', extensions: ['json', 'xml', 'yaml', 'yml', 'toml', 'ini'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    })
+    if (result.canceled) return []
+
+    const attachments: FileAttachment[] = []
+    for (const filePath of result.filePaths) {
+      try {
+        const stat = statSync(filePath)
+        const ext = extname(filePath).toLowerCase()
+        const mimeType = MIME_MAP[ext] || 'application/octet-stream'
+        const isImage = IMAGE_TYPES.has(mimeType)
+        const maxSize = isImage ? MAX_IMAGE : MAX_DOC
+        if (stat.size > maxSize) continue
+
+        const buffer = readFileSync(filePath)
+        const data = isImage || mimeType === 'application/pdf'
+          ? buffer.toString('base64')
+          : buffer.toString('utf-8')
+        attachments.push({
+          name: basename(filePath),
+          mimeType,
+          size: stat.size,
+          data,
+          isImage,
+        })
+      } catch {
+        // skip unreadable files
+      }
+    }
+    return attachments
   })
 
   ipcMain.handle(IPC_CHANNELS.GET_CONFIG, () => {
