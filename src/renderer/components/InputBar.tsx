@@ -58,7 +58,7 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
   }, [])
 
   const handlePickFiles = async () => {
-    const files = await (window as any).claude.pickAndReadFiles()
+    const files = await window.claude.pickAndReadFiles()
     if (files && files.length > 0) {
       setAttachments((prev) => [...prev, ...files])
     }

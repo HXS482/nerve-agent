@@ -22,6 +22,7 @@ function buildUserContentBlocks(payload: SendMessagePayload): ContentBlock[] {
         fileName: file.name,
         fileSize: file.size,
         mimeType: file.mimeType,
+        fileContent: file.data,
       })
     }
   }
@@ -178,6 +179,11 @@ export class ClaudeService {
                   source: { type: 'base64', media_type: match[1], data: match[2] },
                 })
               }
+            } else if (block.type === 'file' && block.fileContent) {
+              apiBlocks.push({
+                type: 'text',
+                text: `[File: ${block.fileName}]\n\`\`\`\n${block.fileContent}\n\`\`\``,
+              })
             }
           }
           if (apiBlocks.length === 1 && apiBlocks[0].type === 'text') {

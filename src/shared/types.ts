@@ -214,6 +214,7 @@ export interface ContentBlock {
   fileName?: string
   fileSize?: number
   mimeType?: string
+  fileContent?: string
 }
 
 export interface ChatMessage {

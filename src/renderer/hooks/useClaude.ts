@@ -8,7 +8,7 @@ const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_s
 declare global {
   interface Window {
     claude: {
-      sendMessage: (prompt: string, sessionId?: string) => Promise<void>
+      sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) => Promise<void>
       cancel: () => Promise<void>
       getConfig: () => Promise<ClaudeConfig>
       setModel: (model: string) => Promise<void>
@@ -17,6 +17,7 @@ declare global {
       setCwd: (cwd: string) => Promise<void>
       setPermissionMode: (mode: string) => Promise<void>
       pickDirectory: () => Promise<string | null>
+      pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
       listSessions: () => Promise<any[]>
       getSessionMessages: (sessionId: string) => Promise<any[]>
@@ -188,6 +189,8 @@ export function useClaude() {
               : String(c.content ?? ''),
             is_error: c.is_error,
           }
+              if (c.type === 'image') return { type: 'image' as const, src: c.src, mimeType: c.mimeType, fileName: c.fileName, fileSize: c.fileSize }
+              if (c.type === 'file') return { type: 'file' as const, fileName: c.fileName, fileSize: c.fileSize, mimeType: c.mimeType, fileContent: c.fileContent }
               return { type: 'text' as const, text: JSON.stringify(c) }
             })
           })(),
