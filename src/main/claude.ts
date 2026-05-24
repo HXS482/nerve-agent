@@ -273,6 +273,7 @@ export class ClaudeService {
         }
       }
       if (payload.files && payload.files.length > 0) {
+        console.log('[Nerve] sendMessage with', payload.files.length, 'file(s):', payload.files.map(f => `${f.name}(${f.mimeType},${f.size}bytes,isImage:${f.isImage})`).join(', '))
         const contentBlocks: Array<Record<string, unknown>> = []
         for (const file of payload.files) {
           if (file.isImage) {
@@ -293,6 +294,7 @@ export class ClaudeService {
           }
         }
         contentBlocks.push({ type: 'text', text: payload.prompt })
+        console.log('[Nerve] user content blocks:', contentBlocks.map(b => b.type).join(', '))
         messages.push({ role: 'user', content: contentBlocks })
       } else {
         messages.push({ role: 'user', content: payload.prompt })

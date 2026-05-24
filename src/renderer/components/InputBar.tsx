@@ -94,23 +94,29 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
 
   return (
     <div className="absolute left-0 right-0 z-50 flex flex-col items-center gap-2" style={{ paddingLeft: '11px', paddingRight: '11px', bottom: '8px' }}>
-      {/* Attachment chips */}
+      {/* Attachment cards */}
       {attachments.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto w-full max-w-4xl" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-2 w-full max-w-4xl flex-wrap justify-center">
           {attachments.map((file, i) => (
-            <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 text-[11px]"
-              style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)', color: 'var(--text-on-surface-variant)' }}>
-              {file.isImage ? (
-                <img src={`data:${file.mimeType};base64,${file.data}`} className="w-4 h-4 rounded object-cover" />
-              ) : (
-                <FileIcon mimeType={file.mimeType} />
-              )}
-              <span className="max-w-[120px] truncate">{file.name}</span>
-              <button onClick={() => removeAttachment(i)} className="hover:text-[var(--error)] transition-colors ml-0.5">
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <div key={i} className="relative flex flex-col items-center overflow-hidden transition-all"
+              style={{ width: 80, background: 'var(--bg-surface-container)', borderRadius: 8, border: '1px solid var(--border-subtle)', boxShadow: '0 4px 16px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.05)' }}>
+              <button onClick={() => removeAttachment(i)}
+                className="absolute top-1 right-1 z-10 w-4 h-4 rounded-full flex items-center justify-center transition-all hover:scale-110"
+                style={{ background: 'rgba(0,0,0,0.5)', color: '#fff' }}>
+                <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 3l6 6M9 3l-6 6" />
                 </svg>
               </button>
+              {file.isImage ? (
+                <img src={`data:${file.mimeType};base64,${file.data}`} className="w-full h-14 object-cover" />
+              ) : (
+                <div className="w-full h-14 flex items-center justify-center" style={{ color: 'var(--text-outline-variant)' }}>
+                  <FileIcon mimeType={file.mimeType} />
+                </div>
+              )}
+              <div className="w-full px-1.5 py-1 text-center">
+                <span className="block text-[9px] truncate" style={{ color: 'var(--text-on-surface-variant)' }}>{file.name}</span>
+              </div>
             </div>
           ))}
         </div>
