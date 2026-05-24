@@ -343,15 +343,37 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
     return (
       <div className="animate-fade-in flex justify-end mb-8">
         <div className="flex items-end gap-2.5" style={{ maxWidth: 'var(--bubble-max-w)' }}>
-          {message.content.map((block, i) => (
-            <p
-              key={i}
-              className="whitespace-pre-wrap"
-              style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-sm)', lineHeight: 1.5 }}
-            >
-              {block.text}
-            </p>
-          ))}
+          <div className="flex flex-col gap-2 items-end">
+            {message.content.map((block, i) => {
+              if (block.type === 'image' && block.src) {
+                return <ImageView key={i} src={block.src} />
+              }
+              if (block.type === 'file') {
+                return (
+                  <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                    style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <span>{block.fileName}</span>
+                    <span style={{ color: 'var(--text-outline-variant)' }}>
+                      {block.fileSize != null ? (block.fileSize < 1024 ? `${block.fileSize} B` : block.fileSize < 1048576 ? `${(block.fileSize / 1024).toFixed(1)} KB` : `${(block.fileSize / 1048576).toFixed(1)} MB`) : ''}
+                    </span>
+                  </div>
+                )
+              }
+              if (block.type === 'text' && block.text) {
+                return (
+                  <p key={i} className="whitespace-pre-wrap"
+                    style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-sm)', lineHeight: 1.5 }}>
+                    {block.text}
+                  </p>
+                )
+              }
+              return null
+            })}
+          </div>
           <UserAvatar />
         </div>
       </div>
@@ -475,7 +497,9 @@ function ImageView({ src }: { src: string }) {
   }
 
   let resolved: string
-  if (isImageUrl(src)) {
+  if (src.startsWith('data:')) {
+    resolved = src
+  } else if (isImageUrl(src)) {
     resolved = src
   } else if (src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
     // Internal gallery path — use file:// protocol

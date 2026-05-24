@@ -1,14 +1,14 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
-import { ContentBlock, ClaudeConfig, ChatMessage } from '../../shared/types'
+import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment } from '../../shared/types'
 
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
 
 declare global {
   interface Window {
     claude: {
-      sendMessage: (prompt: string, sessionId?: string) => Promise<void>
+      sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) => Promise<void>
       cancel: () => Promise<void>
       getConfig: () => Promise<ClaudeConfig>
       setModel: (model: string) => Promise<void>
@@ -17,6 +17,7 @@ declare global {
       setCwd: (cwd: string) => Promise<void>
       setPermissionMode: (mode: string) => Promise<void>
       pickDirectory: () => Promise<string | null>
+      pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
       listSessions: () => Promise<any[]>
       getSessionMessages: (sessionId: string) => Promise<any[]>
@@ -188,6 +189,8 @@ export function useClaude() {
               : String(c.content ?? ''),
             is_error: c.is_error,
           }
+              if (c.type === 'image') return { type: 'image' as const, src: c.src, mimeType: c.mimeType, fileName: c.fileName, fileSize: c.fileSize }
+              if (c.type === 'file') return { type: 'file' as const, fileName: c.fileName, fileSize: c.fileSize, mimeType: c.mimeType, fileContent: c.fileContent }
               return { type: 'text' as const, text: JSON.stringify(c) }
             })
           })(),
@@ -482,7 +485,7 @@ export function useClaude() {
   }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions])
 
   const send = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, files?: FileAttachment[]) => {
       if (!prompt.trim() || isLoading) return
 
       const store = useChatStore.getState()
@@ -505,10 +508,31 @@ export function useClaude() {
         pendingTempSessionId.current = null
       }
 
+      const userContent: ContentBlock[] = []
+      if (files && files.length > 0) {
+        for (const file of files) {
+          if (file.isImage) {
+            userContent.push({
+              type: 'image',
+              src: `data:${file.mimeType};base64,${file.data}`,
+              mimeType: file.mimeType,
+            })
+          } else {
+            userContent.push({
+              type: 'file',
+              fileName: file.name,
+              fileSize: file.size,
+              mimeType: file.mimeType,
+            })
+          }
+        }
+      }
+      userContent.push({ type: 'text', text: prompt })
+
       addMessage({
         id: `user-${Date.now()}`,
         role: 'user',
-        content: [{ type: 'text', text: prompt }],
+        content: userContent,
         timestamp: Date.now(),
         sessionId: sid,
       })
@@ -532,7 +556,7 @@ export function useClaude() {
       }, 180000)
       try {
         // Only pass sessionId to backend if it's a real (persisted) session
-        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined)
+        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files)
         clearTimeout(safetyTimer)
       } catch (err: unknown) {
         clearTimeout(safetyTimer)

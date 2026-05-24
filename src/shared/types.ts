@@ -58,6 +58,8 @@ export const IPC_CHANNELS = {
   IMAGE_LIST: 'nerve:image-list',
   IMAGE_DELETE: 'nerve:image-delete',
   IMAGE_GET_PATH: 'nerve:image-get-path',
+  // File upload
+  PICK_AND_READ_FILES: 'nerve:pick-and-read-files',
   // Brain
   BRAIN_SCAN: 'nerve:brain-scan',
   BRAIN_READ_FILE: 'nerve:brain-read-file',
@@ -160,9 +162,18 @@ export const DEFAULT_STATE_MAP: Record<PetState, PetdexAnimId> = {
   waiting: 'waiting',
 }
 
+export interface FileAttachment {
+  name: string
+  mimeType: string
+  size: number
+  data: string
+  isImage: boolean
+}
+
 export interface SendMessagePayload {
   prompt: string
   sessionId?: string
+  files?: FileAttachment[]
 }
 
 export interface SessionInfo {
@@ -190,7 +201,7 @@ export type ColorScheme = 'purple' | 'blue' | 'green' | 'pink' | 'orange'
 export type MessageRole = 'user' | 'assistant' | 'system'
 
 export interface ContentBlock {
-  type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image'
+  type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image' | 'file'
   text?: string
   thinking?: string
   src?: string
@@ -200,6 +211,10 @@ export interface ContentBlock {
   content?: string | ContentBlock[]
   toolCallId?: string
   is_error?: boolean
+  fileName?: string
+  fileSize?: number
+  mimeType?: string
+  fileContent?: string
 }
 
 export interface ChatMessage {
