@@ -458,16 +458,14 @@ function FileReferenceCard({ filePath }: { filePath: string }) {
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-2.5 my-2 rounded-xl cursor-pointer transition-opacity hover:opacity-80"
+      className="flex items-center gap-3 px-4 py-2.5 my-2 rounded-lg cursor-pointer transition-opacity hover:opacity-80"
       style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container-low)' }}
       onClick={handleOpen}
     >
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--bg-surface-container)' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
-      </div>
+      <svg className="shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+        <polyline points="14 2 14 8 20 8" />
+      </svg>
       <div className="flex-1 min-w-0">
         <div className="truncate" style={{ fontSize: '13px', color: 'var(--text-on-surface)' }}>{fileName}</div>
         <div style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
