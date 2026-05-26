@@ -343,10 +343,11 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole }: 
   }
 
   if (isUser) {
+    const hasImage = message.content.some((b) => b.type === 'image')
     return (
       <div className={`animate-fade-in flex justify-center ${mb}`}>
         <div className="flex justify-end" style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
-          <div className="px-4 py-2.5 rounded-2xl" style={{ background: 'var(--bg-surface-container)', maxWidth: '80%', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+          <div className={hasImage ? 'px-4 py-2.5 rounded-t-2xl rounded-b-lg' : 'px-4 py-2.5 rounded-2xl'} style={{ background: 'var(--bg-surface-container)', maxWidth: '80%', wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right' }}>
             {message.content.map((block, i) => {
               if (block.type === 'image' && block.src) {
                 return <ImageView key={i} src={block.src} />
@@ -427,15 +428,56 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole }: 
     return result
   }
 
+  const fileRefs = otherBlocks
+    .filter((b) => b.type === 'tool_use' && (b.name === 'Write' || b.name === 'Edit'))
+    .map((b) => b.input?.file_path as string)
+    .filter(Boolean)
+
   return (
     <div className={`animate-fade-in flex justify-center ${mb} group/msg`}>
       <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
         {renderBlocks()}
+        {fileRefs.length > 0 && (
+          <div className="mt-2">
+            {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
+          </div>
+        )}
         <MessageActions message={message} />
       </div>
     </div>
   )
 })
+
+function FileReferenceCard({ filePath }: { filePath: string }) {
+  const fileName = filePath.split(/[/\\]/).pop() || filePath
+  const ext = fileName.split('.').pop()?.toUpperCase() || ''
+
+  const handleOpen = () => {
+    window.claude.openInBrowser('file', filePath)
+  }
+
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 my-2 rounded-xl cursor-pointer transition-opacity hover:opacity-80"
+      style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container-low)' }}
+      onClick={handleOpen}
+    >
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--bg-surface-container)' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="truncate" style={{ fontSize: '13px', color: 'var(--text-on-surface)' }}>{fileName}</div>
+        <div style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
+          {ext ? `文档 · ${ext}` : '文档'}
+        </div>
+      </div>
+      <span className="shrink-0" style={{ fontSize: '11px', color: 'var(--text-outline)' }}>打开方式 ▾</span>
+    </div>
+  )
+}
 
 function MessageActions({ message }: { message: ChatMessage }) {
   const [copied, setCopied] = useState(false)
