@@ -346,7 +346,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole }: 
     return (
       <div className={`animate-fade-in flex justify-center ${mb}`}>
         <div className="flex justify-end" style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
-          <div className="px-4 py-2.5 rounded-2xl" style={{ background: 'var(--bg-surface-container)', maxWidth: '80%' }}>
+          <div className="px-4 py-2.5 rounded-2xl" style={{ background: 'var(--bg-surface-container)', maxWidth: '80%', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
             {message.content.map((block, i) => {
               if (block.type === 'image' && block.src) {
                 return <ImageView key={i} src={block.src} />
