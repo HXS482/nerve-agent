@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useEffect, useRef, useMemo, Fragment } from 'react'
 import { ChatMessage } from '../../shared/types'
 import { MessageBubble } from './MessageBubble'
 import { SubagentTracker } from './SubagentTracker'
@@ -9,6 +9,11 @@ interface Props {
   messages: ChatMessage[]
   isLoading: boolean
   onSend?: (prompt: string) => void
+}
+
+function formatTime(ts: number): string {
+  const d = new Date(ts)
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
 export function ChatPanel({ messages, isLoading, onSend }: Props) {
@@ -24,15 +29,6 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [filteredMessages.length])
-
-  const [thinkingExpanded, setThinkingExpanded] = useState(false)
-  const thinkingText = useMemo(() => {
-    if (!isLoading) return ''
-    const lastMsg = filteredMessages[filteredMessages.length - 1]
-    if (!lastMsg || lastMsg.role !== 'assistant') return ''
-    const block = lastMsg.content.find((b) => b.type === 'thinking')
-    return (block as any)?.thinking || ''
-  }, [filteredMessages, isLoading])
 
   if (filteredMessages.length === 0) {
     return (
@@ -59,63 +55,29 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
       style={{ paddingTop: 'var(--sp-xl)', paddingBottom: '72px' }}
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
-        {filteredMessages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
+        {filteredMessages.map((msg, i) => {
+          const prev = i > 0 ? filteredMessages[i - 1] : undefined
+          const showTimestamp = prev && prev.role !== msg.role && msg.timestamp
+          return (
+            <Fragment key={msg.id}>
+              {showTimestamp && (
+                <div className="flex justify-center my-3">
+                  <span style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
+                    {formatTime(msg.timestamp)}
+                  </span>
+                </div>
+              )}
+              <MessageBubble message={msg} prevRole={prev?.role} />
+            </Fragment>
+          )
+        })}
         <SubagentTracker />
         {isLoading && (
-          <div className="mb-6 animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <span
-                className="w-2 h-2 rounded-full animate-pulse-soft"
-                style={{ background: '#34d399' }}
-              />
-              <button
-                onClick={() => thinkingText && setThinkingExpanded(!thinkingExpanded)}
-                className="flex items-center gap-1 transition-colors"
-                style={{ cursor: thinkingText ? 'pointer' : 'default' }}
-              >
-                <span
-                  className="text-[var(--fs-sm)]"
-                  style={{ color: 'var(--text-outline)' }}
-                >
-                  Thinking
-                </span>
-                {thinkingText && (
-                  <svg
-                    className="w-2.5 h-2.5 transition-transform duration-150"
-                    style={{
-                      color: 'var(--text-outline-variant)',
-                      transform: thinkingExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                    }}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    viewBox="0 0 16 16"
-                  >
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                )}
-              </button>
+          <div className="flex justify-center my-4 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft" style={{ background: 'var(--accent-primary)' }} />
+              <span style={{ fontSize: '11px', color: 'var(--text-outline)' }}>思考中...</span>
             </div>
-            {thinkingExpanded && thinkingText && (
-              <div className="mt-2.5 ml-6">
-                <div
-                  className="whitespace-pre-wrap rounded-xl leading-relaxed max-h-48 overflow-y-auto"
-                  style={{
-                    padding: 'var(--sp-sm)',
-                    fontSize: 'var(--fs-xs)',
-                    color: 'var(--text-on-surface-variant)',
-                    background: 'var(--bg-surface-container)',
-                    border: '1px solid var(--border-subtle)',
-                    fontFamily: 'var(--font-mono)',
-                  }}
-                >
-                  {thinkingText}
-                </div>
-              </div>
-            )}
           </div>
         )}
         <div ref={bottomRef} />

@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react'
+import React, { useState, useMemo, memo } from 'react'
 import { ChatMessage, ContentBlock } from '../../shared/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -6,6 +6,7 @@ import rehypeHighlight from 'rehype-highlight'
 
 interface Props {
   message: ChatMessage
+  prevRole?: MessageRole
 }
 
 // Tool-specific color palette
@@ -322,9 +323,11 @@ function getToolDetail(name: string, input: Record<string, unknown> | undefined,
   return ''
 }
 
-export const MessageBubble = memo(function MessageBubble({ message }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, prevRole }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
+  const sameRole = prevRole === message.role
+  const mb = sameRole ? 'mb-2' : 'mb-8'
 
   if (isSystem) {
     return (
@@ -340,10 +343,11 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
   }
 
   if (isUser) {
+    const hasImage = message.content.some((b) => b.type === 'image')
     return (
-      <div className="animate-fade-in flex justify-end mb-8">
-        <div className="flex items-end gap-2.5" style={{ maxWidth: 'var(--bubble-max-w)' }}>
-          <div className="flex flex-col gap-2 items-end">
+      <div className={`animate-fade-in flex justify-center ${mb}`}>
+        <div className="flex justify-end" style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
+          <div className={hasImage ? 'px-4 py-2.5 rounded-t-2xl rounded-b-lg' : 'px-4 py-2.5 rounded-2xl'} style={{ background: 'var(--bg-surface-container)', maxWidth: '80%', wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right' }}>
             {message.content.map((block, i) => {
               if (block.type === 'image' && block.src) {
                 return <ImageView key={i} src={block.src} />
@@ -351,7 +355,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
               if (block.type === 'file') {
                 return (
                   <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                    style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
+                    style={{ background: 'var(--bg-surface-container-high)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
                       <polyline points="14 2 14 8 20 8" />
@@ -366,7 +370,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
               if (block.type === 'text' && block.text) {
                 return (
                   <p key={i} className="whitespace-pre-wrap"
-                    style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-sm)', lineHeight: 1.5 }}>
+                    style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
                     {block.text}
                   </p>
                 )
@@ -374,7 +378,6 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
               return null
             })}
           </div>
-          <UserAvatar />
         </div>
       </div>
     )
@@ -425,13 +428,54 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
     return result
   }
 
+  const fileRefs = otherBlocks
+    .filter((b) => b.type === 'tool_use' && (b.name === 'Write' || b.name === 'Edit'))
+    .map((b) => b.input?.file_path as string)
+    .filter(Boolean)
+
   return (
-    <div className="animate-fade-in mb-8 group/msg" style={{ maxWidth: 'var(--bubble-max-w)' }}>
-      {renderBlocks()}
-      <MessageActions message={message} />
+    <div className={`animate-fade-in flex justify-center ${mb} group/msg`}>
+      <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
+        {renderBlocks()}
+        {fileRefs.length > 0 && (
+          <div className="mt-2">
+            {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
+          </div>
+        )}
+        <MessageActions message={message} />
+      </div>
     </div>
   )
 })
+
+function FileReferenceCard({ filePath }: { filePath: string }) {
+  const fileName = filePath.split(/[/\\]/).pop() || filePath
+  const ext = fileName.split('.').pop()?.toUpperCase() || ''
+
+  const handleOpen = () => {
+    window.claude.openInBrowser('file', filePath)
+  }
+
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 my-2 rounded-lg cursor-pointer transition-opacity hover:opacity-80"
+      style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container-low)' }}
+      onClick={handleOpen}
+    >
+      <svg className="shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+        <polyline points="14 2 14 8 20 8" />
+      </svg>
+      <div className="flex-1 min-w-0">
+        <div className="truncate" style={{ fontSize: '13px', color: 'var(--text-on-surface)' }}>{fileName}</div>
+        <div style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
+          {ext ? `文档 · ${ext}` : '文档'}
+        </div>
+      </div>
+      <span className="shrink-0" style={{ fontSize: '11px', color: 'var(--text-outline)' }}>打开方式 ▾</span>
+    </div>
+  )
+}
 
 function MessageActions({ message }: { message: ChatMessage }) {
   const [copied, setCopied] = useState(false)
@@ -521,7 +565,68 @@ function ImageView({ src }: { src: string }) {
   )
 }
 
+function extractText(children: React.ReactNode): string {
+  if (typeof children === 'string') return children
+  if (Array.isArray(children)) return children.map(extractText).join('')
+  if (React.isValidElement(children) && (children as any).props.children)
+    return extractText((children as any).props.children)
+  return ''
+}
+
+function CodeBlock({ language, codeText, children }: {
+  language?: string; codeText?: string; children: React.ReactNode
+}) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    if (!codeText) return
+    navigator.clipboard.writeText(codeText).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <div className="group/code" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)' }}>
+      {(language || codeText) && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-surface-container)', borderBottom: '1px solid var(--border-subtle)' }}>
+          {language ? (
+            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              {language}
+            </span>
+          ) : <span />}
+          {codeText && (
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity"
+              style={{ fontSize: 'var(--fs-xs)', color: copied ? '#34d399' : 'var(--text-outline)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}
+            >
+              {copied ? (
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 8l3.5 3.5L13 5" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="5" y="5" width="8" height="8" rx="1.5" />
+                  <path d="M3 11V3.5A.5.5 0 013.5 3H11" />
+                </svg>
+              )}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+          )}
+        </div>
+      )}
+      <pre style={{ margin: 0, border: 'none', borderRadius: 0, background: 'var(--bg-surface-container-lowest)', overflowX: 'auto' }}>
+        {children}
+      </pre>
+    </div>
+  )
+}
+
 const MARKDOWN_COMPONENTS = {
+  h1: ({ children }: any) => (
+    <h1 className="font-bold mt-8 mb-3" style={{ color: 'var(--text-on-surface)', fontSize: 'clamp(18px, calc(18px + 0.3vw), 22px)', lineHeight: 1.3 }}>
+      {children}
+    </h1>
+  ),
   h2: ({ children }: any) => (
     <h2 className="font-semibold mt-6 mb-2" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-lg)' }}>
       {children}
@@ -532,8 +637,23 @@ const MARKDOWN_COMPONENTS = {
       {children}
     </h3>
   ),
+  h4: ({ children }: any) => (
+    <h4 className="font-bold mt-4 mb-1" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-base)', lineHeight: 1.4 }}>
+      {children}
+    </h4>
+  ),
+  h5: ({ children }: any) => (
+    <h5 className="font-medium mt-3 mb-1" style={{ color: 'var(--text-on-surface-variant)', fontSize: 'var(--fs-sm)', lineHeight: 1.4 }}>
+      {children}
+    </h5>
+  ),
+  h6: ({ children }: any) => (
+    <h6 className="font-medium mt-3 mb-1" style={{ color: 'var(--text-outline)', fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.4 }}>
+      {children}
+    </h6>
+  ),
   p: ({ children }: any) => (
-    <p className="my-2.5" style={{ color: 'var(--text-on-surface)', lineHeight: '1.7' }}>
+    <p className="my-4" style={{ color: 'var(--text-on-surface)', lineHeight: '1.7' }}>
       {children}
     </p>
   ),
@@ -552,17 +672,18 @@ const MARKDOWN_COMPONENTS = {
     }
     return <code className={className} {...props}>{children}</code>
   },
-  pre: ({ children }: any) => (
-    <pre
-      className="rounded-xl my-3 overflow-x-auto"
-      style={{
-        background: 'var(--bg-surface-container-lowest)',
-        border: '1px solid var(--border-subtle)',
-      }}
-    >
-      {children}
-    </pre>
-  ),
+  pre: ({ children }: any) => {
+    let language: string | undefined
+    let codeText: string | undefined
+    React.Children.forEach(children, (child) => {
+      if (React.isValidElement(child) && child.type === 'code') {
+        const match = ((child as any).props.className || '').match(/language-(\w+)/)
+        if (match) language = match[1]
+        codeText = extractText((child as any).props.children)
+      }
+    })
+    return <CodeBlock language={language} codeText={codeText}>{children}</CodeBlock>
+  },
   a: ({ children, href }: any) => (
     <a
       href={href}
@@ -573,12 +694,27 @@ const MARKDOWN_COMPONENTS = {
     </a>
   ),
   strong: ({ children }: any) => (
-    <strong className="font-semibold" style={{ color: 'var(--text-on-surface)' }}>
+    <strong className="font-bold" style={{ color: 'var(--text-on-surface)' }}>
       {children}
     </strong>
   ),
+  em: ({ children }: any) => (
+    <em className="italic" style={{ color: 'var(--text-on-surface-variant)' }}>
+      {children}
+    </em>
+  ),
+  ol: ({ children }: any) => (
+    <ol className="my-3" style={{ paddingLeft: '1.5em' }}>
+      {children}
+    </ol>
+  ),
+  ul: ({ children }: any) => (
+    <ul className="my-3" style={{ paddingLeft: '1.5em' }}>
+      {children}
+    </ul>
+  ),
   li: ({ children }: any) => (
-    <li className="leading-[1.7]" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-base)' }}>
+    <li className="leading-relaxed mb-1" style={{ color: 'var(--text-on-surface)', fontSize: '13px' }}>
       {children}
     </li>
   ),
@@ -594,21 +730,24 @@ const MARKDOWN_COMPONENTS = {
     </blockquote>
   ),
   hr: () => (
-    <hr className="my-6" style={{ borderColor: 'var(--border-subtle)' }} />
+    <hr className="my-8" style={{ borderColor: 'var(--border-default)', opacity: 0.5 }} />
   ),
   table: ({ children }: any) => (
-    <table className="w-full my-3" style={{ borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
-      {children}
-    </table>
+    <div className="my-3 overflow-x-auto" style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+        {children}
+      </table>
+    </div>
   ),
   th: ({ children }: any) => (
     <th
-      className="text-left py-2 px-3 font-medium text-[11px]"
+      className="text-left py-2.5 px-3 font-medium text-[11px]"
       style={{
         color: 'var(--text-outline)',
-        borderBottom: '1px solid var(--border-subtle)',
+        borderBottom: '1px solid var(--border-default)',
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
+        background: 'var(--bg-surface-container)',
       }}
     >
       {children}
@@ -646,7 +785,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
     const matches = cleaned.match(IMAGE_PATH_RE) || []
     if (matches.length > 0) {
       return (
-        <div style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-base)', lineHeight: 1.7 }}>
+        <div style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.7 }}>
           {parts.map((part, i) => (
             <span key={i}>
               {part && (
@@ -667,7 +806,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
         className="prose"
         style={{
           color: 'var(--text-on-surface)',
-          fontSize: 'var(--fs-base)',
+          fontSize: '13px',
           lineHeight: 1.7,
         }}
       >
