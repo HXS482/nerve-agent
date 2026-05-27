@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, Fragment } from 'react'
+import React, { useEffect, useRef, useMemo, useCallback, Fragment } from 'react'
 import { ChatMessage } from '../../shared/types'
 import { MessageBubble } from './MessageBubble'
 import { SubagentTracker } from './SubagentTracker'
@@ -11,11 +11,6 @@ interface Props {
   onSend?: (prompt: string) => void
 }
 
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
 export function ChatPanel({ messages, isLoading, onSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -24,6 +19,18 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
   const filteredMessages = useMemo(
     () => currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : [],
     [messages, currentSessionId]
+  )
+
+  const onRetryMessage = useCallback(
+    (assistantMsg: ChatMessage) => {
+      if (!onSend) return
+      const idx = filteredMessages.findIndex((m) => m.id === assistantMsg.id)
+      const userMsg = filteredMessages.slice(0, idx).reverse().find((m) => m.role === 'user')
+      if (!userMsg) return
+      const text = userMsg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+      if (text) onSend(text)
+    },
+    [onSend, filteredMessages]
   )
 
   useEffect(() => {
@@ -57,17 +64,9 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
       <div style={{ paddingInline: 'var(--sp-md)' }}>
         {filteredMessages.map((msg, i) => {
           const prev = i > 0 ? filteredMessages[i - 1] : undefined
-          const showTimestamp = prev && prev.role !== msg.role && msg.timestamp
           return (
             <Fragment key={msg.id}>
-              {showTimestamp && (
-                <div className="flex justify-center my-3">
-                  <span style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
-                    {formatTime(msg.timestamp)}
-                  </span>
-                </div>
-              )}
-              <MessageBubble message={msg} prevRole={prev?.role} />
+              <MessageBubble message={msg} prevRole={prev?.role} onRetry={msg.role === 'assistant' ? onRetryMessage : undefined} />
             </Fragment>
           )
         })}

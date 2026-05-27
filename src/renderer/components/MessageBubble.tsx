@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react'
+import React, { useState, useMemo, memo, useCallback } from 'react'
 import { ChatMessage, ContentBlock } from '../../shared/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -7,6 +7,7 @@ import rehypeHighlight from 'rehype-highlight'
 interface Props {
   message: ChatMessage
   prevRole?: MessageRole
+  onRetry?: (message: ChatMessage) => void
 }
 
 // Tool-specific color palette
@@ -323,10 +324,11 @@ function getToolDetail(name: string, input: Record<string, unknown> | undefined,
   return ''
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, prevRole }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, prevRole, onRetry }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const sameRole = prevRole === message.role
+  const handleRetry = useCallback(() => { onRetry?.(message) }, [onRetry, message])
   const mb = sameRole ? 'mb-2' : 'mb-8'
 
   if (isSystem) {
@@ -442,7 +444,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole }: 
             {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
           </div>
         )}
-        <MessageActions message={message} />
+        <MessageActions message={message} onRetry={handleRetry} />
       </div>
     </div>
   )
@@ -477,8 +479,96 @@ function FileReferenceCard({ filePath }: { filePath: string }) {
   )
 }
 
-function MessageActions({ message }: { message: ChatMessage }) {
+const CopyButton = memo(function CopyButton({ fullText }: { fullText: string }) {
   const [copied, setCopied] = useState(false)
+  const handleClick = useCallback(() => {
+    navigator.clipboard.writeText(fullText).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }, [fullText])
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
+      style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)', background: 'transparent' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
+    >
+      {copied ? (
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 8l3.5 3.5L13 5" />
+        </svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="5" y="5" width="8" height="8" rx="1.5" />
+          <path d="M3 11V3.5A.5.5 0 013.5 3H11" />
+        </svg>
+      )}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  )
+})
+
+const RetryButton = memo(function RetryButton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <button
+      onClick={onRetry}
+      className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
+      style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)', background: 'transparent' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
+    >
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 8a6 6 0 0110.47-4M14 8a6 6 0 01-10.47 4" />
+        <path d="M14 2v4h-4M2 14v-4h4" />
+      </svg>
+      <span>Retry</span>
+    </button>
+  )
+})
+
+const FeedbackButtons = memo(function FeedbackButtons() {
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+
+  return (
+    <>
+      <button
+        onClick={() => setFeedback(feedback === 'up' ? null : 'up')}
+        className="flex items-center px-2 py-1 rounded-md transition-colors"
+        style={{
+          fontSize: 'var(--fs-xs)',
+          color: feedback === 'up' ? '#34d399' : 'var(--text-outline)',
+          background: feedback === 'up' ? 'rgba(52,211,153,0.1)' : 'transparent',
+        }}
+        onMouseEnter={(e) => { if (!feedback || feedback !== 'up') { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' } }}
+        onMouseLeave={(e) => { if (feedback !== 'up') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' } }}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill={feedback === 'up' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 14V7.5L2 7.5V14h3zM5 7.5L8 2a2 2 0 012 2v3.5h3.5a1.5 1.5 0 011.46 1.85l-1.2 5A1.5 1.5 0 0112.3 15H5" />
+        </svg>
+      </button>
+      <button
+        onClick={() => setFeedback(feedback === 'down' ? null : 'down')}
+        className="flex items-center px-2 py-1 rounded-md transition-colors"
+        style={{
+          fontSize: 'var(--fs-xs)',
+          color: feedback === 'down' ? 'var(--error)' : 'var(--text-outline)',
+          background: feedback === 'down' ? 'rgba(255,180,171,0.1)' : 'transparent',
+        }}
+        onMouseEnter={(e) => { if (!feedback || feedback !== 'down') { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' } }}
+        onMouseLeave={(e) => { if (feedback !== 'down') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' } }}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill={feedback === 'down' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 2v6.5L14 8.5V2h-3zM11 8.5L8 14a2 2 0 01-2-2v-3.5H2.5A1.5 1.5 0 011.04 6.65l1.2-5A1.5 1.5 0 013.7 1H11" />
+        </svg>
+      </button>
+    </>
+  )
+})
+
+function MessageActions({ message, onRetry }: { message: ChatMessage; onRetry?: () => void }) {
   const fullText = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
   if (!fullText) return null
 
@@ -487,30 +577,9 @@ function MessageActions({ message }: { message: ChatMessage }) {
       className="flex items-center gap-1 mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200"
       style={{ transitionTimingFunction: 'cubic-bezier(0.32, 0.72, 0, 1)' }}
     >
-      <button
-        onClick={() => {
-          navigator.clipboard.writeText(fullText).then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
-          }).catch(() => {})
-        }}
-        className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
-        style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)', background: 'transparent' }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
-      >
-        {copied ? (
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 8l3.5 3.5L13 5" />
-          </svg>
-        ) : (
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5" y="5" width="8" height="8" rx="1.5" />
-            <path d="M3 11V3.5A.5.5 0 013.5 3H11" />
-          </svg>
-        )}
-        <span>{copied ? 'Copied' : 'Copy'}</span>
-      </button>
+      <CopyButton fullText={fullText} />
+      {onRetry && <RetryButton onRetry={onRetry} />}
+      <FeedbackButtons />
       {message.cost !== undefined && (
         <span
           className="tabular-nums px-1.5"
