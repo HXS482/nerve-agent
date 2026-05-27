@@ -8,3 +8,4 @@ dist/
 Thumbs.db
 *.tsbuildinfo
 .heartbeat
+.agents/skills/
