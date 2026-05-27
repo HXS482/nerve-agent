@@ -1,7 +1,8 @@
-﻿import { useEffect, useState, useCallback } from 'react'
+﻿import { useEffect, useState, useCallback, memo, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useGitStore } from '../stores/gitStore'
 import { useChatStore } from '../stores/chatStore'
+import { useShallow } from 'zustand/react/shallow'
 import { DiffLine } from './DiffLine'
 
 // ─── Icons ─────────────────────────────────────────────
@@ -97,7 +98,6 @@ const I = {
 
 const CARD = {
   hero: {
-    background: 'var(--bg-surface-container)',
     border: '1px solid var(--border-default)',
     borderRadius: 12,
     boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.1)',
@@ -105,7 +105,6 @@ const CARD = {
     margin: '8px 8px 4px',
   },
   primary: {
-    background: 'var(--bg-surface-container)',
     border: '1px solid var(--border-default)',
     borderRadius: 12,
     boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
@@ -113,7 +112,6 @@ const CARD = {
     margin: '0 8px 8px',
   },
   surface: {
-    background: 'var(--bg-surface-container)',
     border: '1px solid var(--border-default)',
     borderRadius: 12,
     boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
@@ -131,25 +129,18 @@ function Section({ title, count, defaultOpen, children, accent, hero }: {
   return (
     <div style={CARD.surface}>
       <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full text-left py-2.5 px-3 transition-colors hover:brightness-110"
+        className="flex items-center gap-2 w-full text-left py-2.5 px-3 transition-colors"
         style={{ color: 'var(--text-outline-variant)' }}
       >
         <motion.span animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0" style={{ width: 14, height: 14, color: accent || 'var(--text-outline-variant)' }}>
           <I.ChevronDn s={12} />
         </motion.span>
         <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: accent || 'var(--text-outline-variant)' }}>{title}</span>
-        {count !== undefined && (
-          <span className="text-[10px] font-semibold ml-auto tabular-nums flex items-center justify-center rounded-full px-1.5"
-            style={{ background: accent ? `${accent}20` : 'var(--bg-surface-container-high)', color: accent || 'var(--text-outline-variant)', minWidth: 18, height: 16 }}
-          >{count}</span>
-        )}
       </button>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }} className="overflow-hidden">
-            <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
               {children}
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -207,7 +198,7 @@ function ActionGroup({ children }: { children: React.ReactNode }) {
 
 // ─── File Row ──────────────────────────────────────────
 
-function FileRow({ filePath, statusCode, staged, onToggle, onShowDiff, onDiscard }: {
+const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, onShowDiff, onDiscard }: {
   filePath: string; statusCode: string; staged: boolean
   onToggle: () => void; onShowDiff: () => void; onDiscard?: () => void
 }) {
@@ -221,10 +212,8 @@ function FileRow({ filePath, statusCode, staged, onToggle, onShowDiff, onDiscard
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 6, height: 0 }} transition={{ duration: 0.12 }}
-      className="flex items-center gap-2 w-full transition-colors hover:bg-[var(--bg-surface-container-high)] group"
+    <div
+      className="flex items-center gap-2 w-full transition-colors group"
       style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
     >
       <button onClick={onToggle} className="shrink-0 flex items-center justify-center rounded-[4px] hover:brightness-150 transition-all"
@@ -255,9 +244,9 @@ function FileRow({ filePath, statusCode, staged, onToggle, onShowDiff, onDiscard
           }}
         >{confirm ? 'Discard' : <I.RotateCcw s={10} />}</button>
       )}
-    </motion.div>
+    </div>
   )
-}
+})
 
 // ─── Empty State ───────────────────────────────────────
 
@@ -273,15 +262,26 @@ function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
 // ─── Files Section ─────────────────────────────────────
 
 function FilesSection() {
-  const { status, loading, stageFiles, unstageFiles, commit, commitAndPush, discardChanges, setSelectedDiffFile, fetchDiff, refresh } = useGitStore()
+  const { status, loading, stageFiles, unstageFiles, commit, commitAndPush, discardChanges, setSelectedDiffFile, fetchDiff, refresh } = useGitStore(useShallow((s) => ({
+    status: s.status,
+    loading: s.loading,
+    stageFiles: s.stageFiles,
+    unstageFiles: s.unstageFiles,
+    commit: s.commit,
+    commitAndPush: s.commitAndPush,
+    discardChanges: s.discardChanges,
+    setSelectedDiffFile: s.setSelectedDiffFile,
+    fetchDiff: s.fetchDiff,
+    refresh: s.refresh,
+  })))
   const setView = useChatStore((s) => s.setRightSidebarView)
   const [msg, setMsg] = useState('')
   const [pushing, setPushing] = useState(false)
 
-  const modified = (status?.modified || []).filter((f) => !(status?.staged || []).includes(f))
-  const untracked = status?.not_added || []
-  const staged = status?.staged || []
-  const conflicts = status?.conflicts || []
+  const modified = useMemo(() => (status?.modified || []).filter((f) => !(status?.staged || []).includes(f)), [status])
+  const untracked = useMemo(() => status?.not_added || [], [status])
+  const staged = useMemo(() => status?.staged || [], [status])
+  const conflicts = useMemo(() => status?.conflicts || [], [status])
 
   const toggle = useCallback((f: string) => {
     status?.staged.includes(f) ? unstageFiles([f]) : stageFiles([f])
@@ -383,7 +383,13 @@ function FilesSection() {
 // ─── Branches Section ──────────────────────────────────
 
 function BranchesSection() {
-  const { branches, loading, checkout, createBranch, deleteBranch } = useGitStore()
+  const { branches, loading, checkout, createBranch, deleteBranch } = useGitStore(useShallow((s) => ({
+    branches: s.branches,
+    loading: s.loading,
+    checkout: s.checkout,
+    createBranch: s.createBranch,
+    deleteBranch: s.deleteBranch,
+  })))
   const [name, setName] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [del, setDel] = useState<string | null>(null)
@@ -393,9 +399,9 @@ function BranchesSection() {
   return (
     <Section title="Branches" count={branches.length}>
       {branches.map((b) => (
-        <motion.div key={b.name} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-2 w-full transition-colors hover:bg-[var(--bg-surface-container-high)] group"
-          style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)', background: b.current ? 'var(--bg-surface-container-high)' : 'transparent' }}
+        <div key={b.name}
+          className="flex items-center gap-2 w-full transition-colors group"
+          style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
         >
           <button onClick={() => checkout(b.name)} className="flex-1 flex items-center gap-2.5 min-w-0">
             <span className="shrink-0 flex items-center justify-center" style={{ width: 16, height: 16 }}>
@@ -422,7 +428,7 @@ function BranchesSection() {
               )}
             </div>
           )}
-        </motion.div>
+        </div>
       ))}
       <AnimatePresence>
         {showNew ? (
@@ -447,7 +453,14 @@ function BranchesSection() {
 // ─── Stashes Section ───────────────────────────────────
 
 function StashesSection() {
-  const { stashes, loading, stashPush, stashPop, stashApply, stashDrop } = useGitStore()
+  const { stashes, loading, stashPush, stashPop, stashApply, stashDrop } = useGitStore(useShallow((s) => ({
+    stashes: s.stashes,
+    loading: s.loading,
+    stashPush: s.stashPush,
+    stashPop: s.stashPop,
+    stashApply: s.stashApply,
+    stashDrop: s.stashDrop,
+  })))
   const [show, setShow] = useState(false)
   const [msg, setMsg] = useState('')
   const [untracked, setUntracked] = useState(false)
@@ -477,8 +490,8 @@ function StashesSection() {
       {stashes.length === 0 && !show && <EmptyState icon={<I.Archive s={18} />} text="No stashes" />}
 
       {stashes.map((s) => (
-        <motion.div key={s.hash} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-2 w-full transition-colors hover:bg-[var(--bg-surface-container-high)] group"
+        <div key={s.hash}
+          className="flex items-center gap-2 w-full transition-colors group"
           style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
         >
           <div className="flex-1 min-w-0">
@@ -493,7 +506,7 @@ function StashesSection() {
             <button onClick={() => stashApply(s.index)} className="p-1 rounded-[4px] hover:bg-[var(--bg-surface-container)]" title="Apply" style={{ color: 'var(--text-outline-variant)' }}><I.Check s={11} /></button>
             <button onClick={() => stashDrop(s.index)} className="p-1 rounded-[4px] hover:bg-[rgba(239,68,68,0.1)]" title="Drop" style={{ color: '#ef4444' }}><I.Trash s={11} /></button>
           </div>
-        </motion.div>
+        </div>
       ))}
     </Section>
   )
@@ -502,16 +515,23 @@ function StashesSection() {
 // ─── Log Section ───────────────────────────────────────
 
 function LogSection() {
-  const { log, selectedCommitHash, commitDiff, loading, fetchCommitDiff, clearCommitDiff } = useGitStore()
+  const { log, selectedCommitHash, commitDiff, loading, fetchCommitDiff, clearCommitDiff } = useGitStore(useShallow((s) => ({
+    log: s.log,
+    selectedCommitHash: s.selectedCommitHash,
+    commitDiff: s.commitDiff,
+    loading: s.loading,
+    fetchCommitDiff: s.fetchCommitDiff,
+    clearCommitDiff: s.clearCommitDiff,
+  })))
 
   if (log.length === 0) return null
 
   return (
     <Section title="Recent Commits" count={log.length} defaultOpen={false}>
       {log.slice(0, 20).map((c) => (
-        <motion.div key={c.hash} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}>
+        <div key={c.hash}>
           <button onClick={() => selectedCommitHash === c.hash ? clearCommitDiff() : fetchCommitDiff(c.hash)}
-            className="flex items-center gap-2 w-full text-left transition-colors hover:bg-[var(--bg-surface-container-high)]"
+            className="flex items-center gap-2 w-full text-left transition-colors"
             style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)', background: selectedCommitHash === c.hash ? 'var(--bg-surface-container-high)' : 'transparent' }}
           >
             <span className="text-[9px] font-mono shrink-0" style={{ color: 'var(--accent-primary)', opacity: 0.55 }}>{c.hash.slice(0, 7)}</span>
@@ -535,7 +555,7 @@ function LogSection() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
       ))}
     </Section>
   )
@@ -544,7 +564,19 @@ function LogSection() {
 // ─── Main ──────────────────────────────────────────────
 
 export function GitView() {
-  const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch } = useGitStore()
+  const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch } = useGitStore(useShallow((s) => ({
+    status: s.status,
+    loading: s.loading,
+    error: s.error,
+    cwd: s.cwd,
+    refresh: s.refresh,
+    init: s.init,
+    clearError: s.clearError,
+    setCwd: s.setCwd,
+    push: s.push,
+    pull: s.pull,
+    fetch: s.fetch,
+  })))
   const chatConfig = useChatStore((s) => s.config)
   const [sync, setSync] = useState<'push' | 'pull' | 'fetch' | null>(null)
 
