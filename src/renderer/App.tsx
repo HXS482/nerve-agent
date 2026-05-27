@@ -9,7 +9,7 @@ import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import Grainient from './components/Grainient'
-import { NerveOrb } from './components/NerveOrb'
+import { NerveCloud } from './components/NerveCloud'
 import { useState, useEffect } from 'react'
 
 export default function App() {
@@ -117,7 +117,7 @@ export default function App() {
 
           {/* Center: Nerve Orb */}
           <div className="flex-1 flex justify-center items-center">
-            <NerveOrb state={orbState} theme={theme} size={36} />
+            <NerveCloud state={orbState} theme={theme} size={64} />
           </div>
 
           {/* Right: toggle sidebar + settings + cmd */}
