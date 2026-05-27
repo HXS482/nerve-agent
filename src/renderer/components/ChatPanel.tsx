@@ -62,24 +62,26 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
       style={{ paddingTop: 'var(--sp-xl)', paddingBottom: '72px' }}
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
-        {filteredMessages.map((msg, i) => {
-          const prev = i > 0 ? filteredMessages[i - 1] : undefined
-          return (
-            <Fragment key={msg.id}>
-              <MessageBubble message={msg} prevRole={prev?.role} onRetry={msg.role === 'assistant' ? onRetryMessage : undefined} />
-            </Fragment>
-          )
-        })}
-        <SubagentTracker />
-        {isLoading && (
-          <div className="flex justify-center my-4 animate-fade-in">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft" style={{ background: 'var(--accent-primary)' }} />
-              <span style={{ fontSize: '11px', color: 'var(--text-outline)' }}>思考中...</span>
+        <div style={{ maxWidth: '60%', margin: '0 auto' }}>
+          {filteredMessages.map((msg, i) => {
+            const prev = i > 0 ? filteredMessages[i - 1] : undefined
+            return (
+              <Fragment key={msg.id}>
+                <MessageBubble message={msg} prevRole={prev?.role} onRetry={msg.role === 'assistant' ? onRetryMessage : undefined} />
+              </Fragment>
+            )
+          })}
+          <SubagentTracker />
+          {isLoading && (
+            <div className="flex justify-center my-4 animate-fade-in">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft" style={{ background: 'var(--accent-primary)' }} />
+                <span style={{ fontSize: '11px', color: 'var(--text-outline)' }}>思考中...</span>
+              </div>
             </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
     </div>
   )

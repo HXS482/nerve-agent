@@ -329,7 +329,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
   const isSystem = message.role === 'system'
   const sameRole = prevRole === message.role
   const handleRetry = useCallback(() => { onRetry?.(message) }, [onRetry, message])
-  const mb = sameRole ? 'mb-2' : 'mb-8'
+  const mb = sameRole ? 'mb-2' : ''
 
   if (isSystem) {
     return (
@@ -345,41 +345,38 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
   }
 
   if (isUser) {
-    const hasImage = message.content.some((b) => b.type === 'image')
     return (
-      <div className={`animate-fade-in flex justify-center ${mb}`}>
-        <div className="flex justify-end" style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
-          <div className={hasImage ? 'px-4 py-2.5 rounded-t-2xl rounded-b-lg' : 'px-4 py-2.5 rounded-2xl'} style={{ background: 'var(--bg-surface-container)', maxWidth: '80%', wordBreak: 'break-word', overflowWrap: 'break-word', textAlign: 'right' }}>
-            {message.content.map((block, i) => {
-              if (block.type === 'image' && block.src) {
-                return <ImageView key={i} src={block.src} />
-              }
-              if (block.type === 'file') {
-                return (
-                  <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                    style={{ background: 'var(--bg-surface-container-high)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <span>{block.fileName}</span>
-                    <span style={{ color: 'var(--text-outline-variant)' }}>
-                      {block.fileSize != null ? (block.fileSize < 1024 ? `${block.fileSize} B` : block.fileSize < 1048576 ? `${(block.fileSize / 1024).toFixed(1)} KB` : `${(block.fileSize / 1048576).toFixed(1)} MB`) : ''}
-                    </span>
-                  </div>
-                )
-              }
-              if (block.type === 'text' && block.text) {
-                return (
-                  <p key={i} className="whitespace-pre-wrap"
-                    style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
-                    {block.text}
-                  </p>
-                )
-              }
-              return null
-            })}
-          </div>
+      <div className="animate-fade-in flex justify-end" style={{ paddingInline: 'var(--sp-md)', marginBottom: sameRole ? 8 : 48 }}>
+        <div style={{ maxWidth: '100%' }}>
+          {message.content.map((block, i) => {
+            if (block.type === 'image' && block.src) {
+              return <ImageView key={i} src={block.src} />
+            }
+            if (block.type === 'file') {
+              return (
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                  style={{ background: 'var(--bg-surface-container-high)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>{block.fileName}</span>
+                  <span style={{ color: 'var(--text-outline-variant)' }}>
+                    {block.fileSize != null ? (block.fileSize < 1024 ? `${block.fileSize} B` : block.fileSize < 1048576 ? `${(block.fileSize / 1024).toFixed(1)} KB` : `${(block.fileSize / 1048576).toFixed(1)} MB`) : ''}
+                  </span>
+                </div>
+              )
+            }
+            if (block.type === 'text' && block.text) {
+              return (
+                <p key={i} className="whitespace-pre-wrap"
+                  style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
+                  {block.text}
+                </p>
+              )
+            }
+            return null
+          })}
         </div>
       </div>
     )
@@ -436,11 +433,11 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     .filter(Boolean)
 
   return (
-    <div className={`animate-fade-in flex justify-center ${mb} group/msg`}>
-      <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
+      <div className="animate-fade-in flex justify-center group/msg" style={{ marginBottom: sameRole ? 8 : 48 }}>
+        <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
         {renderBlocks()}
         {fileRefs.length > 0 && (
-          <div className="mt-2">
+          <div className="mt-2 flex flex-col gap-2">
             {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
           </div>
         )}
@@ -460,7 +457,7 @@ function FileReferenceCard({ filePath }: { filePath: string }) {
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-2.5 my-2 rounded-lg cursor-pointer transition-opacity hover:opacity-80"
+      className="flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-opacity hover:opacity-80"
       style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container-low)' }}
       onClick={handleOpen}
     >
