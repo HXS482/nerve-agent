@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIMO API 调用监控仪表盘</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #050505;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #111111;
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-medium: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.4);
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background glow */
+        .ambient-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(59, 130, 246, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse 70% 60% at 60% 80%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+        }
+
+        /* Glass morphism card */
+        .glass-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        }
+
+        /* Double-bezel effect */
+        .double-bezel {
+            padding: 2px;
+            border-radius: 26px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
+        }
+
+        .double-bezel-inner {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 24px;
+            height: 100%;
+            position: relative;
+        }
+
+        .double-bezel-inner::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+        }
+
+        /* Stat card variations */
+        .stat-card {
+            transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px) scale(1.01);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .stat-card:hover .stat-glow {
+            opacity: 1;
+        }
+
+        .stat-glow {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        /* Metric badge */
+        .metric-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        /* Status indicator */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.9); }
+        }
+
+        /* Code block */
+        .code-block {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .code-keyword { color: var(--accent-purple); }
+        .code-string { color: var(--accent-emerald); }
+        .code-number { color: var(--accent-amber); }
+        .code-comment { color: var(--text-muted); }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Animation delays for staggered entrance */
+        .animate-delay-1 { animation-delay: 0.1s; }
+        .animate-delay-2 { animation-delay: 0.2s; }
+        .animate-delay-3 { animation-delay: 0.3s; }
+        .animate-delay-4 { animation-delay: 0.4s; }
+        .animate-delay-5 { animation-delay: 0.5s; }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp 0.6s ease-out forwards;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow"></div>
+    
+    <!-- Main Container -->
+    <div class="relative z-10 min-h-screen p-6 md:p-8">
+        <!-- Header -->
+        <header class="mb-8 animate-fade-in-up">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                        </div>
+                        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">MIMO API 监控中心</h1>
+                    </div>
+                    <p class="text-gray-400 text-sm md:text-base">实时监控API调用性能与模型接入状态</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                        <div class="status-dot bg-emerald-500"></div>
+                        <span class="text-emerald-400 text-sm font-medium">系统运行中</span>
+                    </div>
+                    <div class="text-sm text-gray-400">
+                        最后更新: <span id="lastUpdate" class="text-gray-300">--</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Calls -->
+            <div class="double-bezel stat-card animate-fade-in-up animate-delay-1">
+                <div class="double-bezel-inner">
+                    <div class="stat-glow bg-gradient-to-b from-blue-500/5 to-transparent"></div>
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="p-2 rounded-lg bg-blue-500/10">
+                            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                        </div>
+                        <div class="metric-badge bg-blue-500/10 text-blue-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-400 mr-1.5"></span>
+                            实时
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold mb-1" id="totalCalls">12,847</div>
+                    <div class="text-sm text-gray-400">总调用次数</div>
+                    <div class="mt-3 flex items-center text-sm">
+                        <span class="text-emerald-400 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                            </svg>
+                            +12.5%
+                        </span>
+                        <span class="text-gray-500 ml-2">较昨日</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success Rate -->
+            <div class="double-bezel stat-card animate-fade-in-up animate-delay-2">
+                <div class="double-bezel-inner">
+                    <div class="stat-glow bg-gradient-to-b from-emerald-500/5 to-transparent"></div>
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="p-2 rounded-lg bg-emerald-500/10">
+                            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="metric-badge bg-emerald-500/10 text-emerald-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                            正常
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold mb-1" id="successRate">99.8%</div>
+                    <div class="text-sm text-gray-400">成功率</div>
+                    <div class="mt-3 flex items-center text-sm">
+                        <span class="text-emerald-400 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                            </svg>
+                            +0.2%
+                        </span>
+                        <span class="text-gray-500 ml-2">较上周</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Avg Response Time -->
+            <div class="double-bezel stat-card animate-fade-in-up animate-delay-3">
+                <div class="double-bezel-inner">
+                    <div class="stat-glow bg-gradient-to-b from-purple-500/5 to-transparent"></div>
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="p-2 rounded-lg bg-purple-500/10">
+                            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="metric-badge bg-purple-500/10 text-purple-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-purple-400 mr-1.5"></span>
+                            延迟
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold mb-1" id="avgResponse">245ms</div>
+                    <div class="text-sm text-gray-400">平均响应时间</div>
+                    <div class="mt-3 flex items-center text-sm">
+                        <span class="text-emerald-400 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                            </svg>
+                            -18ms
+                        </span>
+                        <span class="text-gray-500 ml-2">较昨日</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Models -->
+            <div class="double-bezel stat-card animate-fade-in-up animate-delay-4">
+                <div class="double-bezel-inner">
+                    <div class="stat-glow bg-gradient-to-b from-amber-500/5 to-transparent"></div>
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="p-2 rounded-lg bg-amber-500/10">
+                            <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="metric-badge bg-amber-500/10 text-amber-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5"></span>
+                            模型
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold mb-1" id="activeModels">8</div>
+                    <div class="text-sm text-gray-400">活跃模型</div>
+                    <div class="mt-3 flex items-center text-sm">
+                        <span class="text-blue-400 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            3 个高性能
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Calls Chart -->
+            <div class="lg:col-span-2 double-bezel animate-fade-in-up animate-delay-5">
+                <div class="double-bezel-inner">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 class="text-lg font-semibold mb-1">API调用趋势</h2>
+                            <p class="text-sm text-gray-400">过去24小时调用数据</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 transition-colors">小时</button>
+                            <button class="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500/20 text-blue-400">天</button>
+                            <button class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 transition-colors">周</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="callsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Distribution -->
+            <div class="double-bezel animate-fade-in-up animate-delay-5">
+                <div class="double-bezel-inner">
+                    <div class="mb-6">
+                        <h2 class="text-lg font-semibold mb-1">模型调用分布</h2>
+                        <p class="text-sm text-gray-400">各模型调用占比</p>
+                    </div>
+                    <div class="chart-container" style="height: 200px;">
+                        <canvas id="modelChart"></canvas>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                                <span class="text-gray-300">mimo-7b</span>
+                            </div>
+                            <span class="font-medium">42%</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-purple-500"></div>
+                                <span class="text-gray-300">mimo-13b</span>
+                            </div>
+                            <span class="font-medium">28%</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                <span class="text-gray-300">mimo-33b</span>
+                            </div>
+                            <span class="font-medium">18%</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+                                <span class="text-gray-300">其他模型</span>
+                            </div>
+                            <span class="font-medium">12%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MIMO Integration Guide -->
+        <div class="double-bezel animate-fade-in-up animate-delay-5">
+            <div class="double-bezel-inner">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold">MIMO大模型接入指南</h2>
+                        <p class="text-sm text-gray-400">计算方式与API接入配置</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Pricing Model -->
+                    <div class="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <h3 class="font-medium mb-4 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            计费方式
+                        </h3>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-white/[0.02]">
+                                <span class="text-gray-400">输入Token</span>
+                                <span class="font-mono font-medium">¥0.002 / 1K tokens</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-white/[0.02]">
+                                <span class="text-gray-400">输出Token</span>
+                                <span class="font-mono font-medium">¥0.006 / 1K tokens</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-white/[0.02]">
+                                <span class="text-gray-400">并发限制</span>
+                                <span class="font-mono font-medium">1000 RPM</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Code Example -->
+                    <div>
+                        <h3 class="font-medium mb-4 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                            </svg>
+                            接入示例
+                        </h3>
+                        <div class="code-block">
+                            <pre><code><span class="code-keyword">import</span> openai
+
+client = openai.<span class="code-keyword">OpenAI</span>(
+    <span class="code-string">api_key</span>=<span class="code-string">"your-api-key"</span>,
+    <span class="code-string">base_url</span>=<span class="code-string">"https://api.mimo.ai/v1"</span>
+)
+
+response = client.chat.completions.<span class="code-keyword">create</span>(
+    <span class="code-string">model</span>=<span class="code-string">"mimo-7b"</span>,
+    <span class="code-string">messages</span>=[{
+        <span class="code-string">"role"</span>: <span class="code-string">"user"</span>,
+        <span class="code-string">"content"</span>: <span class="code-string">"Hello!"</span>
+    }],
+    <span class="code-string">max_tokens</span>=<span class="code-number">1024</span>,
+    <span class="code-string">temperature</span>=<span class="code-number">0.7</span>
+)
+
+<span class="code-comment"># 计算本次调用费用</span>
+input_tokens = response.usage.prompt_tokens
+output_tokens = response.usage.completion_tokens
+cost = (input_tokens * <span class="code-number">0.002</span> + 
+        output_tokens * <span class="code-number">0.006</span>) / <span class="code-number">1000</span></code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cost Calculator -->
+                <div class="mt-6 p-4 rounded-xl bg-gradient-to-r from-blue-500/5 to-purple-500/5 border border-blue-500/10">
+                    <h3 class="font-medium mb-4">费用计算器</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">输入Token数</label>
+                            <input type="number" id="inputTokens" value="1000" class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">输出Token数</label>
+                            <input type="number" id="outputTokens" value="500" class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">调用次数</label>
+                            <input type="number" id="callCount" value="100" class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="calculateCost()" class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors">
+                                计算费用
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 rounded-lg bg-black/20 border border-white/5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">预估总费用</span>
+                            <span class="text-2xl font-bold text-white" id="totalCost">¥0.50</span>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-400">
+                            单次调用: <span id="perCallCost" class="text-gray-300">¥0.005</span> | 
+                            每1000次: <span id="per1kCost" class="text-gray-300">¥5.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="mt-8 double-bezel animate-fade-in-up animate-delay-5">
+            <div class="double-bezel-inner">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-lg font-semibold mb-1">最近调用记录</h2>
+                        <p class="text-sm text-gray-400">最新的API调用日志</p>
+                    </div>
+                    <button class="px-4 py-2 text-sm font-medium rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                        查看全部
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-400 border-b border-white/5">
+                                <th class="pb-3 font-medium">时间</th>
+                                <th class="pb-3 font-medium">模型</th>
+                                <th class="pb-3 font-medium">状态</th>
+                                <th class="pb-3 font-medium">延迟</th>
+                                <th class="pb-3 font-medium">Token使用</th>
+                                <th class="pb-3 font-medium">费用</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityLog" class="divide-y divide-white/5">
+                            <!-- Activity rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize charts
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update last update time
+            updateLastUpdate();
+            
+            // Initialize calls chart
+            initCallsChart();
+            
+            // Initialize model distribution chart
+            initModelChart();
+            
+            // Initialize activity log
+            initActivityLog();
+            
+            // Calculate initial cost
+            calculateCost();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(updateDashboard, 30000);
+        });
+
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('zh-CN');
+        }
+
+        function initCallsChart() {
+            const ctx = document.getElementById('callsChart').getContext('2d');
+            
+            // Generate sample data
+            const labels = Array.from({length: 24}, (_, i) => `${i}:00`);
+            const data = [120, 180, 250, 320, 450, 680, 820, 1200, 1500, 1800, 2100, 1900, 
+                         1700, 1500, 1300, 1100, 900, 750, 600, 450, 350, 280, 200, 150];
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'API调用次数',
+                        data: data,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: 'rgba(59, 130, 246, 1)',
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toLocaleString()} 次调用`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.4)',
+                                maxTicksLimit: 12
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.4)',
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        function initModelChart() {
+            const ctx = document.getElementById('modelChart').getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['mimo-7b', 'mimo-13b', 'mimo-33b', '其他模型'],
+                    datasets: [{
+                        data: [42, 28, 18, 12],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 1)',
+                            'rgba(139, 92, 246, 1)',
+                            'rgba(16, 185, 129, 1)',
+                            'rgba(245, 158, 11, 1)'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initActivityLog() {
+            const activities = [
+                { time: '14:32:15', model: 'mimo-7b', status: 'success', latency: '180ms', tokens: '1,247', cost: '¥0.0049' },
+                { time: '14:31:42', model: 'mimo-13b', status: 'success', latency: '320ms', tokens: '2,156', cost: '¥0.0130' },
+                { time: '14:30:18', model: 'mimo-7b', status: 'success', latency: '195ms', tokens: '892', cost: '¥0.0035' },
+                { time: '14:29:55', model: 'mimo-33b', status: 'success', latency: '450ms', tokens: '3,421', cost: '¥0.0205' },
+                { time: '14:28:30', model: 'mimo-7b', status: 'error', latency: '1,200ms', tokens: '0', cost: '¥0.0000' },
+                { time: '14:27:15', model: 'mimo-13b', status: 'success', latency: '310ms', tokens: '1,876', cost: '¥0.0113' },
+            ];
+
+            const tbody = document.getElementById('activityLog');
+            tbody.innerHTML = activities.map(activity => `
+                <tr class="hover:bg-white/[0.02] transition-colors">
+                    <td class="py-3 font-mono text-gray-300">${activity.time}</td>
+                    <td class="py-3">
+                        <span class="px-2 py-1 rounded-md bg-white/5 text-gray-300">${activity.model}</span>
+                    </td>
+                    <td class="py-3">
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full ${activity.status === 'success' ? 'bg-emerald-500' : 'bg-red-500'}"></span>
+                            <span class="${activity.status === 'success' ? 'text-emerald-400' : 'text-red-400'}">
+                                ${activity.status === 'success' ? '成功' : '失败'}
+                            </span>
+                        </span>
+                    </td>
+                    <td class="py-3 font-mono text-gray-300">${activity.latency}</td>
+                    <td class="py-3 font-mono text-gray-300">${activity.tokens}</td>
+                    <td class="py-3 font-mono text-gray-300">${activity.cost}</td>
+                </tr>
+            `).join('');
+        }
+
+        function calculateCost() {
+            const inputTokens = parseInt(document.getElementById('inputTokens').value) || 0;
+            const outputTokens = parseInt(document.getElementById('outputTokens').value) || 0;
+            const callCount = parseInt(document.getElementById('callCount').value) || 0;
+
+            const inputCostPer1k = 0.002;
+            const outputCostPer1k = 0.006;
+
+            const singleCallCost = (inputTokens * inputCostPer1k + outputTokens * outputCostPer1k) / 1000;
+            const totalCost = singleCallCost * callCount;
+            const per1kCost = singleCallCost * 1000;
+
+            document.getElementById('totalCost').textContent = `¥${totalCost.toFixed(2)}`;
+            document.getElementById('perCallCost').textContent = `¥${singleCallCost.toFixed(4)}`;
+            document.getElementById('per1kCost').textContent = `¥${per1kCost.toFixed(2)}`;
+        }
+
+        function updateDashboard() {
+            // Simulate real-time updates
+            const totalCalls = document.getElementById('totalCalls');
+            const currentValue = parseInt(totalCalls.textContent.replace(/,/g, ''));
+            const newValue = currentValue + Math.floor(Math.random() * 50) + 10;
+            totalCalls.textContent = newValue.toLocaleString();
+
+            // Update success rate (small fluctuations)
+            const successRate = document.getElementById('successRate');
+            const currentRate = parseFloat(successRate.textContent);
+            const newRate = Math.min(100, Math.max(99, currentRate + (Math.random() - 0.5) * 0.1));
+            successRate.textContent = `${newRate.toFixed(1)}%`;
+
+            // Update response time
+            const avgResponse = document.getElementById('avgResponse');
+            const currentTime = parseInt(avgResponse.textContent);
+            const newTime = Math.max(200, Math.min(300, currentTime + Math.floor((Math.random() - 0.5) * 20)));
+            avgResponse.textContent = `${newTime}ms`;
+
+            updateLastUpdate();
+        }
+
+        // Make calculateCost available globally
+        window.calculateCost = calculateCost;
+    </script>
+</body>
+</html>

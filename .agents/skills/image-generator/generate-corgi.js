@@ -1,6 +1,6 @@
 const https = require('https');
 
-const apiKey = 'ENV_SILICONFLOW_API_KEY';
+const apiKey = process.env.SILICONFLOW_API_KEY;
 
 const payload = JSON.stringify({
   model: "Kwai-Kolors/Kolors",

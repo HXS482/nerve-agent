@@ -14,7 +14,7 @@ triggers:
 
 ## 配置
 
-- API Key: `ENV_SILICONFLOW_API_KEY`
+- API Key: `$env:SILICONFLOW_API_KEY` 或 `process.env.SILICONFLOW_API_KEY`
 - Base URL: `https://api.siliconflow.cn/v1`
 
 ## 使用方式
@@ -23,7 +23,7 @@ triggers:
 
 ```powershell
 $headers = @{
-    Authorization = "Bearer ENV_SILICONFLOW_API_KEY"
+    Authorization = "Bearer $env:SILICONFLOW_API_KEY"
     "Content-Type" = "application/json"
 }
 $body = @{model="Kwai-Kolors/Kolors";prompt="描述";negative_prompt="blurry";image_size="1024x1024";num_inference_steps=25;guidance_scale=7.5} | ConvertTo-Json -Compress
@@ -65,11 +65,11 @@ Invoke-WebRequest -Uri $url -OutFile "$galleryDir\image.png"
 
 ## 可用模型
 
-| Model ID           | Description              | 状态    |
-| ------------------ | ------------------------ | ------- |
-| Kwai-Kolors/Kolors | 快手可图 Kolors（唯一可用） | ✅ 可用 |
-| FLUX1-dev          | 高质量 FLUX              | ❌ 不存在 |
-| FLUX1-schnell      | 快速生成                 | ❌ 已禁用 |
+| Model ID           | Description                 | 状态      |
+| ------------------ | --------------------------- | --------- |
+| Kwai-Kolors/Kolors | 快手可图 Kolors（唯一可用） | ✅ 可用   |
+| FLUX1-dev          | 高质量 FLUX                 | ❌ 不存在 |
+| FLUX1-schnell      | 快速生成                    | ❌ 已禁用 |
 
 > ⚠️ FLUX 模型当前不可用，不要尝试。只有 Kolors。
 
