@@ -105,7 +105,7 @@ export default function App() {
           {/* Left: model island (with sidebar toggle when collapsed) */}
           <div
             className="flex items-center gap-1.5 shrink-0"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            style={{ WebkitAppRegion: 'no-drag', transform: 'translateY(-16px)' } as React.CSSProperties}
           >
             <ModelIsland
               currentModel={claude.config.model || 'sonnet'}
@@ -116,7 +116,7 @@ export default function App() {
           </div>
 
           {/* Center: Nerve Orb */}
-          <div className="flex-1 flex justify-center items-center">
+          <div className="flex-1 flex justify-center items-center" style={{ transform: 'translateY(-16px)' } as React.CSSProperties}>
             <NerveCloud state={orbState} theme={theme} size={64} />
           </div>
 
@@ -128,6 +128,7 @@ export default function App() {
               borderRadius: 9,
               height: 28,
               WebkitAppRegion: 'no-drag',
+              transform: 'translateY(-16px)',
               boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
             } as React.CSSProperties}
           >

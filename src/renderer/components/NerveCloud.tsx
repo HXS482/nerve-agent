@@ -11,16 +11,16 @@ interface Props {
 }
 
 const STATE_COLORS: Record<OrbState, string> = {
-  idle: '#4A9EFF',
-  active: '#6BA3FE',
-  thinking: '#22D3EE',
-  morphing: '#F97316',
+  idle: '#6AB4FF',
+  active: '#8BC4FF',
+  thinking: '#5EE7F8',
+  morphing: '#FB923C',
 }
 
 const THEME_COLORS: Record<string, string> = {
-  dark: '#4A9EFF',
-  light: '#3B82F6',
-  aurora: '#60A5FA',
+  dark: '#6AB4FF',
+  light: '#60A5FA',
+  aurora: '#7FC4FF',
 }
 
 const PARTICLE_COUNT = 300
@@ -61,28 +61,54 @@ function fibonacciSphere(count: number, radius: number): Float32Array {
   return data
 }
 
+function ringFlags(count: number, ringCount: number): { flags: Float32Array; angles: Float32Array } {
+  const flags = new Float32Array(count)
+  const angles = new Float32Array(count)
+  const step = count / ringCount
+  for (let i = 0; i < ringCount; i++) {
+    const idx = Math.floor(i * step + step * 0.5)
+    flags[idx] = 1.0
+    angles[idx] = (i / ringCount) * Math.PI * 2
+  }
+  return { flags, angles }
+}
+
 const VERTEX = `#version 300 es
 precision highp float;
 in vec3 aPosition;
+in float aFlag;
+in float aRingAngle;
 uniform mat4 uModelView;
 uniform mat4 uProjection;
 uniform float uTime;
 uniform float uPointSize;
+uniform float uRing;
+uniform float uRingTime;
 out float vAlpha;
 
 void main() {
-  vec3 pos = aPosition;
+  vec3 sp = aPosition;
+
+  // simple ring orbiting sphere
+  float orbitAngle = aRingAngle + uRingTime;
+  float a = 1.2;
+  float b = 0.6;
+  vec3 rp = vec3(cos(orbitAngle) * a, 0.0, sin(orbitAngle) * b);
+
+  float ringMix = uRing * aFlag;
+  vec3 pos = mix(sp, rp, ringMix);
 
   float breathe = sin(uTime * 0.5 + aPosition.y * 2.0) * 0.008;
-  pos += normalize(aPosition) * breathe;
+  pos += normalize(sp) * breathe * (1.0 - ringMix * 0.8);
 
   vec4 mvPos = uModelView * vec4(pos, 1.0);
   gl_Position = uProjection * mvPos;
 
   float eqFactor = 1.0 - 0.15 * abs(aPosition.y);
-  gl_PointSize = uPointSize * eqFactor / (1.0 - mvPos.z * 0.3);
+  float baseSize = uPointSize * eqFactor / (1.0 - mvPos.z * 0.3);
+  gl_PointSize = mix(baseSize, uPointSize * 0.7, ringMix);
 
-  vAlpha = 1.0 - 0.3 * abs(aPosition.y);
+  vAlpha = mix(1.0 - 0.3 * abs(aPosition.y), 0.85, ringMix);
 }
 `
 
@@ -101,10 +127,10 @@ void main() {
   float alpha = 1.0 - pow(d * 2.0, 2.5);
   alpha *= vAlpha * uOpacity;
 
-  float centerBoost = 1.0 + 0.4 * (1.0 - d * 2.0);
+  float centerBoost = 1.0 + 0.6 * (1.0 - d * 2.0);
   vec3 col = uColor * centerBoost;
 
-  float glow = (1.0 - d * 2.0) * 0.15;
+  float glow = (1.0 - d * 2.0) * 0.25;
   col += uColor * glow;
 
   fragColor = vec4(col, alpha);
@@ -132,6 +158,8 @@ const ctxMap = new WeakMap<HTMLElement, {
   mvLoc: WebGLUniformLocation
   projLoc: WebGLUniformLocation
   pointSizeLoc: WebGLUniformLocation
+  ringLoc: WebGLUniformLocation
+  ringTimeLoc: WebGLUniformLocation
 }>()
 
 export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, className = '' }: Props) {
@@ -173,6 +201,8 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
     const mvLoc = gl.getUniformLocation(program, 'uModelView')!
     const projLoc = gl.getUniformLocation(program, 'uProjection')!
     const pointSizeLoc = gl.getUniformLocation(program, 'uPointSize')!
+    const ringLoc = gl.getUniformLocation(program, 'uRing')!
+    const ringTimeLoc = gl.getUniformLocation(program, 'uRingTime')!
 
     // ---- geometry ----
     const positions = fibonacciSphere(PARTICLE_COUNT, 0.5)
@@ -181,6 +211,21 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
     gl.enableVertexAttribArray(posLoc)
     gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0)
+
+    const { flags, angles } = ringFlags(PARTICLE_COUNT, 45)
+    const flagBuf = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, flagBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, flags, gl.STATIC_DRAW)
+    const flagLoc = gl.getAttribLocation(program, 'aFlag')
+    gl.enableVertexAttribArray(flagLoc)
+    gl.vertexAttribPointer(flagLoc, 1, gl.FLOAT, false, 0, 0)
+
+    const angleBuf = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, angleBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, angles, gl.STATIC_DRAW)
+    const angleLoc = gl.getAttribLocation(program, 'aRingAngle')
+    gl.enableVertexAttribArray(angleLoc)
+    gl.vertexAttribPointer(angleLoc, 1, gl.FLOAT, false, 0, 0)
 
     // ---- matrices ----
     const fov = Math.PI / 5.6
@@ -191,6 +236,7 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
       gl, program,
       colorLoc, opacityLoc, timeLoc,
       mvLoc, projLoc, pointSizeLoc,
+      ringLoc, ringTimeLoc,
     })
 
     // ---- color state ----
@@ -201,6 +247,8 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
 
     let curOpacity = 0.92
     let curSpeed = 0.25
+    let curRing = 0
+    let curRingTime = 0
     let angle = 0
     let raf = 0
     const t0 = performance.now()
@@ -225,7 +273,12 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
         curColor[i] += (tgtColor[i] - curColor[i]) * 0.04
       }
 
-      angle += 0.008 * curSpeed
+      const wantsRing = current === 'thinking' || current === 'morphing'
+      const tgtRing = wantsRing ? 1 : 0
+      curRing += (tgtRing - curRing) * 0.03
+      curRingTime += 0.02 * curSpeed
+
+      angle += 0.03 * curSpeed
 
       mv.identity()
       mv.translate([0, 0, -4])
@@ -243,6 +296,8 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
       gl.uniform3fv(colorLoc, curColor)
       gl.uniform1f(opacityLoc, curOpacity)
       gl.uniform1f(pointSizeLoc, 6 + 3 * curSpeed)
+      gl.uniform1f(ringLoc, curRing)
+      gl.uniform1f(ringTimeLoc, curRingTime)
 
       gl.drawArrays(gl.POINTS, 0, PARTICLE_COUNT)
 
