@@ -10,6 +10,7 @@ import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
 import { initImagesDir } from './images'
+import { injectSettingsEnv } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import OpenAI from 'openai'
@@ -255,6 +256,7 @@ app.whenReady().then(() => {
 
   // Setup Claude service, Git service, and IPC
   const projectDir = process.cwd()
+  injectSettingsEnv()
   initImagesDir(projectDir)
   const claude = new ClaudeService(mainWindow, projectDir)
   const skinManager = new PetSkinManager()
