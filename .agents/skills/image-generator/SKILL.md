@@ -77,8 +77,8 @@ Invoke-WebRequest -Uri $url -OutFile "$galleryDir\image.png"
 
 - 需要 `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12` 才能下载图片
 - 下载偶发失败，脚本已内置 3 次重试
-- 图片保存到内置 Gallery（`~/.nerve/images/`），文件名带时间戳避免覆盖
-- **重要：生成完成后，在回复中包含图片的完整文件路径**（如 `C:\Users\Arch\.nerve\images\puppy_20260511.png`），聊天界面会自动检测并内联显示图片
+- 图片保存到内置 Gallery（`.nerve/gallery/`），文件名带时间戳避免覆盖
+- **重要：生成完成后，在回复中包含图片的完整文件路径**（如 `.nerve\gallery\puppy_20260511.png`），聊天界面会自动检测并内联显示图片
 
 ## 尺寸
 

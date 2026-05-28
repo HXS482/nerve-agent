@@ -611,7 +611,7 @@ function ImageView({ src }: { src: string }) {
     resolved = src
   } else if (isImageUrl(src)) {
     resolved = src
-  } else if (src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
+  } else if (src.includes('.nerve/gallery/') || src.includes('.nerve\\gallery\\') || src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
     // Internal gallery path — use file:// protocol
     resolved = `file:///${src.replace(/\\/g, '/')}`
   } else {

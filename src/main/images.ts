@@ -2,7 +2,15 @@ import { join, resolve } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { homedir } from 'os'
 
-const IMAGES_DIR = join(homedir(), '.nerve', 'images')
+let imagesDir = join(homedir(), '.nerve', 'images')
+
+export function initImagesDir(projectDir: string) {
+  const dir = join(projectDir, '.nerve', 'gallery')
+  if (existsSync(projectDir)) {
+    imagesDir = dir
+  }
+  if (!existsSync(imagesDir)) mkdirSync(imagesDir, { recursive: true })
+}
 
 export interface GalleryImage {
   id: string
@@ -14,17 +22,17 @@ export interface GalleryImage {
 }
 
 function ensureDir() {
-  if (!existsSync(IMAGES_DIR)) mkdirSync(IMAGES_DIR, { recursive: true })
+  if (!existsSync(imagesDir)) mkdirSync(imagesDir, { recursive: true })
 }
 
 function readMeta(): Record<string, { source?: string; createdAt: number }> {
-  const metaPath = join(IMAGES_DIR, 'meta.json')
+  const metaPath = join(imagesDir, 'meta.json')
   if (!existsSync(metaPath)) return {}
   try { return JSON.parse(readFileSync(metaPath, 'utf-8')) } catch { return {} }
 }
 
 function writeMeta(meta: Record<string, { source?: string; createdAt: number }>) {
-  writeFileSync(join(IMAGES_DIR, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8')
+  writeFileSync(join(imagesDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8')
 }
 
 export function saveImage(filename: string, buffer: Buffer, source?: string): GalleryImage {
@@ -32,7 +40,7 @@ export function saveImage(filename: string, buffer: Buffer, source?: string): Ga
   const id = filename.replace(/\.[^.]+$/, '') + '-' + Date.now()
   const ext = filename.match(/\.(\w+)$/)?.[1] || 'png'
   const safeName = `${id}.${ext}`
-  const filePath = join(IMAGES_DIR, safeName)
+  const filePath = join(imagesDir, safeName)
 
   writeFileSync(filePath, buffer)
 
@@ -53,11 +61,11 @@ export function saveImage(filename: string, buffer: Buffer, source?: string): Ga
 export function listImages(): GalleryImage[] {
   ensureDir()
   const meta = readMeta()
-  const files = readdirSync(IMAGES_DIR).filter((f) => /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(f))
+  const files = readdirSync(imagesDir).filter((f) => /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(f))
 
   return files
     .map((f) => {
-      const filePath = join(IMAGES_DIR, f)
+      const filePath = join(imagesDir, f)
       const stat = statSync(filePath)
       const m = meta[f] || {}
       return {
@@ -73,9 +81,8 @@ export function listImages(): GalleryImage[] {
 }
 
 export function deleteImage(filename: string): boolean {
-  const filePath = resolve(join(IMAGES_DIR, filename))
-  // Path traversal guard
-  if (!filePath.startsWith(resolve(IMAGES_DIR))) return false
+  const filePath = resolve(join(imagesDir, filename))
+  if (!filePath.startsWith(resolve(imagesDir))) return false
   if (!existsSync(filePath)) return false
   unlinkSync(filePath)
 
@@ -86,13 +93,12 @@ export function deleteImage(filename: string): boolean {
 }
 
 export function getImagePath(filename: string): string | null {
-  const filePath = resolve(join(IMAGES_DIR, filename))
-  // Path traversal guard
-  if (!filePath.startsWith(resolve(IMAGES_DIR))) return null
+  const filePath = resolve(join(imagesDir, filename))
+  if (!filePath.startsWith(resolve(imagesDir))) return null
   return existsSync(filePath) ? filePath : null
 }
 
 export function getImagesDir(): string {
   ensureDir()
-  return IMAGES_DIR
+  return imagesDir
 }

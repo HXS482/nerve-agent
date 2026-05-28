@@ -348,7 +348,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     GenerateImage: {
-      description: 'Generate an image from a text prompt. Saves to the internal gallery (~/.nerve/images/). Tries OpenAI DALL-E first, falls back to any configured provider. ALWAYS use this for images — never Bash/Write.',
+      description: 'Generate an image from a text prompt. Saves to the internal gallery (.nerve/gallery/). Tries OpenAI DALL-E first, falls back to any configured provider. ALWAYS use this for images — never Bash/Write.',
       input_schema: zodToInputSchema(generateImageSchema),
       execute: async ({ prompt, size = '1024x1024', quality = 'standard' }: { prompt: string; size?: string; quality?: string }) => {
         try {
