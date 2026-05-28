@@ -589,7 +589,7 @@ function MessageActions({ message, onRetry }: { message: ChatMessage; onRetry?: 
   )
 }
 
-const IMAGE_PATH_RE = /\b[\w\\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)\b/i
+const IMAGE_PATH_RE = /(?<!\w)[\w\\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)\b/gi
 
 function isImageUrl(src: string): boolean {
   return /^https?:\/\//i.test(src)
