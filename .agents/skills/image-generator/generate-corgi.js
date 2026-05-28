@@ -38,7 +38,7 @@ const req = https.request(options, (res) => {
         const fs = require('fs');
         const path = require('path');
         const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
-        const galleryDir = path.join(process.env.USERPROFILE || require('os').homedir(), '.nerve', 'images');
+        const galleryDir = path.join(process.cwd(), '.nerve', 'gallery');
         if (!fs.existsSync(galleryDir)) fs.mkdirSync(galleryDir, { recursive: true });
         const outFile = path.join(galleryDir, `corgi_${timestamp}.png`);
         

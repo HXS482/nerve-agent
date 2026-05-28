@@ -28,7 +28,7 @@ $headers = @{
 }
 $body = @{model="Kwai-Kolors/Kolors";prompt="描述";negative_prompt="blurry";image_size="1024x1024";num_inference_steps=25;guidance_scale=7.5} | ConvertTo-Json -Compress
 $url = (Invoke-RestMethod -Uri "https://api.siliconflow.cn/v1/images/generations" -Method Post -Headers $headers -Body $body).data[0].url
-$galleryDir = "$env:USERPROFILE\.nerve\images"
+$galleryDir = Join-Path (Get-Location) ".nerve\gallery"
 if (!(Test-Path $galleryDir)) { New-Item -ItemType Directory -Path $galleryDir -Force | Out-Null }
 Invoke-WebRequest -Uri $url -OutFile "$galleryDir\image.png"
 ```
