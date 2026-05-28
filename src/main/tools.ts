@@ -9,10 +9,22 @@ import { saveImage, getImagesDir } from './images'
 import simpleGit from 'simple-git'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'])
+const ARTIFACT_EXTS = new Set(['.html', '.htm'])
 
 function isImageFile(filePath: string): boolean {
   const ext = filePath.toLowerCase().match(/\.[^.]+$/)?.[0]
   return ext ? IMAGE_EXTS.has(ext) : false
+}
+
+function isArtifact(filePath: string): boolean {
+  const ext = filePath.toLowerCase().match(/\.[^.]+$/)?.[0]
+  return ext ? ARTIFACT_EXTS.has(ext) : false
+}
+
+function getArtifactPath(fp: string, projectDir: string): string {
+  const artifactsDir = join(projectDir, '.nerve', 'artifacts')
+  if (!existsSync(artifactsDir)) mkdirSync(artifactsDir, { recursive: true })
+  return join(artifactsDir, basename(fp))
 }
 
 function moveToGallery(filePath: string, source?: string): { moved: boolean; galleryPath?: string; error?: string } {
@@ -69,8 +81,9 @@ function matchGlob(pattern: string, filePath: string): boolean {
   return regex.test(filePath)
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
+  const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
   const bashSchema = z.object({
     command: z.string().describe('The bash command to execute'),
@@ -113,11 +126,13 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       execute: async ({ command }: { command: string }) => {
         const psExe = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
-        // Snapshot existing image files before execution
+        // Snapshot existing image/artifact files before execution
         const beforeImages = new Set<string>()
+        const beforeArtifacts = new Set<string>()
         try {
           for (const f of readdirSync(effectiveCwd)) {
             if (isImageFile(f)) beforeImages.add(f)
+            if (isArtifact(f)) beforeArtifacts.add(f)
           }
         } catch { /* ignore */ }
 
@@ -164,8 +179,26 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             } catch { /* ignore scan errors for this dir */ }
           }
 
-          if (movedImages.length > 0) {
-            return { output: output + `\n\n[Auto-saved ${movedImages.length} image(s) to gallery]`, savedImages: movedImages }
+          // Scan for new artifact files (HTML etc.) and move to .nerve/artifacts/
+          const movedArtifacts: string[] = []
+          try {
+            for (const f of readdirSync(effectiveCwd)) {
+              if (!isArtifact(f) || beforeArtifacts.has(f)) continue
+              const fullPath = join(effectiveCwd, f)
+              const destPath = getArtifactPath(f, artifactRoot)
+              try {
+                writeFileSync(destPath, readFileSync(fullPath))
+                unlinkSync(fullPath)
+                movedArtifacts.push(destPath)
+              } catch { /* ignore */ }
+            }
+          } catch { /* ignore */ }
+
+          const saved: string[] = []
+          if (movedImages.length > 0) saved.push(`${movedImages.length} image(s) to gallery`)
+          if (movedArtifacts.length > 0) saved.push(`${movedArtifacts.length} artifact(s) to .nerve/artifacts/`)
+          if (saved.length > 0) {
+            return { output: output + `\n\n[Auto-saved ${saved.join(', ')}]`, savedImages: movedImages, savedArtifacts: movedArtifacts }
           }
 
           return { output }
@@ -179,12 +212,18 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     Write: {
-      description: 'Write content to a file. Creates parent directories if needed. For image files (.png, .jpg, etc.), the file is automatically saved to the internal gallery.',
+      description: 'Write content to a file. Creates parent directories if needed. For image files (.png, .jpg, etc.), the file is automatically saved to the internal gallery. HTML files are saved to .nerve/artifacts/.',
       input_schema: zodToInputSchema(writeSchema),
       execute: async (args: any) => {
         try {
-          const fp = args.file_path || args.filePath || args.path
+          let fp = args.file_path || args.filePath || args.path
           const content = args.content
+
+          // Auto-intercept: artifact files → .nerve/artifacts/
+          if (isArtifact(fp)) {
+            fp = getArtifactPath(fp, artifactRoot)
+          }
+
           const dir = dirname(fp)
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
           writeFileSync(fp, content, 'utf-8')

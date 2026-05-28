@@ -372,7 +372,7 @@ export class ClaudeService {
             this.window.webContents.send(IPC_CHANNELS.GIT_REFRESH)
           }
         },
-      })
+      }, this.sourceDir)
       const allToolDefs = [
         ...Object.entries(builtinTools).map(([name, tool]) => ({
           name,
@@ -681,8 +681,12 @@ export class ClaudeService {
         const hash = input.content.length + ':' + input.content.slice(0, 200)
         if (!this.flowContentHashes.has(hash)) {
           this.flowContentHashes.add(hash)
+          // Parse actual saved path from tool result
+          let savedPath = filePath
+          try { savedPath = JSON.parse(resultText).file_path || filePath } catch {}
           this.pushFlowItem('html', input.content, {
             label: filePath.split(/[/\\]/).pop(),
+            savedPath,
           })
         }
         return
