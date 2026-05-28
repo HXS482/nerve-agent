@@ -100,6 +100,23 @@ export function loadSettings(): ClaudeSettings {
   }
 }
 
+export function injectSettingsEnv(): void {
+  try {
+    const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+    const claudeSettingsPath = join(homedir(), '.claude', 'settings.json')
+    const settingsPath = existsSync(nerveSettingsPath) ? nerveSettingsPath : claudeSettingsPath
+    if (!existsSync(settingsPath)) return
+    const data = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    if (data.env) {
+      for (const [key, value] of Object.entries(data.env)) {
+        if (typeof value === 'string' && !process.env[key]) {
+          process.env[key] = value
+        }
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 // --- MCP ---
 
 export interface McpServerConfig {

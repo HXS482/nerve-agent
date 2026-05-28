@@ -589,7 +589,7 @@ function MessageActions({ message, onRetry }: { message: ChatMessage; onRetry?: 
   )
 }
 
-const IMAGE_PATH_RE = /\b[\w\\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)\b/i
+const IMAGE_PATH_RE = /(?<!\w)[\w\\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)\b/gi
 
 function isImageUrl(src: string): boolean {
   return /^https?:\/\//i.test(src)
@@ -611,7 +611,7 @@ function ImageView({ src }: { src: string }) {
     resolved = src
   } else if (isImageUrl(src)) {
     resolved = src
-  } else if (src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
+  } else if (src.includes('.nerve/gallery/') || src.includes('.nerve\\gallery\\') || src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
     // Internal gallery path — use file:// protocol
     resolved = `file:///${src.replace(/\\/g, '/')}`
   } else {

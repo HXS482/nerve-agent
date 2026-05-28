@@ -9,10 +9,22 @@ import { saveImage, getImagesDir } from './images'
 import simpleGit from 'simple-git'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'])
+const ARTIFACT_EXTS = new Set(['.html', '.htm'])
 
 function isImageFile(filePath: string): boolean {
   const ext = filePath.toLowerCase().match(/\.[^.]+$/)?.[0]
   return ext ? IMAGE_EXTS.has(ext) : false
+}
+
+function isArtifact(filePath: string): boolean {
+  const ext = filePath.toLowerCase().match(/\.[^.]+$/)?.[0]
+  return ext ? ARTIFACT_EXTS.has(ext) : false
+}
+
+function getArtifactPath(fp: string, projectDir: string): string {
+  const artifactsDir = join(projectDir, '.nerve', 'artifacts')
+  if (!existsSync(artifactsDir)) mkdirSync(artifactsDir, { recursive: true })
+  return join(artifactsDir, basename(fp))
 }
 
 function moveToGallery(filePath: string, source?: string): { moved: boolean; galleryPath?: string; error?: string } {
@@ -69,8 +81,9 @@ function matchGlob(pattern: string, filePath: string): boolean {
   return regex.test(filePath)
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
+  const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
   const bashSchema = z.object({
     command: z.string().describe('The bash command to execute'),
@@ -113,11 +126,13 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       execute: async ({ command }: { command: string }) => {
         const psExe = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
-        // Snapshot existing image files before execution
+        // Snapshot existing image/artifact files before execution
         const beforeImages = new Set<string>()
+        const beforeArtifacts = new Set<string>()
         try {
           for (const f of readdirSync(effectiveCwd)) {
             if (isImageFile(f)) beforeImages.add(f)
+            if (isArtifact(f)) beforeArtifacts.add(f)
           }
         } catch { /* ignore */ }
 
@@ -164,8 +179,26 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             } catch { /* ignore scan errors for this dir */ }
           }
 
-          if (movedImages.length > 0) {
-            return { output: output + `\n\n[Auto-saved ${movedImages.length} image(s) to gallery]`, savedImages: movedImages }
+          // Scan for new artifact files (HTML etc.) and move to .nerve/artifacts/
+          const movedArtifacts: string[] = []
+          try {
+            for (const f of readdirSync(effectiveCwd)) {
+              if (!isArtifact(f) || beforeArtifacts.has(f)) continue
+              const fullPath = join(effectiveCwd, f)
+              const destPath = getArtifactPath(f, artifactRoot)
+              try {
+                writeFileSync(destPath, readFileSync(fullPath))
+                unlinkSync(fullPath)
+                movedArtifacts.push(destPath)
+              } catch { /* ignore */ }
+            }
+          } catch { /* ignore */ }
+
+          const saved: string[] = []
+          if (movedImages.length > 0) saved.push(`${movedImages.length} image(s) to gallery`)
+          if (movedArtifacts.length > 0) saved.push(`${movedArtifacts.length} artifact(s) to .nerve/artifacts/`)
+          if (saved.length > 0) {
+            return { output: output + `\n\n[Auto-saved ${saved.join(', ')}]`, savedImages: movedImages, savedArtifacts: movedArtifacts }
           }
 
           return { output }
@@ -179,12 +212,18 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     Write: {
-      description: 'Write content to a file. Creates parent directories if needed. For image files (.png, .jpg, etc.), the file is automatically saved to the internal gallery.',
+      description: 'Write content to a file. Creates parent directories if needed. For image files (.png, .jpg, etc.), the file is automatically saved to the internal gallery. HTML files are saved to .nerve/artifacts/.',
       input_schema: zodToInputSchema(writeSchema),
       execute: async (args: any) => {
         try {
-          const fp = args.file_path || args.filePath || args.path
+          let fp = args.file_path || args.filePath || args.path
           const content = args.content
+
+          // Auto-intercept: artifact files → .nerve/artifacts/
+          if (isArtifact(fp)) {
+            fp = getArtifactPath(fp, artifactRoot)
+          }
+
           const dir = dirname(fp)
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
           writeFileSync(fp, content, 'utf-8')
@@ -309,68 +348,64 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     GenerateImage: {
-      description: 'Generate an image from a text prompt. Saves to the internal gallery (~/.nerve/images/). Tries OpenAI DALL-E first, falls back to any configured provider. ALWAYS use this for images — never Bash/Write.',
+      description: 'Generate an image from a text prompt using SiliconFlow API (Kwai-Kolors). Saves to .nerve/gallery/. Requires SILICONFLOW_API_KEY in settings.',
       input_schema: zodToInputSchema(generateImageSchema),
-      execute: async ({ prompt, size = '1024x1024', quality = 'standard' }: { prompt: string; size?: string; quality?: string }) => {
+      execute: async ({ prompt, size = '1024x1024' }: { prompt: string; size?: string; quality?: string }) => {
         try {
-          const OpenAI = (await import('openai')).default
-
-          const { loadSettings } = await import('./settings')
-          const settings = loadSettings()
-          let imageConfig: { baseURL: string; apiKey: string } | null = null
-
-          // Priority 1: explicit OpenAI provider
-          if (settings.providers) {
-            for (const [, cfg] of Object.entries(settings.providers)) {
-              if ((cfg as any).type === 'openai') {
-                imageConfig = { baseURL: (cfg as any).baseURL, apiKey: (cfg as any).authToken }
-                break
-              }
-            }
+          const apiKey = process.env.SILICONFLOW_API_KEY
+          if (!apiKey) {
+            return { error: 'SILICONFLOW_API_KEY not configured. Add it to ~/.nerve/settings.json env section.' }
           }
 
-          // Priority 2: OPENAI_API_KEY env
-          if (!imageConfig && process.env.OPENAI_API_KEY) {
-            imageConfig = { baseURL: 'https://api.openai.com/v1', apiKey: process.env.OPENAI_API_KEY }
+          // Map DALL-E sizes to SiliconFlow sizes
+          const sizeMap: Record<string, string> = {
+            '1024x1024': '1024x1024',
+            '1024x1792': '960x1280',
+            '1792x1024': '768x1024',
           }
+          const imageSize = sizeMap[size] || '1024x1024'
 
-          // Priority 3: base settings (Anthropic proxy — may support image generation)
-          if (!imageConfig && settings.authToken) {
-            imageConfig = { baseURL: settings.baseURL, apiKey: settings.authToken }
-          }
-
-          // Priority 4: any configured provider with an API key
-          if (!imageConfig && settings.providers) {
-            for (const [, cfg] of Object.entries(settings.providers)) {
-              if ((cfg as any).authToken) {
-                imageConfig = { baseURL: (cfg as any).baseURL, apiKey: (cfg as any).authToken }
-                break
-              }
-            }
-          }
-
-          if (!imageConfig || !imageConfig.apiKey) {
-            return { error: 'No provider with API key configured. Add a provider in Settings > Provider to enable image generation.' }
-          }
-
-          const openai = new OpenAI({ baseURL: imageConfig.baseURL, apiKey: imageConfig.apiKey })
-
-          const response = await openai.images.generate({
-            model: 'dall-e-3',
-            prompt,
-            size: size as any,
-            quality: quality as any,
-            response_format: 'b64_json',
+          const res = await fetch('https://api.siliconflow.cn/v1/images/generations', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'Kwai-Kolors/Kolors',
+              prompt,
+              negative_prompt: 'blurry, bad anatomy, deformed, extra limbs, low quality, watermark, text',
+              image_size: imageSize,
+              num_inference_steps: 25,
+              guidance_scale: 7.5,
+            }),
           })
 
+          if (!res.ok) {
+            const body = await res.text().catch(() => '')
+            return { error: `SiliconFlow API error ${res.status}: ${body.slice(0, 300)}` }
+          }
+
+          const json = await res.json() as any
+          const imageUrl = json?.data?.[0]?.url
+          if (!imageUrl) {
+            return { error: 'No image URL in SiliconFlow response' }
+          }
+
+          // Download image
+          const imgRes = await fetch(imageUrl)
+          if (!imgRes.ok) {
+            return { error: `Image download failed: ${imgRes.status}` }
+          }
+
+          const arrayBuffer = await imgRes.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
           const filename = `gen-${Date.now()}.png`
-          const buffer = Buffer.from(response.data[0].b64_json!, 'base64')
           const saved = saveImage(filename, buffer, prompt)
 
           return { path: saved.path, filename: saved.filename, prompt, savedTo: 'gallery' }
         } catch (err: any) {
-          const msg = err.message || 'Image generation failed'
-          return { error: `Image generation failed: ${msg.slice(0, 500)}. If your provider doesn't support image generation, use a tool like Bash to download the image — it will be auto-saved to the gallery.` }
+          return { error: `Image generation failed: ${(err.message || 'unknown').slice(0, 500)}` }
         }
       },
     },
