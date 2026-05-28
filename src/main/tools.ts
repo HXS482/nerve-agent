@@ -373,23 +373,19 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             imageConfig = { baseURL: 'https://api.openai.com/v1', apiKey: process.env.OPENAI_API_KEY }
           }
 
-          // Priority 3: base settings (Anthropic proxy — may support image generation)
-          if (!imageConfig && settings.authToken) {
-            imageConfig = { baseURL: settings.baseURL, apiKey: settings.authToken }
-          }
-
-          // Priority 4: any configured provider with an API key
+          // Priority 3: any OpenAI-compatible provider (skip Anthropic — no image generation support)
           if (!imageConfig && settings.providers) {
             for (const [, cfg] of Object.entries(settings.providers)) {
-              if ((cfg as any).authToken) {
-                imageConfig = { baseURL: (cfg as any).baseURL, apiKey: (cfg as any).authToken }
+              const p = cfg as any
+              if (p.type !== 'anthropic' && p.authToken) {
+                imageConfig = { baseURL: p.baseURL, apiKey: p.authToken }
                 break
               }
             }
           }
 
           if (!imageConfig || !imageConfig.apiKey) {
-            return { error: 'No provider with API key configured. Add a provider in Settings > Provider to enable image generation.' }
+            return { error: 'No image-capable provider found. Add an OpenAI or compatible provider in Settings > Provider.' }
           }
 
           const openai = new OpenAI({ baseURL: imageConfig.baseURL, apiKey: imageConfig.apiKey })
