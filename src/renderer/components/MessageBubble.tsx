@@ -324,6 +324,57 @@ function getToolDetail(name: string, input: Record<string, unknown> | undefined,
   return ''
 }
 
+function formatMessageTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function getMessageText(message: ChatMessage): string {
+  return message.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+}
+
+function UserCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(() => {
+    if (!text) return
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    }).catch(() => {})
+  }, [text])
+
+  if (!text) return null
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center justify-center transition-colors"
+      title={copied ? 'Copied' : 'Copy'}
+      style={{
+        width: 24,
+        height: 24,
+        color: copied ? 'var(--accent-primary)' : 'var(--text-outline)',
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 6,
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+    >
+      {copied ? (
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 8l3.5 3.5L13 5" />
+        </svg>
+      ) : (
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="5" y="4" width="8" height="9" rx="2" />
+          <path d="M3 11V4.5A1.5 1.5 0 014.5 3H10" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 export const MessageBubble = memo(function MessageBubble({ message, prevRole, onRetry }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
