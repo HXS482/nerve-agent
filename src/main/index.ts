@@ -67,7 +67,15 @@ function createWindow(): BrowserWindow {
     window.setTitle('')
   })
 
-  // DWM frame removed via SetWindowLong — no need for blur fix
+  // Debug: log window style on blur to understand DWM frame
+  window.on('blur', () => {
+    const hwnd = window.getNativeWindowHandle().readBigUInt64LE(0)
+    console.log(`[DWM] blur — hwnd=${hwnd}`)
+    applyDwmFix(window)
+  })
+  window.on('focus', () => {
+    console.log('[DWM] focus')
+  })
 
   // Capture renderer console messages
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
