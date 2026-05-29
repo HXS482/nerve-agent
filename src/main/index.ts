@@ -45,8 +45,8 @@ function createWindow(): BrowserWindow {
     titleBarOverlay: false,
     thickFrame: false,
     roundedCorners: false,
-    backgroundMaterial: 'mica',
-    backgroundColor: '#00000000',
+    backgroundMaterial: 'none',
+    backgroundColor: '#0d0d0d',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -67,15 +67,8 @@ function createWindow(): BrowserWindow {
     window.setTitle('')
   })
 
-  // Debug: log window style on blur to understand DWM frame
-  window.on('blur', () => {
-    const hwnd = window.getNativeWindowHandle().readBigUInt64LE(0)
-    console.log(`[DWM] blur — hwnd=${hwnd}`)
-    applyDwmFix(window)
-  })
-  window.on('focus', () => {
-    console.log('[DWM] focus')
-  })
+  // Re-apply DWM fix on blur
+  window.on('blur', () => applyDwmFix(window))
 
   // Capture renderer console messages
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
@@ -106,7 +99,7 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
     y: screenH - 270,
     frame: false,
     transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#0d0d0d',
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
