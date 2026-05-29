@@ -99,24 +99,24 @@ const I = {
 const CARD = {
   hero: {
     border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.1)',
+    borderRadius: 10,
     padding: '10px 14px',
     margin: '8px 8px 4px',
+    background: 'var(--bg-surface-container)',
   },
   primary: {
     border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
+    borderRadius: 10,
     padding: '12px 14px',
     margin: '0 8px 8px',
+    background: 'var(--bg-surface-container)',
   },
   surface: {
     border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+    borderRadius: 10,
     overflow: 'hidden' as const,
     margin: '0 8px 8px',
+    background: 'var(--bg-surface-container)',
   },
 }
 
@@ -182,7 +182,6 @@ function GlassIconBtn({ icon, onClick, disabled, title, danger }: {
         color: danger ? '#ef4444' : 'var(--text-outline-variant)',
         border: '1px solid var(--border-subtle)',
         cursor: disabled ? 'default' : 'pointer',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
       }}
     >{icon}</button>
   )
