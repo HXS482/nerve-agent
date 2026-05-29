@@ -562,11 +562,11 @@ export function RightSidebar() {
               className={`inline-flex items-center gap-1 p-1 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
               style={{
                 borderRadius: 10,
-                background: theme === 'aurora' ? undefined : 'rgba(30, 30, 32, 0.6)',
+                background: theme === 'aurora' ? undefined : 'var(--bg-surface-container)',
                 backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
                 WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid rgba(255,255,255,0.08)',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid var(--border-default)',
+                boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
               }}
             >
               {VIEWS.map((v) => (
