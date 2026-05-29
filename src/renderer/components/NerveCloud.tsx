@@ -10,17 +10,25 @@ interface Props {
   className?: string
 }
 
-const STATE_COLORS: Record<OrbState, string> = {
-  idle: '#6AB4FF',
-  active: '#8BC4FF',
-  thinking: '#5EE7F8',
-  morphing: '#FB923C',
-}
-
-const THEME_COLORS: Record<string, string> = {
-  dark: '#6AB4FF',
-  light: '#1E3A8A',
-  aurora: '#7FC4FF',
+const STATE_COLORS: Record<string, Record<OrbState, string>> = {
+  dark: {
+    idle: '#6AB4FF',
+    active: '#8BC4FF',
+    thinking: '#5EE7F8',
+    morphing: '#FB923C',
+  },
+  light: {
+    idle: '#1E3A8A',
+    active: '#1E40AF',
+    thinking: '#0E7490',
+    morphing: '#C2410C',
+  },
+  aurora: {
+    idle: '#7FC4FF',
+    active: '#8BC4FF',
+    thinking: '#5EE7F8',
+    morphing: '#FB923C',
+  },
 }
 
 const PARTICLE_COUNT = 300
@@ -244,7 +252,7 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
     })
 
     // ---- color state ----
-    const idle = hexToFloat(THEME_COLORS[theme] || THEME_COLORS.dark)
+    const idle = hexToFloat((STATE_COLORS[theme] || STATE_COLORS.dark).idle)
     const idleArr = new Float32Array(idle)
     const curColor = new Float32Array(idleArr)
     const tgtColor = new Float32Array(idleArr)
@@ -261,8 +269,8 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
       const elapsed = (t - t0) * 0.001
 
       const current = stateRef.current
-      const raw = STATE_COLORS[current]
-      const tgt = hexToFloat(current === 'idle' ? (THEME_COLORS[theme] || THEME_COLORS.dark) : raw)
+      const raw = (STATE_COLORS[theme] || STATE_COLORS.dark)[current]
+      const tgt = hexToFloat(raw)
       for (let i = 0; i < 3; i++) tgtColor[i] = tgt[i]
 
       const SPEED_MAP: Record<OrbState, number> = { idle: 0.25, active: 0.5, thinking: 0.9, morphing: 2.0 }
