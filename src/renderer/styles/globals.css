@@ -228,7 +228,7 @@
 html, body {
   height: 100%;
   overflow: hidden;
-  background: var(--window-alpha-floor, rgba(13, 13, 13, 0.01));
+  background: transparent;
   border-radius: var(--app-window-radius);
 }
 

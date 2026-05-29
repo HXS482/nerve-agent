@@ -26,6 +26,8 @@ process.on('uncaughtException', (err) => {
 
 // Window control IPC — registered once, reference updated per window
 let currentMainWindow: BrowserWindow | null = null
+const MAIN_WINDOW_RADIUS = 16
+const MAIN_WINDOW_SHAPE_GUARD_RADIUS = 15
 
 ipcMain.on('window:minimize', () => currentMainWindow?.minimize())
 ipcMain.on('window:maximize', () => {
@@ -34,6 +36,39 @@ ipcMain.on('window:maximize', () => {
 })
 ipcMain.on('window:close', () => currentMainWindow?.close())
 
+function buildRoundedWindowShape(width: number, height: number, radius: number) {
+  const rects: Electron.Rectangle[] = []
+  const r = Math.min(radius, Math.floor(width / 2), Math.floor(height / 2))
+
+  for (let y = 0; y < height; y++) {
+    let inset = 0
+
+    if (y < r) {
+      const dy = r - y - 0.5
+      inset = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)))
+    } else if (y >= height - r) {
+      const dy = y - (height - r) + 0.5
+      inset = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)))
+    }
+
+    rects.push({ x: inset, y, width: Math.max(0, width - inset * 2), height: 1 })
+  }
+
+  return rects
+}
+
+function applyMainWindowShape(window: BrowserWindow) {
+  if (process.platform !== 'win32' || window.isDestroyed()) return
+
+  if (window.isMaximized() || window.isFullScreen()) {
+    window.setShape([])
+    return
+  }
+
+  const { width, height } = window.getBounds()
+  window.setShape(buildRoundedWindowShape(width, height, MAIN_WINDOW_SHAPE_GUARD_RADIUS))
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1200,
@@ -41,13 +76,14 @@ function createWindow(): BrowserWindow {
     title: '',
     show: false,
     frame: false,
+    transparent: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
-    transparent: true,
     thickFrame: false,
     roundedCorners: false,
     backgroundMaterial: 'none',
-    backgroundColor: '#01000000',
+    backgroundColor: '#00000000',
+    shadow: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -57,6 +93,7 @@ function createWindow(): BrowserWindow {
 
   // Apply DWM fix before window is visible —抢先 in DWM's first render
   applyDwmFix(window)
+  applyMainWindowShape(window)
 
   window.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -68,6 +105,19 @@ function createWindow(): BrowserWindow {
     window.setTitle('')
   })
 
+  // DWM can redraw the inactive frame on focus changes, so keep the HWND style clean.
+  const syncWindowChrome = () => {
+    applyDwmFix(window)
+    applyMainWindowShape(window)
+  }
+
+  window.on('focus', syncWindowChrome)
+  window.on('blur', syncWindowChrome)
+  window.on('restore', syncWindowChrome)
+  window.on('unmaximize', syncWindowChrome)
+  window.on('maximize', syncWindowChrome)
+  window.on('resize', syncWindowChrome)
+
   // Capture renderer console messages
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     const prefix = ['VERBOSE', 'INFO', 'WARNING', 'ERROR'][level] || 'LOG'
@@ -78,7 +128,7 @@ function createWindow(): BrowserWindow {
 
   // Re-apply DWM fix + show after page loads
   window.webContents.on('did-finish-load', () => {
-    applyDwmFix(window)
+    syncWindowChrome()
     window.show()
   })
 
@@ -97,7 +147,7 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
     y: screenH - 270,
     frame: false,
     transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#0d0d0d',
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
