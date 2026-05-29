@@ -68,13 +68,8 @@ function createWindow(): BrowserWindow {
     window.setTitle('')
   })
 
-  // On blur, set dark background to hide DWM's white frame
-  window.on('blur', () => {
-    window.setBackgroundColor('#0d0d0d')
-  })
-  window.on('focus', () => {
-    window.setBackgroundColor('#00000000')
-  })
+  // Re-apply DWM fix on blur to prevent white frame flash
+  window.on('blur', () => applyDwmFix(window))
 
   // Capture renderer console messages
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
