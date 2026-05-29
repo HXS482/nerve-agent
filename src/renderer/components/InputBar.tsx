@@ -94,12 +94,11 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
 
   return (
     <div className="absolute left-0 right-0 z-50 flex flex-col items-center gap-2" style={{ paddingLeft: '11px', paddingRight: '11px', bottom: '8px' }}>
-      {/* Attachment cards */}
+      {/* Attachment thumbnails */}
       {attachments.length > 0 && (
-        <div className="flex gap-2 w-full max-w-4xl flex-wrap justify-center">
+        <div className="flex gap-1.5 justify-center">
           {attachments.map((file, i) => (
-            <div key={i} className="relative flex flex-col items-center overflow-hidden transition-all"
-              style={{ width: 80, background: 'var(--bg-surface-container)', borderRadius: 8, border: '1px solid var(--border-subtle)', boxShadow: '0 4px 16px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.05)' }}>
+            <div key={i} className="relative rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)', maxWidth: 120 }}>
               <button onClick={() => removeAttachment(i)}
                 className="absolute top-1 right-1 z-10 w-4 h-4 rounded-full flex items-center justify-center transition-all hover:scale-110"
                 style={{ background: 'rgba(0,0,0,0.5)', color: '#fff' }}>
@@ -108,15 +107,12 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
                 </svg>
               </button>
               {file.isImage ? (
-                <img src={`data:${file.mimeType};base64,${file.data}`} className="w-full h-14 object-cover" />
+                <img src={`data:${file.mimeType};base64,${file.data}`} className="w-full h-16 object-cover" />
               ) : (
-                <div className="w-full h-14 flex items-center justify-center" style={{ color: 'var(--text-outline-variant)' }}>
+                <div className="w-full h-16 flex items-center justify-center" style={{ background: 'var(--bg-surface-container)', color: 'var(--text-outline-variant)' }}>
                   <FileIcon mimeType={file.mimeType} />
                 </div>
               )}
-              <div className="w-full px-1.5 py-1 text-center">
-                <span className="block text-[9px] truncate" style={{ color: 'var(--text-on-surface-variant)' }}>{file.name}</span>
-              </div>
             </div>
           ))}
         </div>
