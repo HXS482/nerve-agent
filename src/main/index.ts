@@ -43,10 +43,9 @@ function createWindow(): BrowserWindow {
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
-    transparent: true,
     thickFrame: false,
     roundedCorners: false,
-    backgroundMaterial: 'none',
+    backgroundMaterial: 'mica',
     backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
