@@ -19,7 +19,7 @@ const STATE_COLORS: Record<OrbState, string> = {
 
 const THEME_COLORS: Record<string, string> = {
   dark: '#6AB4FF',
-  light: '#2563EB',
+  light: '#60A5FA',
   aurora: '#7FC4FF',
 }
 
@@ -117,6 +117,7 @@ precision highp float;
 in float vAlpha;
 uniform vec3 uColor;
 uniform float uOpacity;
+uniform float uBrightness;
 out vec4 fragColor;
 
 void main() {
@@ -132,6 +133,8 @@ void main() {
 
   float glow = (1.0 - d * 2.0) * 0.25;
   col += uColor * glow;
+
+  col *= uBrightness;
 
   fragColor = vec4(col, alpha);
 }
@@ -197,6 +200,7 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
     const posLoc = gl.getAttribLocation(program, 'aPosition')
     const colorLoc = gl.getUniformLocation(program, 'uColor')!
     const opacityLoc = gl.getUniformLocation(program, 'uOpacity')!
+    const brightnessLoc = gl.getUniformLocation(program, 'uBrightness')!
     const timeLoc = gl.getUniformLocation(program, 'uTime')!
     const mvLoc = gl.getUniformLocation(program, 'uModelView')!
     const projLoc = gl.getUniformLocation(program, 'uProjection')!
@@ -295,6 +299,7 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
       gl.uniform1f(timeLoc, elapsed * curSpeed)
       gl.uniform3fv(colorLoc, curColor)
       gl.uniform1f(opacityLoc, curOpacity)
+      gl.uniform1f(brightnessLoc, theme === 'light' ? 1.8 : 1.0)
       gl.uniform1f(pointSizeLoc, 6 + 3 * curSpeed)
       gl.uniform1f(ringLoc, curRing)
       gl.uniform1f(ringTimeLoc, curRingTime)
