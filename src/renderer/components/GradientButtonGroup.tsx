@@ -163,7 +163,7 @@ export function GradientButtonGroup({
             : isDark
               ? "1px solid rgba(255,255,255,0.08)"
               : "1px solid rgba(0,0,0,0.06)",
-          boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+          boxShadow: theme === 'aurora' ? "0 20px 50px rgba(0,0,0,0.5)" : undefined,
         }}
       >
         {navItems.map((item) => {
