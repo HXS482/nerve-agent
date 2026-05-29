@@ -482,6 +482,7 @@ export function RightSidebar() {
   const width = useChatStore((s) => s.rightSidebarWidth)
   const view = useChatStore((s) => s.rightSidebarView)
   const theme = useChatStore((s) => s.theme)
+  const isDark = theme !== 'light'
   const setView = useChatStore((s) => s.setRightSidebarView)
   const setOpen = useChatStore((s) => s.setRightSidebarOpen)
   const setWidth = useChatStore((s) => s.setRightSidebarWidth)
@@ -562,10 +563,18 @@ export function RightSidebar() {
               className={`inline-flex items-center gap-1 p-1 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
               style={{
                 borderRadius: 10,
-                background: theme === 'aurora' ? undefined : 'var(--bg-surface-container)',
+                background: theme === 'aurora'
+                  ? undefined
+                  : isDark
+                    ? 'rgba(30, 30, 32, 0.6)'
+                    : 'rgba(255, 255, 255, 0.6)',
                 backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
                 WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid var(--border-default)',
+                border: theme === 'aurora'
+                  ? '1px solid var(--glass-border)'
+                  : isDark
+                    ? '1px solid rgba(255,255,255,0.08)'
+                    : '1px solid rgba(0,0,0,0.06)',
                 boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
               }}
             >
