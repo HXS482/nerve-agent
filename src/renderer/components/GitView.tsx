@@ -96,32 +96,38 @@ const I = {
 
 // ─── Glass Card ────────────────────────────────────────
 
-function getCardStyles(theme: string) {
-  const isDark = theme !== 'light'
-  const base = {
-    borderRadius: 10,
-    background: theme === 'aurora'
-      ? undefined
-      : isDark ? 'rgba(30, 30, 32, 0.6)' : 'rgba(255, 255, 255, 0.6)',
-    border: theme === 'aurora'
-      ? '1px solid var(--glass-border)'
-      : isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
-  }
-  return {
-    hero: { ...base, padding: '10px 14px', margin: '8px 8px 4px' },
-    primary: { ...base, padding: '12px 14px', margin: '0 8px 8px' },
-    surface: { ...base, overflow: 'hidden' as const, margin: '0 8px 8px' },
-  }
+const CARD = {
+  hero: {
+    border: '1px solid var(--border-default)',
+    borderRadius: 12,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.1)',
+    padding: '10px 14px',
+    margin: '8px 8px 4px',
+  },
+  primary: {
+    border: '1px solid var(--border-default)',
+    borderRadius: 12,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
+    padding: '12px 14px',
+    margin: '0 8px 8px',
+  },
+  surface: {
+    border: '1px solid var(--border-default)',
+    borderRadius: 12,
+    boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+    overflow: 'hidden' as const,
+    margin: '0 8px 8px',
+  },
 }
 
 // ─── Collapsible Section ───────────────────────────────
 
-function Section({ title, count, defaultOpen, children, accent, hero, cardStyle }: {
-  title: string; count?: number; defaultOpen?: boolean; children: React.ReactNode; accent?: string; hero?: boolean; cardStyle: React.CSSProperties
+function Section({ title, count, defaultOpen, children, accent, hero }: {
+  title: string; count?: number; defaultOpen?: boolean; children: React.ReactNode; accent?: string; hero?: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen ?? true)
   return (
-    <div style={cardStyle}>
+    <div style={CARD.surface}>
       <button onClick={() => setOpen(!open)}
         className="flex items-center gap-2 w-full text-left py-2.5 px-3 transition-colors"
         style={{ color: 'var(--text-outline-variant)' }}
@@ -167,17 +173,16 @@ function StatusBadge({ code }: { code: string }) {
 function GlassIconBtn({ icon, onClick, disabled, title, danger }: {
   icon: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string; danger?: boolean
 }) {
-  const theme = useChatStore((s) => s.theme)
-  const isDark = theme !== 'light'
   return (
     <button onClick={onClick} disabled={disabled} title={title}
       className="flex items-center justify-center rounded-[8px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
       style={{
         width: 32, height: 30,
-        background: theme === 'aurora' ? undefined : 'var(--bg-surface-container-high)',
+        background: 'var(--bg-surface-container-high)',
         color: danger ? '#ef4444' : 'var(--text-outline-variant)',
-        border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid var(--border-subtle)',
+        border: '1px solid var(--border-subtle)',
         cursor: disabled ? 'default' : 'pointer',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
       }}
     >{icon}</button>
   )
@@ -256,7 +261,7 @@ function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
 
 // ─── Files Section ─────────────────────────────────────
 
-function FilesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
+function FilesSection() {
   const { status, loading, stageFiles, unstageFiles, commit, commitAndPush, discardChanges, setSelectedDiffFile, fetchDiff, refresh } = useGitStore(useShallow((s) => ({
     status: s.status,
     loading: s.loading,
@@ -341,14 +346,14 @@ function FilesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
 
       {/* ── Conflict Section ── */}
       {hasConflicts && (
-        <Section key="conflicts" title="Merge Conflicts" count={conflicts.length} accent="#ef4444" cardStyle={CARD.surface}>
+        <Section key="conflicts" title="Merge Conflicts" count={conflicts.length} accent="#ef4444">
           {conflicts.map((f) => <FileRow key={f} filePath={f} statusCode="UU" staged={false} onToggle={() => {}} onShowDiff={() => showDiff(f, false)} />)}
         </Section>
       )}
 
       {/* ── Staged Section ── */}
       {hasStaged && (
-        <Section key="staged" title="Staged Changes" count={staged.length} accent="#22c55e" cardStyle={CARD.surface}>
+        <Section key="staged" title="Staged Changes" count={staged.length} accent="#22c55e">
           <div style={{ borderLeft: '2px solid rgba(34,197,94,0.35)', margin: '2px 0 2px 6px' }}>
             {staged.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged onToggle={() => toggle(f)} onShowDiff={() => showDiff(f, true)} />)}
           </div>
@@ -357,7 +362,7 @@ function FilesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
 
       {/* ── Changes Section ── */}
       {hasChanges && (
-        <Section key="changes" title="Changes" count={modified.length + untracked.length} cardStyle={CARD.surface}>
+        <Section key="changes" title="Changes" count={modified.length + untracked.length}>
           <div style={{ borderLeft: '2px solid var(--border-subtle)', margin: '2px 0 2px 6px' }}>
             {modified.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged={false} onToggle={() => toggle(f)} onShowDiff={() => showDiff(f, false)} onDiscard={() => discardChanges([f], true)} />)}
             {untracked.map((f) => <FileRow key={f} filePath={f} statusCode="??" staged={false} onToggle={() => toggle(f)} onShowDiff={() => showDiff(f, false)} onDiscard={() => discardChanges([f], false)} />)}
@@ -377,7 +382,7 @@ function FilesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
 
 // ─── Branches Section ──────────────────────────────────
 
-function BranchesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
+function BranchesSection() {
   const { branches, loading, checkout, createBranch, deleteBranch } = useGitStore(useShallow((s) => ({
     branches: s.branches,
     loading: s.loading,
@@ -392,7 +397,7 @@ function BranchesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
   const doCreate = async () => { if (!name.trim()) return; await createBranch(name.trim()); setName(''); setShowNew(false) }
 
   return (
-    <Section title="Branches" count={branches.length} cardStyle={CARD.surface}>
+    <Section title="Branches" count={branches.length}>
       {branches.map((b) => (
         <div key={b.name}
           className="flex items-center gap-2 w-full transition-colors group"
@@ -447,7 +452,7 @@ function BranchesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
 
 // ─── Stashes Section ───────────────────────────────────
 
-function StashesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
+function StashesSection() {
   const { stashes, loading, stashPush, stashPop, stashApply, stashDrop } = useGitStore(useShallow((s) => ({
     stashes: s.stashes,
     loading: s.loading,
@@ -463,7 +468,7 @@ function StashesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
   const doStash = async () => { await stashPush(msg || undefined, untracked); setMsg(''); setUntracked(false); setShow(false) }
 
   return (
-    <Section title="Stashes" count={stashes.length} cardStyle={CARD.surface}>
+    <Section title="Stashes" count={stashes.length}>
       <AnimatePresence>
         {show && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-4 py-2 overflow-hidden" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
@@ -509,7 +514,7 @@ function StashesSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
 
 // ─── Log Section ───────────────────────────────────────
 
-function LogSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
+function LogSection() {
   const { log, selectedCommitHash, commitDiff, loading, fetchCommitDiff, clearCommitDiff } = useGitStore(useShallow((s) => ({
     log: s.log,
     selectedCommitHash: s.selectedCommitHash,
@@ -522,7 +527,7 @@ function LogSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
   if (log.length === 0) return null
 
   return (
-    <Section title="Recent Commits" count={log.length} defaultOpen={false} cardStyle={CARD.surface}>
+    <Section title="Recent Commits" count={log.length} defaultOpen={false}>
       {log.slice(0, 20).map((c) => (
         <div key={c.hash}>
           <button onClick={() => selectedCommitHash === c.hash ? clearCommitDiff() : fetchCommitDiff(c.hash)}
@@ -559,8 +564,6 @@ function LogSection({ CARD }: { CARD: ReturnType<typeof getCardStyles> }) {
 // ─── Main ──────────────────────────────────────────────
 
 export function GitView() {
-  const theme = useChatStore((s) => s.theme)
-  const CARD = getCardStyles(theme)
   const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch } = useGitStore(useShallow((s) => ({
     status: s.status,
     loading: s.loading,
@@ -671,10 +674,10 @@ export function GitView() {
 
       {/* ── Scrolling content ── */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingTop: 2 }}>
-        <FilesSection CARD={CARD} />
-        <BranchesSection CARD={CARD} />
-        <StashesSection CARD={CARD} />
-        <LogSection CARD={CARD} />
+        <FilesSection />
+        <BranchesSection />
+        <StashesSection />
+        <LogSection />
         <div className="h-4" />
       </div>
     </div>
