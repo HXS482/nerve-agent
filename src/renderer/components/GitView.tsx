@@ -180,11 +180,9 @@ function GlassIconBtn({ icon, onClick, disabled, title, danger }: {
       className="flex items-center justify-center rounded-[8px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
       style={{
         width: 32, height: 30,
-        background: theme === 'aurora' ? undefined : isDark ? 'rgba(30, 30, 32, 0.6)' : 'rgba(255, 255, 255, 0.6)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        background: theme === 'aurora' ? undefined : 'var(--bg-surface-container-high)',
         color: danger ? '#ef4444' : 'var(--text-outline-variant)',
-        border: theme === 'aurora' ? '1px solid var(--glass-border)' : isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
+        border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid var(--border-subtle)',
         cursor: disabled ? 'default' : 'pointer',
       }}
     >{icon}</button>
