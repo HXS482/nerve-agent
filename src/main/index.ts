@@ -47,7 +47,7 @@ function createWindow(): BrowserWindow {
     thickFrame: false,
     roundedCorners: false,
     backgroundMaterial: 'none',
-    backgroundColor: '#01000000',
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
