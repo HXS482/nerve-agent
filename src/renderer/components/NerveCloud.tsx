@@ -19,7 +19,7 @@ const STATE_COLORS: Record<OrbState, string> = {
 
 const THEME_COLORS: Record<string, string> = {
   dark: '#6AB4FF',
-  light: '#1D4ED8',
+  light: '#1E3A8A',
   aurora: '#7FC4FF',
 }
 
@@ -299,7 +299,7 @@ export function NerveCloud({ state = 'idle', theme = 'dark', size = 64, classNam
       gl.uniform1f(timeLoc, elapsed * curSpeed)
       gl.uniform3fv(colorLoc, curColor)
       gl.uniform1f(opacityLoc, curOpacity)
-      gl.uniform1f(glowStrengthLoc, theme === 'light' ? 0.8 : 0.25)
+      gl.uniform1f(glowStrengthLoc, theme === 'light' ? 1.0 : 0.25)
       gl.uniform1f(pointSizeLoc, 6 + 3 * curSpeed)
       gl.uniform1f(ringLoc, curRing)
       gl.uniform1f(ringTimeLoc, curRingTime)
