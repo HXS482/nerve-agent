@@ -16,27 +16,22 @@ using System.Runtime.InteropServices;
 [StructLayout(LayoutKind.Sequential)]
 public struct MARGINS { public int Left, Right, Top, Bottom; }
 public class Win32 {
-    [DllImport("user32.dll")]
-    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError=true)]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", SetLastError=true)]
+    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     [DllImport("dwmapi.dll")]
     public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 }'
 $hwnd = [IntPtr]::New(${hwnd})
-
-# Remove WS_CAPTION and WS_THICKFRAME to eliminate DWM non-client area
 $GWL_STYLE = -16
-$WS_CAPTION = 0x00C00000
-$WS_THICKFRAME = 0x00040000
-$WS_SYSMENU = 0x00080000
-$WS_MAXIMIZEBOX = 0x00010000
-$WS_MINIMIZEBOX = 0x00020000
+
+# Read current style, strip caption + thickframe
 $style = [Win32]::GetWindowLong($hwnd, $GWL_STYLE)
-$style = $style -band (-bnot ($WS_CAPTION -bor $WS_THICKFRAME -bor $WS_SYSMENU -bor $WS_MAXIMIZEBOX -bor $WS_MINIMIZEBOX))
+$style = $style -band (-bnot (0x00C00000 -bor 0x00040000))
 [Win32]::SetWindowLong($hwnd, $GWL_STYLE, $style) | Out-Null
 
-# Extend frame into client area (all -1) to remove any residual frame
+# Extend frame into client area
 $m = New-Object MARGINS
 $m.Left = -1; $m.Right = -1; $m.Top = -1; $m.Bottom = -1
 [Win32]::DwmExtendFrameIntoClientArea($hwnd, [ref]$m)
@@ -47,7 +42,7 @@ $m.Left = -1; $m.Right = -1; $m.Top = -1; $m.Bottom = -1
     writeFileSync(tmpFile, script, 'utf-8')
     execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${tmpFile}"`, {
       stdio: 'pipe',
-      timeout: 5000,
+      timeout: 10000,
     })
     console.log('[DWM] Frame removed')
   } catch (e) {
