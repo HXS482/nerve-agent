@@ -402,60 +402,60 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     const text = getMessageText(message)
 
     return (
-      <div className="animate-fade-in flex justify-end" style={{ paddingInline: 'var(--sp-md)', marginBottom: sameRole ? 8 : 48 }}>
-        <div style={{ maxWidth: '80%' }}>
-          {/* Image thumbnail */}
-          {imageBlocks.length > 0 && (
-            <div className="flex justify-end mb-1.5">
-              {imageBlocks.map((block, i) => (
-                <div key={i} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
-                  <ImageView src={block.src!} />
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="animate-fade-in flex flex-col items-end" style={{ paddingInline: 'var(--sp-md)', marginBottom: sameRole ? 8 : 48 }}>
+        {/* Image thumbnails */}
+        {imageBlocks.length > 0 && (
+          <div className="flex gap-1.5 mb-1.5">
+            {imageBlocks.map((block, i) => (
+              <div key={i} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)', maxWidth: 260 }}>
+                <ImageView src={block.src!} />
+              </div>
+            ))}
+          </div>
+        )}
 
           {/* File attachments */}
-          {fileBlocks.map((block, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg mb-1"
-              style={{ background: 'var(--bg-surface-container-high)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-              <span>{block.fileName}</span>
-              <span style={{ color: 'var(--text-outline-variant)' }}>
-                {block.fileSize != null ? (block.fileSize < 1024 ? `${block.fileSize} B` : block.fileSize < 1048576 ? `${(block.fileSize / 1024).toFixed(1)} KB` : `${(block.fileSize / 1048576).toFixed(1)} MB`) : ''}
-              </span>
-            </div>
-          ))}
-
-          {/* Text bubble */}
-          {textBlocks.length > 0 && (
-            <div
-              className="rounded-2xl rounded-br-md"
-              style={{
-                background: 'var(--bg-surface-container)',
-                padding: '10px 14px',
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
-              {textBlocks.map((block, i) => (
-                <p key={i} className="whitespace-pre-wrap"
-                  style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
-                  {block.text}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {/* Timestamp + copy button */}
-          <div className="flex items-center justify-end gap-1 mt-1" style={{ paddingRight: 2 }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-outline-variant)' }}>
-              {formatMessageTime(message.timestamp)}
+        {fileBlocks.map((block, i) => (
+          <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg mb-1"
+            style={{ background: 'var(--bg-surface-container-high)', border: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <span>{block.fileName}</span>
+            <span style={{ color: 'var(--text-outline-variant)' }}>
+              {block.fileSize != null ? (block.fileSize < 1024 ? `${block.fileSize} B` : block.fileSize < 1048576 ? `${(block.fileSize / 1024).toFixed(1)} KB` : `${(block.fileSize / 1048576).toFixed(1)} MB`) : ''}
             </span>
-            <UserCopyButton text={text} />
           </div>
+        ))}
+
+        {/* Text bubble */}
+        {textBlocks.length > 0 && (
+          <div
+            className="rounded-lg"
+            style={{
+              background: 'var(--bg-surface-container)',
+              padding: '6px 10px',
+              border: '1px solid var(--border-subtle)',
+              display: 'inline-block',
+              maxWidth: '80%',
+            }}
+          >
+            {textBlocks.map((block, i) => (
+              <p key={i} className="whitespace-pre-wrap"
+                style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
+                {block.text}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {/* Timestamp + copy button */}
+        <div className="flex items-center justify-end gap-1 mt-1" style={{ paddingRight: 2 }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-outline-variant)' }}>
+            {formatMessageTime(message.timestamp)}
+          </span>
+          <UserCopyButton text={text} />
         </div>
       </div>
     )

@@ -123,7 +123,7 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
         {/* Plus Action Button */}
         <button
           onClick={handlePickFiles}
-          className="w-9 h-9 rounded-full dynamic-island flex items-center justify-center text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-all shrink-0"
+          className="w-9 h-9 rounded-full dynamic-island flex items-center justify-center text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] hover:brightness-125 active:scale-90 transition-all duration-150 shrink-0 cursor-pointer"
           style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
