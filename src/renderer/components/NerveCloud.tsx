@@ -19,7 +19,7 @@ const STATE_COLORS: Record<OrbState, string> = {
 
 const THEME_COLORS: Record<string, string> = {
   dark: '#6AB4FF',
-  light: '#60A5FA',
+  light: '#2563EB',
   aurora: '#7FC4FF',
 }
 
