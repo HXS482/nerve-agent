@@ -104,6 +104,7 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
     movable: false,
     shadow: false,
     focusable: false,
+    show: false,
     title: '',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -140,7 +141,7 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
 
   // Pet state
   let petDocked = false
-  let petVisible = true
+  let petVisible = false
   let dragOffset: { x: number; y: number } | null = null
   let mainWindowRef: BrowserWindow | null = null
   let currentWinPos: { x: number; y: number } = { x: screenW - 200, y: screenH - 240 }
