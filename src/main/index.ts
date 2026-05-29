@@ -68,8 +68,7 @@ function createWindow(): BrowserWindow {
     window.setTitle('')
   })
 
-  // Re-apply DWM fix on blur to prevent white frame flash
-  window.on('blur', () => applyDwmFix(window))
+  // DWM frame removed via SetWindowLong — no need for blur fix
 
   // Capture renderer console messages
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {

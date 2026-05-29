@@ -15,30 +15,31 @@ using System;
 using System.Runtime.InteropServices;
 [StructLayout(LayoutKind.Sequential)]
 public struct MARGINS { public int Left, Right, Top, Bottom; }
-public class Dwm {
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll")]
+    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("dwmapi.dll")]
     public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 }'
 $hwnd = [IntPtr]::New(${hwnd})
 
-# 1. Disable non-client rendering
-$policy = 1
-[void][Dwm]::DwmSetWindowAttribute($hwnd, 2, [ref]$policy, 4)
+# Remove WS_CAPTION and WS_THICKFRAME to eliminate DWM non-client area
+$GWL_STYLE = -16
+$WS_CAPTION = 0x00C00000
+$WS_THICKFRAME = 0x00040000
+$WS_SYSMENU = 0x00080000
+$WS_MAXIMIZEBOX = 0x00010000
+$WS_MINIMIZEBOX = 0x00020000
+$style = [Win32]::GetWindowLong($hwnd, $GWL_STYLE)
+$style = $style -band (-bnot ($WS_CAPTION -bor $WS_THICKFRAME -bor $WS_SYSMENU -bor $WS_MAXIMIZEBOX -bor $WS_MINIMIZEBOX))
+[Win32]::SetWindowLong($hwnd, $GWL_STYLE, $style) | Out-Null
 
-# 2. Set border color to none
-$color = -2
-[void][Dwm]::DwmSetWindowAttribute($hwnd, 34, [ref]$color, 4)
-
-# 3. Enable immersive dark mode so DWM frame is dark, not white
-$dark = 1
-[void][Dwm]::DwmSetWindowAttribute($hwnd, 20, [ref]$dark, 4)
-
-# 4. Extend frame into client area
+# Extend frame into client area (all -1) to remove any residual frame
 $m = New-Object MARGINS
 $m.Left = -1; $m.Right = -1; $m.Top = -1; $m.Bottom = -1
-[void][Dwm]::DwmExtendFrameIntoClientArea($hwnd, [ref]$m)
+[Win32]::DwmExtendFrameIntoClientArea($hwnd, [ref]$m)
 `.trim()
 
   const tmpFile = join(tmpdir(), `dwm-${Date.now()}.ps1`)
@@ -48,7 +49,7 @@ $m.Left = -1; $m.Right = -1; $m.Top = -1; $m.Bottom = -1
       stdio: 'pipe',
       timeout: 5000,
     })
-    console.log('[DWM] All fixes applied')
+    console.log('[DWM] Frame removed')
   } catch (e) {
     console.warn('[DWM] Failed:', (e as Error).message?.slice(0, 200))
   } finally {
