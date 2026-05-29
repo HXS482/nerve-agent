@@ -173,14 +173,18 @@ function StatusBadge({ code }: { code: string }) {
 function GlassIconBtn({ icon, onClick, disabled, title, danger }: {
   icon: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string; danger?: boolean
 }) {
+  const theme = useChatStore((s) => s.theme)
+  const isDark = theme !== 'light'
   return (
     <button onClick={onClick} disabled={disabled} title={title}
       className="flex items-center justify-center rounded-[8px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
       style={{
         width: 32, height: 30,
-        background: 'var(--bg-surface-container-high)',
+        background: theme === 'aurora' ? undefined : isDark ? 'rgba(30, 30, 32, 0.6)' : 'rgba(255, 255, 255, 0.6)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         color: danger ? '#ef4444' : 'var(--text-outline-variant)',
-        border: '1px solid var(--border-subtle)',
+        border: theme === 'aurora' ? '1px solid var(--glass-border)' : isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
         cursor: disabled ? 'default' : 'pointer',
       }}
     >{icon}</button>
