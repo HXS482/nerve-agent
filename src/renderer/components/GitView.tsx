@@ -187,19 +187,19 @@ const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, 
   return (
     <div
       className="flex items-center gap-2 w-full transition-colors group"
-      style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+      style={{ padding: '5px 10px 5px 8px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
     >
       <button onClick={onToggle} className="shrink-0 flex items-center justify-center rounded-[4px] hover:brightness-150 transition-all"
         style={{ width: 18, height: 18 }}
       >
         {staged ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="4" fill="rgba(34,197,94,0.15)" stroke="#22c55e" />
-            <polyline points="20 6 9 17 4 12" />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" fill="#22c55e" stroke="#22c55e" strokeWidth="2" />
+            <polyline points="8 12 11 15 16 9" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         ) : (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" opacity="0.35">
-            <rect x="3" y="3" width="18" height="18" rx="4" />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" opacity="0.35" />
           </svg>
         )}
       </button>
@@ -262,7 +262,12 @@ function FilesList({ onShowDiff }: { onShowDiff: (f: string, s: boolean) => void
   }
 
   return (
-    <div className="flex flex-col">
+    <div style={{
+      margin: '0 6px',
+      border: '1px solid var(--border-default)',
+      borderRadius: 10,
+      overflow: 'hidden',
+    }}>
       {hasConflicts && (
         <>
           {conflicts.map((f) => <FileRow key={f} filePath={f} statusCode="UU" staged={false} onToggle={() => {}} onShowDiff={() => onShowDiff(f, false)} />)}
@@ -274,7 +279,7 @@ function FilesList({ onShowDiff }: { onShowDiff: (f: string, s: boolean) => void
         </>
       )}
       {hasStaged && hasChanges && (
-        <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '2px 14px' }} />
+        <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '0 14px' }} />
       )}
       {hasChanges && (
         <>
@@ -284,11 +289,7 @@ function FilesList({ onShowDiff }: { onShowDiff: (f: string, s: boolean) => void
       )}
     </div>
   )
-    </div>
-  )
 }
-
-// ─── Branches Tab ──────────────────────────────────────
 
 function BranchesTab() {
   const { branches, loading, checkout, createBranch, deleteBranch } = useGitStore(useShallow((s) => ({
@@ -485,7 +486,7 @@ const TAB_CONTENT: Record<GitTab, React.FC<{ onShowDiff: (f: string, s: boolean)
 }
 
 export function GitView() {
-  const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch, commit, commitAndPush, setSelectedDiffFile, fetchDiff } = useGitStore(useShallow((s) => ({
+  const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch, commit, setSelectedDiffFile, fetchDiff } = useGitStore(useShallow((s) => ({
     status: s.status,
     loading: s.loading,
     error: s.error,
@@ -498,7 +499,6 @@ export function GitView() {
     pull: s.pull,
     fetch: s.fetch,
     commit: s.commit,
-    commitAndPush: s.commitAndPush,
     setSelectedDiffFile: s.setSelectedDiffFile,
     fetchDiff: s.fetchDiff,
   })))
@@ -509,7 +509,6 @@ export function GitView() {
   const [activeTab, setActiveTab] = useState<GitTab>('changes')
   const [sync, setSync] = useState<'push' | 'pull' | 'fetch' | null>(null)
   const [msg, setMsg] = useState('')
-  const [pushing, setPushing] = useState(false)
 
   useEffect(() => { if (chatConfig.cwd && chatConfig.cwd !== cwd) setCwd(chatConfig.cwd) }, [chatConfig.cwd, cwd, setCwd])
   useEffect(() => { if (cwd) refresh() }, [cwd])
@@ -524,10 +523,6 @@ export function GitView() {
   }, [setSelectedDiffFile, fetchDiff, setView])
 
   const doCommit = useCallback(async () => { if (!msg.trim()) return; await commit(msg.trim()); setMsg('') }, [msg, commit])
-
-  const doCommitPush = useCallback(async () => {
-    if (!msg.trim()) return; setPushing(true); await commitAndPush(msg.trim()); setPushing(false); setMsg('')
-  }, [msg, commitAndPush])
 
   const TabContent = TAB_CONTENT[activeTab]
 
@@ -610,7 +605,7 @@ export function GitView() {
               <GlassIconBtn icon={sync === 'fetch' ? <I.Spinner s={9} /> : <I.Fetch s={9} />} title="Fetch" onClick={() => { setSync('fetch'); gitFetch().finally(() => setSync(null)) }} disabled={!!sync} />
             </div>
           </div>
-          <div style={{ margin: '6px 10% 0', borderTop: '1px solid var(--border-subtle)' }} />
+          <div style={{ margin: '6px 10% 0', borderTop: '2px solid var(--border-subtle)' }} />
         </div>
       )}
 
@@ -659,42 +654,39 @@ export function GitView() {
 
       {/* ── Commit Area (sticky bottom, only for Changes tab) ── */}
       {activeTab === 'changes' && (
-        <div className="shrink-0" style={{ padding: '10px 8px 10px', borderTop: '1.5px solid var(--border-default)' }}>
-          <textarea
-            value={msg} onChange={(e) => setMsg(e.target.value)}
-            placeholder="Commit message…"
-            rows={2}
-            className="w-full text-[12px] outline-none rounded-[8px] px-3 py-2.5 resize-none transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
-            style={{
-              background: 'var(--bg-surface-container-high)',
-              color: 'var(--text-on-surface)',
-              border: '1px solid var(--border-subtle)',
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); doCommitPush() }
-              else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doCommit() }
-            }}
-          />
-          <div className="flex items-center gap-2 mt-2.5">
+        <div className="shrink-0" style={{ padding: '8px 6px 8px', borderTop: '1.5px solid var(--border-default)' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'var(--bg-surface-container-high)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 10,
+            padding: '6px 8px',
+          }}>
+            <textarea
+              value={msg} onChange={(e) => setMsg(e.target.value)}
+              placeholder="Commit message…"
+              rows={1}
+              className="flex-1 text-[12px] outline-none resize-none bg-transparent"
+              style={{ color: 'var(--text-on-surface)', minHeight: 20, maxHeight: 80 }}
+              onInput={(e) => { e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doCommit() }
+              }}
+            />
             <button onClick={doCommit} disabled={!msg.trim() || loading}
-              className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-semibold rounded-[8px] py-1.5 transition-all duration-150 disabled:opacity-35 hover:brightness-110 active:scale-[0.97]"
+              className="shrink-0 flex items-center justify-center rounded-[7px] transition-all duration-150 disabled:opacity-30 hover:brightness-110 active:scale-[0.95]"
               style={{
                 background: 'var(--accent-primary)', color: '#fff', border: 'none',
-                cursor: loading || pushing ? 'wait' : 'pointer',
-                boxShadow: '0 2px 8px rgba(59,130,246,0.3)',
+                cursor: loading ? 'wait' : 'pointer',
+                width: 30, height: 30,
               }}
-            >{loading && !pushing ? <I.Spinner s={11} /> : <I.Check s={11} />} Commit</button>
-            <button onClick={doCommitPush} disabled={!msg.trim() || loading}
-              className="flex items-center justify-center rounded-[8px] px-3 py-1.5 transition-all duration-150 disabled:opacity-35 hover:brightness-110 active:scale-[0.97]"
-              style={{
-                background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)',
-                border: '1px solid var(--border-subtle)',
-                cursor: loading || pushing ? 'wait' : 'pointer',
-              }}
-            >{pushing ? <I.Spinner s={11} /> : <I.Up s={12} />}</button>
-          </div>
-          <div className="text-[9px] mt-1.5 text-center" style={{ color: 'var(--text-outline-variant)', opacity: 0.25 }}>
-            Enter to commit · {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter to push
+            >{loading ? <I.Spinner s={10} /> : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <line x1="1.05" y1="12" x2="7" y2="12" />
+                <line x1="17.01" y1="12" x2="22.96" y2="12" />
+              </svg>
+            )}</button>
           </div>
         </div>
       )}
