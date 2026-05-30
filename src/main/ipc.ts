@@ -405,7 +405,7 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   })
 
   ipcMain.handle(IPC_CHANNELS.OPEN_IN_BROWSER, async (_event, { type, content }: { type: string; content: string }) => {
-    if (type === 'image') {
+    if (type === 'image' || type === 'url') {
       shell.openExternal(content)
     } else if (type === 'file') {
       shell.openPath(content)

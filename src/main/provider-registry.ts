@@ -38,8 +38,16 @@ export class ProviderRegistry {
 
         const isNative = sdkBaseURL.includes('anthropic.com')
 
-        // No custom fetch — use native fetch like Claude CLI does
-        const customFetch = undefined
+        // For proxy endpoints, strip the internal 'authorization' header that the SDK
+        // auto-injects from Claude Code auth — it conflicts with the proxy's x-api-key check
+        const customFetch = isNative ? undefined : async (url: string | URL | Request, init?: RequestInit) => {
+          if (init?.headers) {
+            const h = new Headers(init.headers)
+            h.delete('authorization')
+            init = { ...init, headers: h }
+          }
+          return fetch(url, init)
+        }
 
         const client = new Anthropic({
           apiKey: entry.authToken,
@@ -123,6 +131,9 @@ export class ProviderRegistry {
     })
     if (settings.providers) {
       for (const [id, config] of Object.entries(settings.providers)) {
+        // Skip 'anthropic' — already set from settings.baseURL/authToken above.
+        // The providers.anthropic entry in JSON may have a stale baseURL (missing /v1 suffix).
+        if (id === 'anthropic') continue
         this.providers.set(id, config)
       }
     }

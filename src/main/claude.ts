@@ -132,7 +132,7 @@ export class ClaudeService {
     }
   }
 
-  private resolveModel(modelAlias: string): string {
+  private resolveModel(modelAlias: string, providerId?: string): string {
     if (this.settings.modelAliases[modelAlias]) {
       return this.settings.modelAliases[modelAlias]
     }
@@ -142,9 +142,9 @@ export class ClaudeService {
       'haiku': 'claude-haiku-4-5-20251001',
     }
     const resolved = aliasMap[modelAlias] || modelAlias
-    // If resolved to a standard Claude name but the proxy uses a different model,
-    // fall back to ANTHROPIC_MODEL from settings (e.g. mimo-v2.5-pro)
-    if (resolved.startsWith('claude-') && this.settings.defaultModel) {
+    // Only apply defaultModel override for anthropic provider —
+    // non-anthropic providers (deepseek, openai, etc.) need their own model IDs
+    if (resolved.startsWith('claude-') && this.settings.defaultModel && (!providerId || providerId === 'anthropic')) {
       return this.settings.defaultModel
     }
     return resolved
@@ -300,16 +300,16 @@ export class ClaudeService {
         messages.push({ role: 'user', content: payload.prompt })
       }
 
-      const modelId = this.resolveModel(this.config.model)
-      console.log('[Nerve] send model:', this.config.model, '→', modelId, 'provider:', this.config.provider || '(auto)')
-
-      // Resolve provider: explicit selection > prefix detection > defaultProvider > anthropic
+      // Resolve provider first — needed for model resolution
       const providerId = this.config.provider
         || (this.config.model.startsWith('gpt') || this.config.model.startsWith('o1') || this.config.model.startsWith('o3') || this.config.model.startsWith('o4')
           ? 'openai'
           : this.config.model.startsWith('gemini')
             ? 'google'
             : this.settings.defaultProvider || 'anthropic')
+
+      const modelId = this.resolveModel(this.config.model, providerId)
+      console.log('[Nerve] send model:', this.config.model, '→', modelId, 'provider:', providerId)
 
       const skills = (await getSkills(this.sourceDir)).filter((s) => s.enabled)
       if (skills.length > 0) {

@@ -494,6 +494,13 @@ function ProviderTab() {
       providers,
       defaultProvider,
     })
+    // Sync providerModels and defaultProvider in chatStore so UI updates immediately
+    const { setProviderModels, setDefaultProvider } = useChatStore.getState()
+    setDefaultProvider(defaultProvider)
+    if (providers.anthropic?.models) setProviderModels('anthropic', providers.anthropic.models)
+    for (const [id, config] of Object.entries(providers)) {
+      if (id !== 'anthropic' && config.models) setProviderModels(id, config.models)
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -528,10 +535,18 @@ function ProviderTab() {
     setFetchingModels(null)
   }
 
-  const handleAddProvider = () => {
+  const handleAddProvider = async () => {
     if (!newId.trim() || !newURL.trim()) return
     const id = newId.trim().toLowerCase().replace(/\s+/g, '-')
-    setProviders({ ...providers, [id]: { type: newType, baseURL: newURL.trim(), authToken: newKey.trim() } })
+    const updated = { ...providers, [id]: { type: newType, baseURL: newURL.trim(), authToken: newKey.trim() } }
+    setProviders(updated)
+    // Auto-persist to disk and reload provider
+    await window.claude.saveNerveSettings({
+      baseURL, authToken,
+      modelAliases: aliases,
+      providers: updated,
+      defaultProvider,
+    })
     setNewId('')
     setNewURL('')
     setNewKey('')

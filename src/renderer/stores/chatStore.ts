@@ -43,6 +43,7 @@ interface ChatState {
 
   // Per-provider models
   providerModels: Record<string, string[]>
+  defaultProvider: string
 
   // Session usage
   sessionUsage: SessionUsage | null
@@ -89,6 +90,7 @@ interface ChatState {
   // Provider actions
   setProviders: (providers: ProviderInfo[]) => void
   setProviderModels: (providerId: string, models: string[]) => void
+  setDefaultProvider: (provider: string) => void
 
   // Usage actions
   setSessionUsage: (usage: SessionUsage | null) => void
@@ -142,6 +144,7 @@ export const useChatStore = create<ChatState>()(
 
       // Per-provider models
       providerModels: {},
+      defaultProvider: '',
 
       // Session usage
       sessionUsage: null,
@@ -220,6 +223,7 @@ export const useChatStore = create<ChatState>()(
       setProviderModels: (providerId, models) => set((s) => ({
         providerModels: { ...s.providerModels, [providerId]: models }
       })),
+      setDefaultProvider: (provider) => set({ defaultProvider: provider }),
 
       // Usage actions
       setSessionUsage: (usage) => set({ sessionUsage: usage }),

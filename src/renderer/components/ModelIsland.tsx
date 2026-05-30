@@ -14,28 +14,27 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
   const providerModels = useChatStore((s) => s.providerModels)
   const config = useChatStore((s) => s.config)
   const theme = useChatStore((s) => s.theme)
+  const storeDefaultProvider = useChatStore((s) => s.defaultProvider)
 
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Use config.provider as authoritative, fallback to prefix detection
+  // Use config.provider as authoritative, then settings defaultProvider, then prefix detection
   const detectProvider = (model: string): string => {
     if (model.startsWith('gpt') || model.startsWith('o1')) return 'openai'
     if (model.startsWith('gemini')) return 'google'
-    if (providers.length > 0) return providers[0].id
     return 'anthropic'
   }
 
-  const activeProvider = config.provider || detectProvider(currentModel)
+  const activeProvider = config.provider || storeDefaultProvider || detectProvider(currentModel)
 
-  // Build grouped models: { providerId: ModelInfo[] }
+  // Build grouped models: only show the active provider's models
   const groupedModels: Record<string, { alias: string; name: string }[]> = {}
 
-  // 1. Models from providerModels (fetched & saved per provider)
-  for (const [providerId, models] of Object.entries(providerModels)) {
-    if (models.length > 0) {
-      groupedModels[providerId] = models.map((m) => ({ alias: m, name: m }))
-    }
+  // 1. Models from providerModels (fetched & saved per provider) — filter to active provider
+  const activeModels = providerModels[activeProvider]
+  if (activeModels && activeModels.length > 0) {
+    groupedModels[activeProvider] = activeModels.map((m) => ({ alias: m, name: m }))
   }
 
   // 2. Fallback: if no providerModels at all, use availableModels under active provider

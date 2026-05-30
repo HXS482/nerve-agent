@@ -233,8 +233,11 @@ export function useClaude() {
       }
     }).catch(() => {})
 
-    // Load per-provider models from settings
+    // Load per-provider models and defaultProvider from settings
     window.claude.getNerveSettings().then((s: any) => {
+      if (s.defaultProvider) {
+        useChatStore.getState().setDefaultProvider(s.defaultProvider)
+      }
       if (s.providers) {
         for (const [id, cfg] of Object.entries(s.providers) as [string, any][]) {
           if (cfg.models && cfg.models.length > 0) {
