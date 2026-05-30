@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback, memo, useMemo } from 'react'
+import { useEffect, useState, useCallback, memo, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useGitStore } from '../stores/gitStore'
 import { useChatStore } from '../stores/chatStore'
@@ -77,11 +77,6 @@ const I = {
       <polyline points="6 9 12 15 18 9" />
     </svg>
   ),
-  ChevronRt: ({ s = 12 }: { s?: number }) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="9 6 15 12 9 18" />
-    </svg>
-  ),
   Close: ({ s = 10 }: { s?: number }) => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -92,60 +87,47 @@ const I = {
       <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
     </svg>
   ),
+  History: ({ s = 14 }: { s?: number }) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  Layers: ({ s = 14 }: { s?: number }) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" />
+    </svg>
+  ),
+  Diff: ({ s = 14 }: { s?: number }) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="16" y2="17" />
+    </svg>
+  ),
 } as const
 
-// ─── Glass Card ────────────────────────────────────────
+// ─── Tab Type ──────────────────────────────────────────
+
+type GitTab = 'changes' | 'branches' | 'stashes' | 'history'
+
+const TABS: { id: GitTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'changes', label: 'Changes', icon: <I.Diff s={13} /> },
+  { id: 'branches', label: 'Branches', icon: <I.Branch s={13} /> },
+  { id: 'stashes', label: 'Stashes', icon: <I.Layers s={13} /> },
+  { id: 'history', label: 'History', icon: <I.History s={13} /> },
+]
+
+// ─── Card Styles ───────────────────────────────────────
 
 const CARD = {
-  hero: {
-    border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.1)',
-    padding: '10px 14px',
-    margin: '8px 8px 4px',
-  },
-  primary: {
-    border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
-    padding: '12px 14px',
-    margin: '0 8px 8px',
-  },
   surface: {
     border: '1px solid var(--border-default)',
     borderRadius: 12,
     boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
     overflow: 'hidden' as const,
-    margin: '0 8px 8px',
+    margin: '0 8px 10px',
   },
-}
-
-// ─── Collapsible Section ───────────────────────────────
-
-function Section({ title, count, defaultOpen, children, accent, hero }: {
-  title: string; count?: number; defaultOpen?: boolean; children: React.ReactNode; accent?: string; hero?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen ?? true)
-  return (
-    <div style={CARD.surface}>
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full text-left py-2.5 px-3 transition-colors"
-        style={{ color: 'var(--text-outline-variant)' }}
-      >
-        <motion.span animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0" style={{ width: 14, height: 14, color: accent || 'var(--text-outline-variant)' }}>
-          <I.ChevronDn s={12} />
-        </motion.span>
-        <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: accent || 'var(--text-outline-variant)' }}>{title}</span>
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }} className="overflow-hidden">
-              {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
 }
 
 // ─── Status Badge ──────────────────────────────────────
@@ -170,29 +152,20 @@ function StatusBadge({ code }: { code: string }) {
 
 // ─── Glass Icon Button ─────────────────────────────────
 
-function GlassIconBtn({ icon, onClick, disabled, title, danger }: {
-  icon: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string; danger?: boolean
+function GlassIconBtn({ icon, onClick, disabled, title }: {
+  icon: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string
 }) {
   return (
     <button onClick={onClick} disabled={disabled} title={title}
-      className="flex items-center justify-center rounded-[8px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
+      className="flex items-center justify-center rounded-[6px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
       style={{
-        width: 32, height: 30,
+        width: 26, height: 26,
         background: 'var(--bg-surface-container-high)',
-        color: danger ? '#ef4444' : 'var(--text-outline-variant)',
+        color: 'var(--text-outline-variant)',
         border: '1px solid var(--border-subtle)',
         cursor: disabled ? 'default' : 'pointer',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
       }}
     >{icon}</button>
-  )
-}
-
-// ─── Action Group ──────────────────────────────────────
-
-function ActionGroup({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-1">{children}</div>
   )
 }
 
@@ -214,26 +187,26 @@ const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, 
   return (
     <div
       className="flex items-center gap-2 w-full transition-colors group"
-      style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+      style={{ padding: '5px 10px 5px 8px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
     >
       <button onClick={onToggle} className="shrink-0 flex items-center justify-center rounded-[4px] hover:brightness-150 transition-all"
         style={{ width: 18, height: 18 }}
       >
         {staged ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="4" fill="rgba(34,197,94,0.15)" stroke="#22c55e" />
-            <polyline points="20 6 9 17 4 12" />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" fill="#22c55e" stroke="#22c55e" strokeWidth="2" />
+            <polyline points="8 12 11 15 16 9" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         ) : (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" opacity="0.35">
-            <rect x="3" y="3" width="18" height="18" rx="4" />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" opacity="0.35" />
           </svg>
         )}
       </button>
       <StatusBadge code={statusCode} />
       <button onClick={onShowDiff} className="flex-1 text-left truncate min-w-0">
         <span className="text-[10px] opacity-35">{dir}</span>
-        <span className="text-[12px] leading-tight" style={{ color: 'var(--text-on-surface)' }}>{fileName}</span>
+        <span className="text-[11px] leading-tight" style={{ color: 'var(--text-on-surface)' }}>{fileName}</span>
       </button>
       {onDiscard && !staged && (
         <button onClick={handleDiscard} className="shrink-0 opacity-0 group-hover:opacity-100 transition-all text-[9px] px-1.5 py-0.5 rounded-[4px]"
@@ -252,31 +225,23 @@ const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, 
 
 function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 py-8" style={{ padding: '24px 0' }}>
-      <span style={{ color: 'var(--text-outline-variant)', opacity: 0.15, display: 'flex' }}>{icon}</span>
-      <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.3 }}>{text}</span>
+    <div className="flex flex-col items-center justify-center gap-2 h-full" style={{ minHeight: 120 }}>
+      <span style={{ color: 'var(--text-outline-variant)', opacity: 0.2, display: 'flex' }}>{icon}</span>
+      <span className="text-[11px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.35 }}>{text}</span>
     </div>
   )
 }
 
-// ─── Files Section ─────────────────────────────────────
+// ─── Files List (no commit UI) ────────────────────────
 
-function FilesSection() {
-  const { status, loading, stageFiles, unstageFiles, commit, commitAndPush, discardChanges, setSelectedDiffFile, fetchDiff, refresh } = useGitStore(useShallow((s) => ({
+function FilesList({ onShowDiff }: { onShowDiff: (f: string, s: boolean) => void }) {
+  const { status, loading, stageFiles, unstageFiles, discardChanges } = useGitStore(useShallow((s) => ({
     status: s.status,
     loading: s.loading,
     stageFiles: s.stageFiles,
     unstageFiles: s.unstageFiles,
-    commit: s.commit,
-    commitAndPush: s.commitAndPush,
     discardChanges: s.discardChanges,
-    setSelectedDiffFile: s.setSelectedDiffFile,
-    fetchDiff: s.fetchDiff,
-    refresh: s.refresh,
   })))
-  const setView = useChatStore((s) => s.setRightSidebarView)
-  const [msg, setMsg] = useState('')
-  const [pushing, setPushing] = useState(false)
 
   const modified = useMemo(() => (status?.modified || []).filter((f) => !(status?.staged || []).includes(f)), [status])
   const untracked = useMemo(() => status?.not_added || [], [status])
@@ -287,102 +252,46 @@ function FilesSection() {
     status?.staged.includes(f) ? unstageFiles([f]) : stageFiles([f])
   }, [status, stageFiles, unstageFiles])
 
-  const showDiff = useCallback((f: string, s: boolean) => {
-    setSelectedDiffFile(f); fetchDiff([f], s); setView('diff')
-  }, [setSelectedDiffFile, fetchDiff, setView])
-
-  const doCommit = useCallback(async () => { if (!msg.trim()) return; await commit(msg.trim()); setMsg('') }, [msg, commit])
-
-  const doCommitPush = useCallback(async () => {
-    if (!msg.trim()) return; setPushing(true); await commitAndPush(msg.trim()); setPushing(false); setMsg('')
-  }, [msg, commitAndPush])
-
   const hasConflicts = conflicts.length > 0
   const hasStaged = staged.length > 0
   const hasChanges = modified.length + untracked.length > 0
   const totalChanges = modified.length + untracked.length + staged.length + conflicts.length
 
+  if (totalChanges === 0 && !loading) {
+    return <EmptyState icon={<I.File s={22} />} text="Clean working tree" />
+  }
+
   return (
-    <div>
-      {/* ── Commit Card ── */}
-      <div style={CARD.primary}>
-        <textarea
-          value={msg} onChange={(e) => setMsg(e.target.value)}
-          placeholder="Commit message…"
-          rows={2}
-          className="w-full text-[12px] outline-none rounded-[8px] px-3 py-2 resize-none transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
-          style={{
-            background: 'var(--bg-surface-container-high)',
-            color: 'var(--text-on-surface)',
-            border: '1px solid var(--border-subtle)',
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); doCommitPush() }
-            else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doCommit() }
-          }}
-        />
-        <div className="flex items-center gap-2 mt-2.5">
-          <button onClick={doCommit} disabled={!msg.trim() || loading}
-            className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-semibold rounded-[8px] py-2 transition-all duration-150 disabled:opacity-35 hover:brightness-110 active:scale-[0.97]"
-            style={{
-              background: 'var(--accent-primary)', color: '#fff', border: 'none',
-              cursor: loading || pushing ? 'wait' : 'pointer',
-              boxShadow: '0 2px 8px rgba(59,130,246,0.3)',
-            }}
-          >{loading && !pushing ? <I.Spinner s={11} /> : <I.Check s={11} />} Commit</button>
-          <button onClick={doCommitPush} disabled={!msg.trim() || loading}
-            className="flex items-center justify-center rounded-[8px] px-3 py-2 transition-all duration-150 disabled:opacity-35 hover:brightness-110 active:scale-[0.97]"
-            style={{
-              background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)',
-              border: '1px solid var(--border-subtle)',
-              cursor: loading || pushing ? 'wait' : 'pointer',
-            }}
-          >{pushing ? <I.Spinner s={11} /> : <I.Up s={12} />}</button>
-        </div>
-        <div className="text-[9px] mt-1.5 text-center" style={{ color: 'var(--text-outline-variant)', opacity: 0.25 }}>
-          Enter to commit · {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter to push
-        </div>
-      </div>
-
-      {/* ── Conflict Section ── */}
+    <div style={{
+      margin: '0 6px',
+      border: '1px solid var(--border-default)',
+      borderRadius: 10,
+      overflow: 'hidden',
+    }}>
       {hasConflicts && (
-        <Section key="conflicts" title="Merge Conflicts" count={conflicts.length} accent="#ef4444">
-          {conflicts.map((f) => <FileRow key={f} filePath={f} statusCode="UU" staged={false} onToggle={() => {}} onShowDiff={() => showDiff(f, false)} />)}
-        </Section>
+        <>
+          {conflicts.map((f) => <FileRow key={f} filePath={f} statusCode="UU" staged={false} onToggle={() => {}} onShowDiff={() => onShowDiff(f, false)} />)}
+        </>
       )}
-
-      {/* ── Staged Section ── */}
       {hasStaged && (
-        <Section key="staged" title="Staged Changes" count={staged.length} accent="#22c55e">
-          <div style={{ borderLeft: '2px solid rgba(34,197,94,0.35)', margin: '2px 0 2px 6px' }}>
-            {staged.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged onToggle={() => toggle(f)} onShowDiff={() => showDiff(f, true)} />)}
-          </div>
-        </Section>
+        <>
+          {staged.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged onToggle={() => toggle(f)} onShowDiff={() => onShowDiff(f, true)} />)}
+        </>
       )}
-
-      {/* ── Changes Section ── */}
+      {hasStaged && hasChanges && (
+        <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '0 14px' }} />
+      )}
       {hasChanges && (
-        <Section key="changes" title="Changes" count={modified.length + untracked.length}>
-          <div style={{ borderLeft: '2px solid var(--border-subtle)', margin: '2px 0 2px 6px' }}>
-            {modified.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged={false} onToggle={() => toggle(f)} onShowDiff={() => showDiff(f, false)} onDiscard={() => discardChanges([f], true)} />)}
-            {untracked.map((f) => <FileRow key={f} filePath={f} statusCode="??" staged={false} onToggle={() => toggle(f)} onShowDiff={() => showDiff(f, false)} onDiscard={() => discardChanges([f], false)} />)}
-          </div>
-        </Section>
-      )}
-
-      {/* ── Empty State ── */}
-      {totalChanges === 0 && !loading && (
-        <div style={{ ...CARD.surface, overflow: 'visible' }}>
-          <EmptyState icon={<I.File s={22} />} text="Clean working tree — no changes" />
-        </div>
+        <>
+          {modified.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged={false} onToggle={() => toggle(f)} onShowDiff={() => onShowDiff(f, false)} onDiscard={() => discardChanges([f], true)} />)}
+          {untracked.map((f) => <FileRow key={f} filePath={f} statusCode="??" staged={false} onToggle={() => toggle(f)} onShowDiff={() => onShowDiff(f, false)} onDiscard={() => discardChanges([f], false)} />)}
+        </>
       )}
     </div>
   )
 }
 
-// ─── Branches Section ──────────────────────────────────
-
-function BranchesSection() {
+function BranchesTab() {
   const { branches, loading, checkout, createBranch, deleteBranch } = useGitStore(useShallow((s) => ({
     branches: s.branches,
     loading: s.loading,
@@ -397,11 +306,11 @@ function BranchesSection() {
   const doCreate = async () => { if (!name.trim()) return; await createBranch(name.trim()); setName(''); setShowNew(false) }
 
   return (
-    <Section title="Branches" count={branches.length}>
+    <div className="flex flex-col">
       {branches.map((b) => (
         <div key={b.name}
           className="flex items-center gap-2 w-full transition-colors group"
-          style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+          style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
         >
           <button onClick={() => checkout(b.name)} className="flex-1 flex items-center gap-2.5 min-w-0">
             <span className="shrink-0 flex items-center justify-center" style={{ width: 16, height: 16 }}>
@@ -432,7 +341,7 @@ function BranchesSection() {
       ))}
       <AnimatePresence>
         {showNew ? (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex gap-1.5 px-4 py-2 overflow-hidden" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex gap-1.5 px-4 py-3 overflow-hidden" style={{ borderTop: '1px solid var(--border-subtle)' }}>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="New branch name" autoFocus
               className="flex-1 text-[11px] outline-none rounded-[6px] px-2.5 py-1.5 transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
               style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)', border: '1px solid var(--border-subtle)' }}
@@ -441,18 +350,18 @@ function BranchesSection() {
             <button onClick={() => setShowNew(false)} className="px-2" style={{ color: 'var(--text-outline-variant)' }}><I.Close /></button>
           </motion.div>
         ) : (
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 text-[11px] w-full py-2 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ color: 'var(--accent-primary)' }}>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 text-[11px] w-full py-2.5 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ color: 'var(--accent-primary)' }}>
             <I.Plus s={9} /> New Branch
           </button>
         )}
       </AnimatePresence>
-    </Section>
+    </div>
   )
 }
 
-// ─── Stashes Section ───────────────────────────────────
+// ─── Stashes Tab ───────────────────────────────────────
 
-function StashesSection() {
+function StashesTab() {
   const { stashes, loading, stashPush, stashPop, stashApply, stashDrop } = useGitStore(useShallow((s) => ({
     stashes: s.stashes,
     loading: s.loading,
@@ -468,10 +377,10 @@ function StashesSection() {
   const doStash = async () => { await stashPush(msg || undefined, untracked); setMsg(''); setUntracked(false); setShow(false) }
 
   return (
-    <Section title="Stashes" count={stashes.length}>
+    <div className="flex flex-col">
       <AnimatePresence>
         {show && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-4 py-2 overflow-hidden" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-4 py-3 overflow-hidden" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <input type="text" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Message (optional)" autoFocus
               className="w-full text-[11px] outline-none rounded-[6px] px-2.5 py-1.5 mb-1.5 transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
               style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)', border: '1px solid var(--border-subtle)' }}
@@ -492,7 +401,7 @@ function StashesSection() {
       {stashes.map((s) => (
         <div key={s.hash}
           className="flex items-center gap-2 w-full transition-colors group"
-          style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+          style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
         >
           <div className="flex-1 min-w-0">
             <div className="text-[12px] truncate leading-tight" style={{ color: 'var(--text-on-surface)' }}>{s.message}</div>
@@ -508,13 +417,19 @@ function StashesSection() {
           </div>
         </div>
       ))}
-    </Section>
+
+      {!show && stashes.length > 0 && (
+        <button onClick={() => setShow(true)} className="flex items-center gap-1.5 text-[11px] w-full py-2.5 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ color: 'var(--accent-primary)' }}>
+          <I.Plus s={9} /> Stash Changes
+        </button>
+      )}
+    </div>
   )
 }
 
-// ─── Log Section ───────────────────────────────────────
+// ─── History Tab ───────────────────────────────────────
 
-function LogSection() {
+function HistoryTab() {
   const { log, selectedCommitHash, commitDiff, loading, fetchCommitDiff, clearCommitDiff } = useGitStore(useShallow((s) => ({
     log: s.log,
     selectedCommitHash: s.selectedCommitHash,
@@ -524,15 +439,15 @@ function LogSection() {
     clearCommitDiff: s.clearCommitDiff,
   })))
 
-  if (log.length === 0) return null
+  if (log.length === 0) return <EmptyState icon={<I.History s={22} />} text="No commits yet" />
 
   return (
-    <Section title="Recent Commits" count={log.length} defaultOpen={false}>
-      {log.slice(0, 20).map((c) => (
+    <div className="flex flex-col">
+      {log.slice(0, 30).map((c) => (
         <div key={c.hash}>
           <button onClick={() => selectedCommitHash === c.hash ? clearCommitDiff() : fetchCommitDiff(c.hash)}
             className="flex items-center gap-2 w-full text-left transition-colors"
-            style={{ padding: '5px 14px 5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)', background: selectedCommitHash === c.hash ? 'var(--bg-surface-container-high)' : 'transparent' }}
+            style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)', background: selectedCommitHash === c.hash ? 'var(--bg-surface-container-high)' : 'transparent' }}
           >
             <span className="text-[9px] font-mono shrink-0" style={{ color: 'var(--accent-primary)', opacity: 0.55 }}>{c.hash.slice(0, 7)}</span>
             <div className="flex-1 min-w-0">
@@ -557,14 +472,21 @@ function LogSection() {
           </AnimatePresence>
         </div>
       ))}
-    </Section>
+    </div>
   )
 }
 
 // ─── Main ──────────────────────────────────────────────
 
+const TAB_CONTENT: Record<GitTab, React.FC<{ onShowDiff: (f: string, s: boolean) => void }>> = {
+  changes: FilesList,
+  branches: BranchesTab,
+  stashes: StashesTab,
+  history: HistoryTab,
+}
+
 export function GitView() {
-  const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch } = useGitStore(useShallow((s) => ({
+  const { status, loading, error, cwd, refresh, init, clearError, setCwd, push, pull, fetch: gitFetch, commit, setSelectedDiffFile, fetchDiff } = useGitStore(useShallow((s) => ({
     status: s.status,
     loading: s.loading,
     error: s.error,
@@ -576,9 +498,17 @@ export function GitView() {
     push: s.push,
     pull: s.pull,
     fetch: s.fetch,
+    commit: s.commit,
+    setSelectedDiffFile: s.setSelectedDiffFile,
+    fetchDiff: s.fetchDiff,
   })))
   const chatConfig = useChatStore((s) => s.config)
+  const setView = useChatStore((s) => s.setRightSidebarView)
+  const theme = useChatStore((s) => s.theme)
+  const isDark = theme !== 'light'
+  const [activeTab, setActiveTab] = useState<GitTab>('changes')
   const [sync, setSync] = useState<'push' | 'pull' | 'fetch' | null>(null)
+  const [msg, setMsg] = useState('')
 
   useEffect(() => { if (chatConfig.cwd && chatConfig.cwd !== cwd) setCwd(chatConfig.cwd) }, [chatConfig.cwd, cwd, setCwd])
   useEffect(() => { if (cwd) refresh() }, [cwd])
@@ -587,6 +517,14 @@ export function GitView() {
   useEffect(() => { if (!error) return; const t = setTimeout(clearError, 5000); return () => clearTimeout(t) }, [error, clearError])
 
   const branch = status?.current || ''
+
+  const showDiff = useCallback((f: string, s: boolean) => {
+    setSelectedDiffFile(f); fetchDiff([f], s); setView('diff')
+  }, [setSelectedDiffFile, fetchDiff, setView])
+
+  const doCommit = useCallback(async () => { if (!msg.trim()) return; await commit(msg.trim()); setMsg('') }, [msg, commit])
+
+  const TabContent = TAB_CONTENT[activeTab]
 
   if (!cwd) return (
     <div className="flex items-center justify-center h-full">
@@ -640,16 +578,14 @@ export function GitView() {
         )}
       </AnimatePresence>
 
-      {/* ── Branch Hero Card ── */}
+      {/* ── Branch Hero — compact single row ── */}
       {branch && (
-        <div style={CARD.hero}>
-          <div className="flex items-center gap-2">
-            <span className="shrink-0 flex items-center justify-center" style={{ color: 'var(--accent-primary)' }}>
-              <I.Branch s={15} />
-            </span>
-            <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--text-on-surface)' }}>{branch}</span>
+        <div className="flex flex-col shrink-0" style={{ padding: '7px 12px 0' }}>
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0" style={{ color: 'var(--accent-primary)' }}><I.Branch s={13} /></span>
+            <span className="text-[12px] font-semibold truncate min-w-0 flex-1" style={{ color: 'var(--text-on-surface)' }}>{branch}</span>
             {(status!.ahead > 0 || status!.behind > 0) && (
-              <div className="flex items-center gap-1.5 ml-auto shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 {status!.ahead > 0 && (
                   <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: 'var(--accent-primary)', background: 'rgba(59,130,246,0.12)' }}>
                     <I.Up s={8} />{status!.ahead}
@@ -662,24 +598,98 @@ export function GitView() {
                 )}
               </div>
             )}
-            <div className="shrink-0 flex items-center gap-1 ml-1" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 8 }}>
-              <GlassIconBtn icon={<I.RotateCcw s={11} />} title="Refresh" onClick={refresh} disabled={loading} />
-              <GlassIconBtn icon={sync === 'pull' ? <I.Spinner s={10} /> : <I.Down s={10} />} title="Pull" onClick={() => { setSync('pull'); pull().finally(() => setSync(null)) }} disabled={!!sync} />
-              <GlassIconBtn icon={sync === 'push' ? <I.Spinner s={10} /> : <I.Up s={10} />} title="Push" onClick={() => { setSync('push'); push().finally(() => setSync(null)) }} disabled={!!sync} />
-              <GlassIconBtn icon={sync === 'fetch' ? <I.Spinner s={10} /> : <I.Fetch s={10} />} title="Fetch" onClick={() => { setSync('fetch'); gitFetch().finally(() => setSync(null)) }} disabled={!!sync} />
+            <div className="shrink-0 flex items-center gap-0.5" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 8, marginLeft: 2 }}>
+              <GlassIconBtn icon={<I.RotateCcw s={10} />} title="Refresh" onClick={refresh} disabled={loading} />
+              <GlassIconBtn icon={sync === 'pull' ? <I.Spinner s={9} /> : <I.Down s={9} />} title="Pull" onClick={() => { setSync('pull'); pull().finally(() => setSync(null)) }} disabled={!!sync} />
+              <GlassIconBtn icon={sync === 'push' ? <I.Spinner s={9} /> : <I.Up s={9} />} title="Push" onClick={() => { setSync('push'); push().finally(() => setSync(null)) }} disabled={!!sync} />
+              <GlassIconBtn icon={sync === 'fetch' ? <I.Spinner s={9} /> : <I.Fetch s={9} />} title="Fetch" onClick={() => { setSync('fetch'); gitFetch().finally(() => setSync(null)) }} disabled={!!sync} />
             </div>
           </div>
+          <div style={{ margin: '6px 10% 0', borderTop: '2px solid var(--border-subtle)' }} />
         </div>
       )}
 
-      {/* ── Scrolling content ── */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingTop: 2 }}>
-        <FilesSection />
-        <BranchesSection />
-        <StashesSection />
-        <LogSection />
-        <div className="h-4" />
+      {/* ── Tab Bar ── */}
+      <div className="flex items-center shrink-0" style={{ padding: '4px 12px 8px 16px', gap: 0 }}>
+        {TABS.map((t, i) => (
+          <span key={t.id} className="flex items-center shrink-0">
+            {i > 0 && <span style={{ borderLeft: '1px solid var(--border-subtle)', height: 14, margin: '0 8px', opacity: 0.5 }} />}
+            <button
+              onClick={() => setActiveTab(t.id)}
+              className="flex items-center gap-1.5 px-1.5 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150"
+              style={{
+                color: activeTab === t.id ? 'var(--accent-primary)' : '#8a8a8e',
+              }}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          </span>
+        ))}
       </div>
+
+      {/* ── Tab Content ── */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ minHeight: 0, paddingTop: 2 }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="h-full"
+          >
+            {activeTab === 'changes' ? (
+              <FilesList onShowDiff={showDiff} />
+            ) : activeTab === 'branches' ? (
+              <BranchesTab />
+            ) : activeTab === 'stashes' ? (
+              <StashesTab />
+            ) : (
+              <HistoryTab />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* ── Commit Area (sticky bottom, only for Changes tab) ── */}
+      {activeTab === 'changes' && (
+        <div className="shrink-0" style={{ padding: '8px 6px 8px', borderTop: '1.5px solid var(--border-default)' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'var(--bg-surface-container-high)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 10,
+            padding: '6px 8px',
+          }}>
+            <textarea
+              value={msg} onChange={(e) => setMsg(e.target.value)}
+              placeholder="Commit message…"
+              rows={1}
+              className="flex-1 text-[12px] outline-none resize-none bg-transparent"
+              style={{ color: 'var(--text-on-surface)', minHeight: 20, maxHeight: 80 }}
+              onInput={(e) => { e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doCommit() }
+              }}
+            />
+            <button onClick={doCommit} disabled={!msg.trim() || loading}
+              className="shrink-0 flex items-center justify-center rounded-[7px] transition-all duration-150 disabled:opacity-30 hover:brightness-110 active:scale-[0.95]"
+              style={{
+                background: 'var(--accent-primary)', color: '#fff', border: 'none',
+                cursor: loading ? 'wait' : 'pointer',
+                width: 30, height: 30,
+              }}
+            >{loading ? <I.Spinner s={10} /> : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <line x1="1.05" y1="12" x2="7" y2="12" />
+                <line x1="17.01" y1="12" x2="22.96" y2="12" />
+              </svg>
+            )}</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
