@@ -99,7 +99,10 @@ const I = {
   ),
   Diff: ({ s = 14 }: { s?: number }) => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v18" /><path d="M5 7l4-4 4 4" /><path d="M5 17l4 4 4-4" />
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="16" y2="17" />
     </svg>
   ),
 } as const
@@ -125,37 +128,6 @@ const CARD = {
     overflow: 'hidden' as const,
     margin: '0 8px 10px',
   },
-}
-
-// ─── Section ───────────────────────────────────────────
-
-function Section({ title, count, defaultOpen, children, accent }: {
-  title: string; count?: number; defaultOpen?: boolean; children: React.ReactNode; accent?: string
-}) {
-  const [open, setOpen] = useState(defaultOpen ?? true)
-  return (
-    <div style={CARD.surface}>
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full text-left py-2.5 px-3 transition-colors"
-        style={{ color: 'var(--text-outline-variant)' }}
-      >
-        <motion.span animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0" style={{ width: 14, height: 14, color: accent || 'var(--text-outline-variant)' }}>
-          <I.ChevronDn s={12} />
-        </motion.span>
-        <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: accent || 'var(--text-outline-variant)' }}>{title}</span>
-        {count != null && count > 0 && (
-          <span className="ml-auto text-[9px] font-mono tabular-nums px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-outline-variant)' }}>{count}</span>
-        )}
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }} className="overflow-hidden">
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
 }
 
 // ─── Status Badge ──────────────────────────────────────
@@ -187,7 +159,7 @@ function GlassIconBtn({ icon, onClick, disabled, title }: {
     <button onClick={onClick} disabled={disabled} title={title}
       className="flex items-center justify-center rounded-[6px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
       style={{
-        width: 28, height: 28,
+        width: 26, height: 26,
         background: 'var(--bg-surface-container-high)',
         color: 'var(--text-outline-variant)',
         border: '1px solid var(--border-subtle)',
@@ -253,9 +225,9 @@ const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, 
 
 function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 py-8" style={{ padding: '24px 0' }}>
-      <span style={{ color: 'var(--text-outline-variant)', opacity: 0.15, display: 'flex' }}>{icon}</span>
-      <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.3 }}>{text}</span>
+    <div className="flex flex-col items-center justify-center gap-2 h-full" style={{ minHeight: 120 }}>
+      <span style={{ color: 'var(--text-outline-variant)', opacity: 0.2, display: 'flex' }}>{icon}</span>
+      <span className="text-[11px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.35 }}>{text}</span>
     </div>
   )
 }
@@ -290,23 +262,28 @@ function FilesList({ onShowDiff }: { onShowDiff: (f: string, s: boolean) => void
   }
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="flex flex-col">
       {hasConflicts && (
-        <Section key="conflicts" title="Conflicts" count={conflicts.length} accent="#ef4444">
+        <>
           {conflicts.map((f) => <FileRow key={f} filePath={f} statusCode="UU" staged={false} onToggle={() => {}} onShowDiff={() => onShowDiff(f, false)} />)}
-        </Section>
+        </>
       )}
       {hasStaged && (
-        <Section key="staged" title="Staged" count={staged.length} accent="#22c55e">
+        <>
           {staged.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged onToggle={() => toggle(f)} onShowDiff={() => onShowDiff(f, true)} />)}
-        </Section>
+        </>
+      )}
+      {hasStaged && hasChanges && (
+        <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '2px 14px' }} />
       )}
       {hasChanges && (
-        <Section key="changes" title="Changes" count={modified.length + untracked.length}>
+        <>
           {modified.map((f) => <FileRow key={f} filePath={f} statusCode="M" staged={false} onToggle={() => toggle(f)} onShowDiff={() => onShowDiff(f, false)} onDiscard={() => discardChanges([f], true)} />)}
           {untracked.map((f) => <FileRow key={f} filePath={f} statusCode="??" staged={false} onToggle={() => toggle(f)} onShowDiff={() => onShowDiff(f, false)} onDiscard={() => discardChanges([f], false)} />)}
-        </Section>
+        </>
       )}
+    </div>
+  )
     </div>
   )
 }
@@ -608,61 +585,52 @@ export function GitView() {
 
       {/* ── Branch Hero — compact single row ── */}
       {branch && (
-        <div className="flex items-center gap-2 shrink-0" style={{ padding: '8px 12px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <span className="shrink-0" style={{ color: 'var(--accent-primary)' }}><I.Branch s={13} /></span>
-          <span className="text-[12px] font-semibold truncate flex-1" style={{ color: 'var(--text-on-surface)' }}>{branch}</span>
-          {(status!.ahead > 0 || status!.behind > 0) && (
-            <div className="flex items-center gap-1 shrink-0">
-              {status!.ahead > 0 && (
-                <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: 'var(--accent-primary)', background: 'rgba(59,130,246,0.12)' }}>
-                  <I.Up s={8} />{status!.ahead}
-                </span>
-              )}
-              {status!.behind > 0 && (
-                <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: '#ef4444', background: 'rgba(239,68,68,0.12)' }}>
-                  <I.Down s={8} />{status!.behind}
-                </span>
-              )}
+        <div className="flex flex-col shrink-0" style={{ padding: '7px 12px 0' }}>
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0" style={{ color: 'var(--accent-primary)' }}><I.Branch s={13} /></span>
+            <span className="text-[12px] font-semibold truncate min-w-0 flex-1" style={{ color: 'var(--text-on-surface)' }}>{branch}</span>
+            {(status!.ahead > 0 || status!.behind > 0) && (
+              <div className="flex items-center gap-1 shrink-0">
+                {status!.ahead > 0 && (
+                  <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: 'var(--accent-primary)', background: 'rgba(59,130,246,0.12)' }}>
+                    <I.Up s={8} />{status!.ahead}
+                  </span>
+                )}
+                {status!.behind > 0 && (
+                  <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: '#ef4444', background: 'rgba(239,68,68,0.12)' }}>
+                    <I.Down s={8} />{status!.behind}
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="shrink-0 flex items-center gap-0.5" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 8, marginLeft: 2 }}>
+              <GlassIconBtn icon={<I.RotateCcw s={10} />} title="Refresh" onClick={refresh} disabled={loading} />
+              <GlassIconBtn icon={sync === 'pull' ? <I.Spinner s={9} /> : <I.Down s={9} />} title="Pull" onClick={() => { setSync('pull'); pull().finally(() => setSync(null)) }} disabled={!!sync} />
+              <GlassIconBtn icon={sync === 'push' ? <I.Spinner s={9} /> : <I.Up s={9} />} title="Push" onClick={() => { setSync('push'); push().finally(() => setSync(null)) }} disabled={!!sync} />
+              <GlassIconBtn icon={sync === 'fetch' ? <I.Spinner s={9} /> : <I.Fetch s={9} />} title="Fetch" onClick={() => { setSync('fetch'); gitFetch().finally(() => setSync(null)) }} disabled={!!sync} />
             </div>
-          )}
-          <div className="shrink-0 flex items-center gap-1.5" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 10, marginLeft: 2 }}>
-            <GlassIconBtn icon={<I.RotateCcw s={10} />} title="Refresh" onClick={refresh} disabled={loading} />
-            <GlassIconBtn icon={sync === 'pull' ? <I.Spinner s={9} /> : <I.Down s={9} />} title="Pull" onClick={() => { setSync('pull'); pull().finally(() => setSync(null)) }} disabled={!!sync} />
-            <GlassIconBtn icon={sync === 'push' ? <I.Spinner s={9} /> : <I.Up s={9} />} title="Push" onClick={() => { setSync('push'); push().finally(() => setSync(null)) }} disabled={!!sync} />
-            <GlassIconBtn icon={sync === 'fetch' ? <I.Spinner s={9} /> : <I.Fetch s={9} />} title="Fetch" onClick={() => { setSync('fetch'); gitFetch().finally(() => setSync(null)) }} disabled={!!sync} />
           </div>
+          <div style={{ margin: '6px 10% 0', borderTop: '1px solid var(--border-subtle)' }} />
         </div>
       )}
 
       {/* ── Tab Bar ── */}
-      <div className="flex items-center justify-center shrink-0" style={{ padding: '4px 8px 10px' }}>
-        <nav
-          className="inline-flex items-center gap-1 p-0.5"
-          style={{
-            borderRadius: 10,
-            background: isDark ? 'rgba(30, 30, 32, 0.6)' : 'rgba(255, 255, 255, 0.6)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
-          }}
-        >
-          {TABS.map((t) => (
+      <div className="flex items-center shrink-0" style={{ padding: '4px 12px 8px 16px', gap: 0 }}>
+        {TABS.map((t, i) => (
+          <span key={t.id} className="flex items-center shrink-0">
+            {i > 0 && <span style={{ borderLeft: '1px solid var(--border-subtle)', height: 14, margin: '0 8px', opacity: 0.5 }} />}
             <button
-              key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[11px] font-medium transition-all duration-150"
+              className="flex items-center gap-1.5 px-1.5 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150"
               style={{
-                color: activeTab === t.id ? 'var(--accent-primary)' : '#6b6b6d',
-                background: activeTab === t.id
-                  ? (isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.08)')
-                  : 'transparent',
+                color: activeTab === t.id ? 'var(--accent-primary)' : '#8a8a8e',
               }}
             >
               {t.icon}
               {t.label}
             </button>
-          ))}
-        </nav>
+          </span>
+        ))}
       </div>
 
       {/* ── Tab Content ── */}
@@ -691,7 +659,7 @@ export function GitView() {
 
       {/* ── Commit Area (sticky bottom, only for Changes tab) ── */}
       {activeTab === 'changes' && (
-        <div className="shrink-0" style={{ padding: '10px 8px 10px', borderTop: '1px solid var(--border-subtle)' }}>
+        <div className="shrink-0" style={{ padding: '10px 8px 10px', borderTop: '1.5px solid var(--border-default)' }}>
           <textarea
             value={msg} onChange={(e) => setMsg(e.target.value)}
             placeholder="Commit message…"
