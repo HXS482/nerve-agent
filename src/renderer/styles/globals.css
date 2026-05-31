@@ -392,14 +392,6 @@ button, a, input, textarea, select {
   border-bottom: none;
 }
 
-.prose tr:nth-child(even) {
-  background: var(--bg-surface-container-low);
-}
-
-[data-theme="light"] .prose tr:nth-child(even) {
-  background: rgba(0, 0, 0, 0.02);
-}
-
 /* Code highlight — darken for dark theme */
 [data-theme="dark"] .prose pre code .hljs-keyword,
 [data-theme="dark"] .prose pre code .hljs-selector-tag { color: #c792ea; }
