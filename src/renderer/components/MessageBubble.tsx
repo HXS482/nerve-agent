@@ -10,11 +10,21 @@ interface Props {
   onRetry?: (message: ChatMessage) => void
 }
 
-// Tool-specific color palette
+// Cursor-inspired timeline pastel palette
+const TIMELINE = {
+  thinking: '#dfa88f', // peach
+  grep: '#9fc9a2',     // mint
+  read: '#9fbbe0',     // pastel blue
+  edit: '#c0a8dd',     // lavender
+  done: '#c08532',     // warm gold
+  error: '#cf2d56',    // semantic error
+} as const
+
+// Tool-specific color palette — mapped to Cursor timeline tokens
 const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
   Read: {
-    color: '#60a5fa',
-    bg: 'rgba(96,165,250,0.1)',
+    color: TIMELINE.read,
+    bg: 'rgba(159,187,224,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 3h4l2 2h6v8H2z" />
@@ -23,8 +33,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Write: {
-    color: '#34d399',
-    bg: 'rgba(52,211,153,0.1)',
+    color: TIMELINE.done,
+    bg: 'rgba(192,133,50,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M11.5 1.5l3 3L5 14H2v-3z" />
@@ -33,8 +43,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Edit: {
-    color: '#fbbf24',
-    bg: 'rgba(251,191,36,0.1)',
+    color: TIMELINE.edit,
+    bg: 'rgba(192,168,221,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
@@ -43,8 +53,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Bash: {
-    color: '#a78bfa',
-    bg: 'rgba(167,139,250,0.1)',
+    color: TIMELINE.grep,
+    bg: 'rgba(159,201,162,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
@@ -53,8 +63,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Glob: {
-    color: '#2dd4bf',
-    bg: 'rgba(45,212,191,0.1)',
+    color: TIMELINE.grep,
+    bg: 'rgba(159,201,162,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2.5 4v7.5a1 1 0 001 1h9a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3.5h-3a1 1 0 00-1 1z" />
@@ -62,8 +72,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Grep: {
-    color: '#2dd4bf',
-    bg: 'rgba(45,212,191,0.1)',
+    color: TIMELINE.grep,
+    bg: 'rgba(159,201,162,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="7" cy="7" r="4" />
@@ -72,8 +82,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Agent: {
-    color: '#22d3ee',
-    bg: 'rgba(34,211,238,0.1)',
+    color: TIMELINE.thinking,
+    bg: 'rgba(223,168,143,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="4" width="10" height="9" rx="2" />
@@ -106,6 +116,9 @@ function ToolIcon({ name, size = 14 }: { name: string; size?: number }) {
     </span>
   )
 }
+
+
+// ─── URL handling ───────────────────────────────────────
 
 const URL_RE = /https?:\/\/[^\s]+/g
 const GITHUB_URL_RE = /https?:\/\/github\.com\/[^\s]+/g
@@ -195,9 +208,8 @@ function UserAvatar() {
     <div
       className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-medium"
       style={{
-        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-        color: '#fff',
-        boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+        background: '#26251e',
+        color: '#f7f7f4',
       }}
     >
       U
@@ -211,7 +223,7 @@ function ToolTimeline({ pairs }: { pairs: { use: ContentBlock; result?: ContentB
   const [expandedDetail, setExpandedDetail] = useState<Record<number, boolean>>({})
   const hasRunning = pairs.some((p) => !p.result)
   const hasError = pairs.some((p) => p.result?.is_error)
-  const dotColor = hasRunning ? '#818cf8' : hasError ? 'var(--error)' : '#34d399'
+  const dotColor = hasRunning ? TIMELINE.thinking : hasError ? TIMELINE.error : TIMELINE.done
 
   return (
     <div className="flex gap-2.5 mb-3 group/timeline">
@@ -294,11 +306,11 @@ function ToolTimeline({ pairs }: { pairs: { use: ContentBlock; result?: ContentB
                 )}
                 <span className="ml-auto shrink-0" style={{ fontSize: 'var(--fs-xs)' }}>
                   {isRunning ? (
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft inline-block" style={{ background: '#818cf8' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft inline-block" style={{ background: TIMELINE.thinking }} />
                   ) : isError ? (
-                    <span style={{ color: 'var(--error)' }}>✕</span>
+                    <span style={{ color: TIMELINE.error }}>✕</span>
                   ) : (
-                    <span style={{ color: '#34d399' }}>✓</span>
+                    <span style={{ color: TIMELINE.done }}>✓</span>
                   )}
                 </span>
               </div>
@@ -350,7 +362,7 @@ function ToolRow({ block, index }: { block: ContentBlock; index: number }) {
     const isError = block.is_error
     return (
       <div className="flex items-center gap-2 py-0.5" style={{ fontSize: 'var(--fs-sm)' }}>
-        <span style={{ color: isError ? 'var(--error)' : '#34d399', fontSize: 'var(--fs-xs)' }}>
+        <span style={{ color: isError ? TIMELINE.error : TIMELINE.done, fontSize: 'var(--fs-xs)' }}>
           {isError ? '✕' : '✓'}
         </span>
       </div>
@@ -699,8 +711,8 @@ const FeedbackButtons = memo(function FeedbackButtons() {
         className="flex items-center px-2 py-1 rounded-md transition-colors"
         style={{
           fontSize: 'var(--fs-xs)',
-          color: feedback === 'up' ? '#34d399' : 'var(--text-outline)',
-          background: feedback === 'up' ? 'rgba(52,211,153,0.1)' : 'transparent',
+          color: feedback === 'up' ? TIMELINE.done : 'var(--text-outline)',
+          background: feedback === 'up' ? 'rgba(192,133,50,0.1)' : 'transparent',
         }}
         onMouseEnter={(e) => { if (!feedback || feedback !== 'up') { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' } }}
         onMouseLeave={(e) => { if (feedback !== 'up') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' } }}
@@ -714,8 +726,8 @@ const FeedbackButtons = memo(function FeedbackButtons() {
         className="flex items-center px-2 py-1 rounded-md transition-colors"
         style={{
           fontSize: 'var(--fs-xs)',
-          color: feedback === 'down' ? 'var(--error)' : 'var(--text-outline)',
-          background: feedback === 'down' ? 'rgba(255,180,171,0.1)' : 'transparent',
+          color: feedback === 'down' ? TIMELINE.error : 'var(--text-outline)',
+          background: feedback === 'down' ? 'rgba(207,45,86,0.1)' : 'transparent',
         }}
         onMouseEnter={(e) => { if (!feedback || feedback !== 'down') { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' } }}
         onMouseLeave={(e) => { if (feedback !== 'down') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' } }}
@@ -814,7 +826,7 @@ function CodeBlock({ language, codeText, children }: {
     }).catch(() => {})
   }
   return (
-    <div className="group/code" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)' }}>
+    <div className="group/code" style={{ borderRadius: '12px', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)', fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono)" }}>
       {(language || codeText) && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-surface-container)', borderBottom: '1px solid var(--border-subtle)' }}>
           {language ? (
@@ -1067,7 +1079,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
           >
             <path d="M6 4l4 4-4 4" />
           </svg>
-          <span>Thinking</span>
+          <span style={{ color: TIMELINE.thinking }}>Thinking</span>
         </summary>
         <div
           className="mt-1.5 whitespace-pre-wrap rounded-xl leading-relaxed max-h-60 overflow-y-auto"

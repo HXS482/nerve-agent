@@ -59,10 +59,10 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
     <div
       ref={containerRef}
       className="flex-1 overflow-y-auto w-full"
-      style={{ paddingTop: 'var(--sp-xl)', paddingBottom: '72px' }}
+      style={{ paddingTop: '32px', paddingBottom: '80px' }}
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
-        <div style={{ maxWidth: '60%', margin: '0 auto' }}>
+        <div style={{ maxWidth: '78%', margin: '0 auto' }}>
           {filteredMessages.map((msg, i) => {
             const prev = i > 0 ? filteredMessages[i - 1] : undefined
             return (
@@ -74,9 +74,12 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
           <SubagentTracker />
           {isLoading && (
             <div className="flex justify-center my-4 animate-fade-in">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft" style={{ background: 'var(--accent-primary)' }} />
-                <span style={{ fontSize: '11px', color: 'var(--text-outline)' }}>思考中...</span>
+              <div
+                className="flex items-center gap-2 px-3 py-1 rounded-full"
+                style={{ background: 'rgba(223,168,143,0.12)' }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft" style={{ background: '#dfa88f' }} />
+                <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08px', color: '#dfa88f', textTransform: 'uppercase' }}>Thinking</span>
               </div>
             </div>
           )}
