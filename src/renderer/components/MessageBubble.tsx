@@ -298,7 +298,7 @@ function ToolTimeline({ pairs }: { pairs: { use: ContentBlock; result?: ContentB
                 onClick={() => hasDetail && setExpandedDetail((s) => ({ ...s, [idx]: !s[idx] }))}
               >
                 <ToolIcon name={name} />
-                <span style={{ color: getToolStyle(name).color }}>{name}</span>
+                <span className={isRunning ? 'tool-row-running' : ''} style={{ color: getToolStyle(name).color }}>{name}</span>
                 {summary && (
                   <span className="truncate font-mono" style={{ color: 'var(--text-outline)', fontSize: 'var(--fs-xs)' }}>
                     {summary}
@@ -316,7 +316,7 @@ function ToolTimeline({ pairs }: { pairs: { use: ContentBlock; result?: ContentB
               </div>
               {detailOpen && hasDetail && (
                 <div
-                  className="ml-6 my-1 rounded-lg overflow-hidden"
+                  className="ml-6 my-1 rounded-lg overflow-hidden tool-detail-enter"
                   style={{
                     background: 'var(--bg-surface-container-lowest)',
                     border: '1px solid var(--border-subtle)',
@@ -825,9 +825,13 @@ function CodeBlock({ language, codeText, children }: {
       setTimeout(() => setCopied(false), 1500)
     }).catch(() => {})
   }
+  const hasHeader = !!language || !!codeText
+  const lines = codeText?.split('\n') || []
+  const showLineNumbers = lines.length > 3
+
   return (
     <div className="group/code" style={{ borderRadius: '12px', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)', fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono)" }}>
-      {(language || codeText) && (
+      {hasHeader && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-surface-container)', borderBottom: '1px solid var(--border-subtle)' }}>
           {language ? (
             <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -855,41 +859,64 @@ function CodeBlock({ language, codeText, children }: {
           )}
         </div>
       )}
-      <pre style={{ margin: 0, border: 'none', borderRadius: 0, background: 'var(--bg-surface-container-lowest)', overflowX: 'auto' }}>
-        {children}
-      </pre>
+      <div style={{ display: 'flex', background: 'var(--bg-surface-container-lowest)', overflowX: 'auto' }}>
+        {showLineNumbers && (
+          <div
+            style={{
+              padding: '12px 0',
+              paddingRight: '12px',
+              paddingLeft: '12px',
+              textAlign: 'right',
+              userSelect: 'none',
+              color: 'var(--text-outline-variant)',
+              fontSize: '12px',
+              lineHeight: '1.65',
+              borderRight: '1px solid var(--border-subtle)',
+              flexShrink: 0,
+              minWidth: '36px',
+            }}
+          >
+            {lines.map((_, i) => (
+              <div key={i}>{i + 1}</div>
+            ))}
+          </div>
+        )}
+        <pre style={{ margin: 0, border: 'none', borderRadius: 0, background: 'transparent', overflowX: 'auto', flex: 1 }}>
+          {children}
+        </pre>
+      </div>
     </div>
   )
 }
 
 const MARKDOWN_COMPONENTS = {
   h1: ({ children }: any) => (
-    <h1 className="font-bold mt-8 mb-3" style={{ color: 'var(--text-on-surface)', fontSize: 'clamp(18px, calc(18px + 0.3vw), 22px)', lineHeight: 1.3 }}>
+    <h1 className="font-bold" style={{ color: 'var(--text-on-surface)', fontSize: 'clamp(18px, calc(18px + 0.3vw), 22px)', lineHeight: 1.3, marginTop: '2em', marginBottom: '0.75em', paddingBottom: '0.5em', borderBottom: '1px solid var(--border-subtle)' }}>
       {children}
     </h1>
   ),
   h2: ({ children }: any) => (
-    <h2 className="font-semibold mt-6 mb-2" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-lg)' }}>
+    <h2 className="font-semibold" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-lg)', marginTop: '1.6em', marginBottom: '0.6em', paddingBottom: '0.4em', borderBottom: '1px solid var(--border-subtle)' }}>
       {children}
     </h2>
   ),
   h3: ({ children }: any) => (
-    <h3 className="font-semibold mt-5 mb-1.5" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-md)' }}>
+    <h3 className="font-semibold" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-md)', marginTop: '1.3em', marginBottom: '0.5em' }}>
       {children}
     </h3>
   ),
   h4: ({ children }: any) => (
-    <h4 className="font-bold mt-4 mb-1" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-base)', lineHeight: 1.4 }}>
+    <h4 className="font-bold" style={{ color: 'var(--text-on-surface)', fontSize: 'var(--fs-base)', lineHeight: 1.4, marginTop: '1.1em', marginBottom: '0.4em' }}>
       {children}
     </h4>
   ),
   h5: ({ children }: any) => (
-    <h5 className="font-medium mt-3 mb-1" style={{ color: 'var(--text-on-surface-variant)', fontSize: 'var(--fs-sm)', lineHeight: 1.4 }}>
+    <h5 className="font-medium" style={{ color: 'var(--text-on-surface-variant)', fontSize: 'var(--fs-sm)', lineHeight: 1.4, marginTop: '1em', marginBottom: '0.3em' }}>
       {children}
     </h5>
   ),
   h6: ({ children }: any) => (
-    <h6 className="font-medium mt-3 mb-1" style={{ color: 'var(--text-outline)', fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.4 }}>
+    <h6 className="font-medium" style={{ color: 'var(--text-outline)', fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.4, marginTop: '1em', marginBottom: '0.3em' }}>
       {children}
     </h6>
   ),
@@ -929,7 +956,9 @@ const MARKDOWN_COMPONENTS = {
     <a
       href={href}
       className="no-underline hover:underline"
-      style={{ color: 'var(--accent-primary)' }}
+      style={{ color: 'var(--accent-primary)', borderBottom: '1px solid transparent', transition: 'border-color 0.15s' }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderBottomColor = 'var(--accent-primary)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderBottomColor = 'transparent' }}
     >
       {children}
     </a>
@@ -965,13 +994,16 @@ const MARKDOWN_COMPONENTS = {
       style={{
         borderColor: 'var(--accent-primary)',
         color: 'var(--text-on-surface-variant)',
+        background: 'rgba(173, 198, 255, 0.04)',
+        borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
+        padding: '8px 14px',
       }}
     >
       {children}
     </blockquote>
   ),
   hr: () => (
-    <hr className="my-8" style={{ borderColor: 'var(--border-default)', opacity: 0.5 }} />
+    <hr className="my-8" style={{ border: 'none', height: 1, background: 'linear-gradient(90deg, transparent, var(--border-default), transparent)' }} />
   ),
   table: ({ children }: any) => (
     <div className="my-3 overflow-x-auto" style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
@@ -985,7 +1017,7 @@ const MARKDOWN_COMPONENTS = {
       className="text-left py-2.5 px-3 font-medium text-[11px]"
       style={{
         color: 'var(--text-outline)',
-        borderBottom: '1px solid var(--border-default)',
+        borderBottom: '2px solid var(--border-default)',
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
         background: 'var(--bg-surface-container)',
@@ -1011,6 +1043,42 @@ const MARKDOWN_COMPONENTS = {
     }
     return <img src={src} alt={alt} className="rounded-xl max-w-full max-h-[512px] object-contain my-2" style={{ border: '1px solid var(--border-subtle)' }} />
   },
+}
+
+function ThinkingBlock({ text, preview }: { text: string; preview: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="mb-3">
+      <button
+        className="thinking-toggle"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="thinking-dot" style={{ background: TIMELINE.thinking }} />
+        <span style={{ color: TIMELINE.thinking, fontWeight: 600 }}>Thinking</span>
+        {!expanded && preview && (
+          <span className="thinking-preview">{preview}</span>
+        )}
+        <svg
+          className="thinking-chevron"
+          data-expanded={expanded}
+          width="12"
+          height="12"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        >
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+      </button>
+      <div className="thinking-body" data-expanded={expanded}>
+        <div className="thinking-body-inner">
+          <div className="thinking-content">{text}</div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ContentBlockView({ block }: { block: ContentBlock }) {
@@ -1063,31 +1131,9 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
   }
 
   if (block.type === 'thinking' && block.thinking) {
+    const preview = block.thinking.split('\n')[0]?.slice(0, 80) || ''
     return (
-      <details className="group mb-3">
-        <summary
-          className="cursor-pointer transition-colors select-none flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[var(--bg-surface-container)]"
-          style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)' }}
-        >
-          <svg
-            className="w-2.5 h-2.5 transition-transform duration-150 group-open:rotate-90"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            viewBox="0 0 16 16"
-          >
-            <path d="M6 4l4 4-4 4" />
-          </svg>
-          <span style={{ color: TIMELINE.thinking }}>Thinking</span>
-        </summary>
-        <div
-          className="mt-1.5 whitespace-pre-wrap rounded-xl leading-relaxed max-h-60 overflow-y-auto"
-          style={{ fontSize: 'var(--fs-xs)', padding: 'var(--sp-sm)', color: 'var(--text-on-surface-variant)', background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}
-        >
-          {block.thinking}
-        </div>
-      </details>
+      <ThinkingBlock text={block.thinking} preview={preview} />
     )
   }
 
