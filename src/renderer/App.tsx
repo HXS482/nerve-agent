@@ -9,7 +9,6 @@ import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import Grainient from './components/Grainient'
-import { NerveCloud } from './components/NerveCloud'
 import { useState, useEffect } from 'react'
 
 export default function App() {
@@ -26,7 +25,6 @@ export default function App() {
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const toggleRightSidebar = useChatStore((s) => s.toggleRightSidebar)
   const theme = useChatStore((s) => s.theme)
-  const orbState = useChatStore((s) => s.orbState)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
 
@@ -105,7 +103,7 @@ export default function App() {
           {/* Left: model island (with sidebar toggle when collapsed) */}
           <div
             className="flex items-center gap-1.5 shrink-0"
-            style={{ WebkitAppRegion: 'no-drag', transform: 'translateY(-16px)' } as React.CSSProperties}
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
             <ModelIsland
               currentModel={claude.config.model || 'sonnet'}
@@ -115,10 +113,8 @@ export default function App() {
             />
           </div>
 
-          {/* Center: Nerve Orb */}
-          <div className="flex-1 flex justify-center items-center" style={{ transform: 'translateY(-16px)' } as React.CSSProperties}>
-            <NerveCloud state={orbState} theme={theme} size={64} />
-          </div>
+          {/* Center spacer */}
+          <div className="flex-1" />
 
           {/* Right: toggle sidebar + settings + cmd */}
           <div
@@ -128,7 +124,6 @@ export default function App() {
               borderRadius: 9,
               height: 28,
               WebkitAppRegion: 'no-drag',
-              transform: 'translateY(-16px)',
               boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
             } as React.CSSProperties}
           >
