@@ -10,11 +10,21 @@ interface Props {
   onRetry?: (message: ChatMessage) => void
 }
 
-// Tool-specific color palette
+// Cursor-inspired timeline pastel palette
+const TIMELINE = {
+  thinking: '#dfa88f', // peach
+  grep: '#9fc9a2',     // mint
+  read: '#9fbbe0',     // pastel blue
+  edit: '#c0a8dd',     // lavender
+  done: '#c08532',     // warm gold
+  error: '#cf2d56',    // semantic error
+} as const
+
+// Tool-specific color palette — mapped to Cursor timeline tokens
 const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
   Read: {
-    color: '#60a5fa',
-    bg: 'rgba(96,165,250,0.1)',
+    color: TIMELINE.read,
+    bg: 'rgba(159,187,224,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 3h4l2 2h6v8H2z" />
@@ -23,8 +33,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Write: {
-    color: '#34d399',
-    bg: 'rgba(52,211,153,0.1)',
+    color: TIMELINE.done,
+    bg: 'rgba(192,133,50,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M11.5 1.5l3 3L5 14H2v-3z" />
@@ -33,8 +43,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Edit: {
-    color: '#fbbf24',
-    bg: 'rgba(251,191,36,0.1)',
+    color: TIMELINE.edit,
+    bg: 'rgba(192,168,221,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
@@ -43,8 +53,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Bash: {
-    color: '#a78bfa',
-    bg: 'rgba(167,139,250,0.1)',
+    color: TIMELINE.grep,
+    bg: 'rgba(159,201,162,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
@@ -53,8 +63,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Glob: {
-    color: '#2dd4bf',
-    bg: 'rgba(45,212,191,0.1)',
+    color: TIMELINE.grep,
+    bg: 'rgba(159,201,162,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2.5 4v7.5a1 1 0 001 1h9a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3.5h-3a1 1 0 00-1 1z" />
@@ -62,8 +72,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Grep: {
-    color: '#2dd4bf',
-    bg: 'rgba(45,212,191,0.1)',
+    color: TIMELINE.grep,
+    bg: 'rgba(159,201,162,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="7" cy="7" r="4" />
@@ -72,8 +82,8 @@ const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.React
     ),
   },
   Agent: {
-    color: '#22d3ee',
-    bg: 'rgba(34,211,238,0.1)',
+    color: TIMELINE.thinking,
+    bg: 'rgba(223,168,143,0.12)',
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="4" width="10" height="9" rx="2" />
@@ -107,14 +117,97 @@ function ToolIcon({ name, size = 14 }: { name: string; size?: number }) {
   )
 }
 
+// ─── URL handling ───────────────────────────────────────
+
+const URL_RE = /https?:\/\/[^\s]+/g
+const GITHUB_URL_RE = /https?:\/\/github\.com\/[^\s]+/g
+
+function LinkIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 -54 1132 1132" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M567.946541 498.230212m-449.210729 0a449.210729 449.210729 0 1 0 898.421459 0 449.210729 449.210729 0 1 0-898.421459 0Z" opacity="0.15" />
+      <path d="M477.3888 0C213.907576 0 0 223.135624 0 497.965176 0 772.806776 213.907576 995.930353 477.3888 995.930353c-241.230306-14.022776-437.067294-232.327529-437.067294-497.965177S236.158494 14.022776 477.3888 0zM643.409318 5.12c263.469176 0 477.376753 223.135624 477.376753 497.965176 0 274.8416-213.907576 497.965176-477.376753 497.965177 241.218259-14.010729 437.055247-232.315482 437.055247-497.965177 0-265.637647-195.836988-483.9424-437.055247-497.965176z" opacity="0.3" />
+      <path d="M528.384 29.057506c-19.468047 0-35.273788 218.762541-35.273788 488.207059 0 269.456565 15.805741 488.207059 35.273788 488.207059-4.867012-122.048753-8.818447-298.791153-8.818447-488.207059 0-189.415906 3.951435-366.146259 8.818447-488.207059z" opacity="0.25" />
+      <path d="M18.697035 487.171012c0 28.949082 237.796894 52.452894 530.697036 52.452894s530.697035-23.503812 530.697035-52.452894c-132.674259 7.240282-324.800753 13.119247-530.697035 13.119247s-398.022776-5.878965-530.697036-13.119247z" opacity="0.25" />
+      <path d="M30.3104 527.7696c0 139.264 235.965741 252.325647 526.613082 252.325647s526.625129-113.061647 526.62513-252.325647c-24.070024 120.157365-251.759435 217.714447-526.62513 217.714447S54.380424 647.926965 30.3104 527.7696z" opacity="0.25" />
+      <path d="M484.424282 10.252047c-139.251953 0-252.3136 224.087341-252.3136 500.097506 0 276.022212 113.061647 500.109553 252.3136 500.109553-120.157365-22.853271-217.714447-239.073882-217.714447-500.109553 0-261.023624 97.557082-477.244235 217.714447-500.097506z" opacity="0.25" />
+      <path d="M28.178071 440.464565c0-139.264 238.748612-252.325647 532.829364-252.325647 294.080753 0 532.829365 113.061647 532.829365 252.325647-24.359153-120.169412-254.723012-217.726494-532.829365-217.726494S52.537224 320.295153 28.178071 440.464565z" opacity="0.25" />
+      <path d="M595.437929 19.6608c139.264 0 252.325647 224.087341 252.325647 500.097506 0 276.022212-113.061647 500.109553-252.325647 500.109553C715.595294 997.014588 813.152376 780.793976 813.152376 519.758306c0-261.023624-97.557082-477.244235-217.714447-500.097506z" opacity="0.25" />
+    </svg>
+  )
+}
+
+function GithubIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0 }}>
+      <path d="M94,7399 C99.523,7399 104,7403.59 104,7409.253 C104,7413.782 101.138,7417.624 97.167,7418.981 C96.66,7419.082 96.48,7418.762 96.48,7418.489 C96.48,7418.151 96.492,7417.047 96.492,7415.675 C96.492,7414.719 96.172,7414.095 95.813,7413.777 C98.04,7413.523 100.38,7412.656 100.38,7408.718 C100.38,7407.598 99.992,7406.684 99.35,7405.966 C99.454,7405.707 99.797,7404.664 99.252,7403.252 C99.252,7403.252 98.414,7402.977 96.505,7404.303 C95.706,7404.076 94.85,7403.962 94,7403.958 C93.15,7403.962 92.295,7404.076 91.497,7404.303 C89.586,7402.977 88.746,7403.252 88.746,7403.252 C88.203,7404.664 88.546,7405.707 88.649,7405.966 C88.01,7406.684 87.619,7407.598 87.619,7408.718 C87.619,7412.646 89.954,7413.526 92.175,7413.785 C91.889,7414.041 91.63,7414.493 91.54,7415.156 C90.97,7415.418 89.522,7415.871 88.63,7414.304 C88.63,7414.304 88.101,7413.319 87.097,7413.247 C87.097,7413.247 86.122,7413.234 87.029,7413.87 C87.029,7413.87 87.684,7414.185 88.139,7415.37 C88.139,7415.37 88.726,7417.2 91.508,7416.58 C91.513,7417.437 91.522,7418.245 91.522,7418.489 C91.522,7418.76 91.338,7419.077 90.839,7418.982 C86.865,7417.627 84,7413.783 84,7409.253 C84,7403.59 88.478,7399 94,7399" transform="translate(-84, -7399)" />
+    </svg>
+  )
+}
+
+function UrlLink({ url }: { url: string }) {
+  const isGithub = GITHUB_URL_RE.test(url)
+  GITHUB_URL_RE.lastIndex = 0
+
+  let label: string
+  try {
+    const u = new URL(url)
+    if (isGithub) {
+      const parts = u.pathname.split('/').filter(Boolean)
+      label = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : u.hostname
+    } else {
+      label = u.hostname
+    }
+  } catch {
+    label = url.length > 40 ? url.slice(0, 37) + '…' : url
+  }
+
+  return (
+    <a
+      href={url}
+      onClick={(e) => { e.preventDefault(); window.claude?.openInBrowser?.('url', url) }}
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 transition-colors"
+      style={{
+        background: 'var(--bg-surface-container-high)',
+        border: '1px solid var(--border-subtle)',
+        color: isGithub ? 'var(--text-on-surface)' : 'var(--accent-primary)',
+        fontSize: '12px',
+        textDecoration: 'none',
+        cursor: 'pointer',
+        verticalAlign: 'middle',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.8' }}
+      onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+    >
+      {isGithub ? <GithubIcon size={13} /> : <LinkIcon size={13} />}
+      <span className="truncate" style={{ maxWidth: 300 }}>{label}</span>
+    </a>
+  )
+}
+
+function RichText({ text }: { text: string }) {
+  const parts = text.split(URL_RE)
+  const urls = text.match(URL_RE) || []
+  if (urls.length === 0) return <>{text}</>
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {part}
+          {urls[i] && <UrlLink url={urls[i]} />}
+        </span>
+      ))}
+    </>
+  )
+}
+
 function UserAvatar() {
   return (
     <div
       className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-medium"
       style={{
-        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-        color: '#fff',
-        boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+        background: '#26251e',
+        color: '#f7f7f4',
       }}
     >
       U
@@ -128,7 +221,7 @@ function ToolTimeline({ pairs }: { pairs: { use: ContentBlock; result?: ContentB
   const [expandedDetail, setExpandedDetail] = useState<Record<number, boolean>>({})
   const hasRunning = pairs.some((p) => !p.result)
   const hasError = pairs.some((p) => p.result?.is_error)
-  const dotColor = hasRunning ? '#818cf8' : hasError ? 'var(--error)' : '#34d399'
+  const dotColor = hasRunning ? TIMELINE.thinking : hasError ? TIMELINE.error : TIMELINE.done
 
   return (
     <div className="flex gap-2.5 mb-3 group/timeline">
@@ -211,11 +304,11 @@ function ToolTimeline({ pairs }: { pairs: { use: ContentBlock; result?: ContentB
                 )}
                 <span className="ml-auto shrink-0" style={{ fontSize: 'var(--fs-xs)' }}>
                   {isRunning ? (
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft inline-block" style={{ background: '#818cf8' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft inline-block" style={{ background: TIMELINE.thinking }} />
                   ) : isError ? (
-                    <span style={{ color: 'var(--error)' }}>✕</span>
+                    <span style={{ color: TIMELINE.error }}>✕</span>
                   ) : (
-                    <span style={{ color: '#34d399' }}>✓</span>
+                    <span style={{ color: TIMELINE.done }}>✓</span>
                   )}
                 </span>
               </div>
@@ -267,7 +360,7 @@ function ToolRow({ block, index }: { block: ContentBlock; index: number }) {
     const isError = block.is_error
     return (
       <div className="flex items-center gap-2 py-0.5" style={{ fontSize: 'var(--fs-sm)' }}>
-        <span style={{ color: isError ? 'var(--error)' : '#34d399', fontSize: 'var(--fs-xs)' }}>
+        <span style={{ color: isError ? TIMELINE.error : TIMELINE.done, fontSize: 'var(--fs-xs)' }}>
           {isError ? '✕' : '✓'}
         </span>
       </div>
@@ -422,7 +515,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
               return (
                 <p key={i} className="whitespace-pre-wrap"
                   style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
-                  {block.text}
+                  <RichText text={block.text} />
                 </p>
               )
             }
@@ -587,8 +680,8 @@ const FeedbackButtons = memo(function FeedbackButtons() {
         className="flex items-center px-2 py-1 rounded-md transition-colors"
         style={{
           fontSize: 'var(--fs-xs)',
-          color: feedback === 'up' ? '#34d399' : 'var(--text-outline)',
-          background: feedback === 'up' ? 'rgba(52,211,153,0.1)' : 'transparent',
+          color: feedback === 'up' ? TIMELINE.done : 'var(--text-outline)',
+          background: feedback === 'up' ? 'rgba(192,133,50,0.1)' : 'transparent',
         }}
         onMouseEnter={(e) => { if (!feedback || feedback !== 'up') { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' } }}
         onMouseLeave={(e) => { if (feedback !== 'up') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' } }}
@@ -602,8 +695,8 @@ const FeedbackButtons = memo(function FeedbackButtons() {
         className="flex items-center px-2 py-1 rounded-md transition-colors"
         style={{
           fontSize: 'var(--fs-xs)',
-          color: feedback === 'down' ? 'var(--error)' : 'var(--text-outline)',
-          background: feedback === 'down' ? 'rgba(255,180,171,0.1)' : 'transparent',
+          color: feedback === 'down' ? TIMELINE.error : 'var(--text-outline)',
+          background: feedback === 'down' ? 'rgba(207,45,86,0.1)' : 'transparent',
         }}
         onMouseEnter={(e) => { if (!feedback || feedback !== 'down') { e.currentTarget.style.background = 'var(--bg-surface-container)'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' } }}
         onMouseLeave={(e) => { if (feedback !== 'down') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' } }}
@@ -702,7 +795,7 @@ function CodeBlock({ language, codeText, children }: {
     }).catch(() => {})
   }
   return (
-    <div className="group/code" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)' }}>
+    <div className="group/code" style={{ borderRadius: '12px', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)', fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono)" }}>
       {(language || codeText) && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-surface-container)', borderBottom: '1px solid var(--border-subtle)' }}>
           {language ? (
@@ -955,7 +1048,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
           >
             <path d="M6 4l4 4-4 4" />
           </svg>
-          <span>Thinking</span>
+          <span style={{ color: TIMELINE.thinking }}>Thinking</span>
         </summary>
         <div
           className="mt-1.5 whitespace-pre-wrap rounded-xl leading-relaxed max-h-60 overflow-y-auto"
