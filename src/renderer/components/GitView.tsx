@@ -118,27 +118,45 @@ const TABS: { id: GitTab; label: string; icon: React.ReactNode }[] = [
   { id: 'history', label: 'History', icon: <I.History s={13} /> },
 ]
 
-// ─── Card Styles ───────────────────────────────────────
+// ─── Design Tokens (theme-aware) ────────────────────────
+
+const GIT = {
+  // Accent states (for staged, success, error)
+  accent: 'var(--accent-primary)',
+  staged: 'var(--text-green, #34d399)',
+  error: 'var(--text-red, #f87171)',
+  // Muted states
+  muted: 'var(--text-outline)',
+  mutedSub: 'var(--text-outline-variant)',
+  // Surfaces
+  cardBg: 'var(--bg-surface-container-lowest, var(--bg-surface))',
+  cardBorder: 'var(--border-default)',
+  rowHover: 'var(--bg-surface-container)',
+  rowBorder: 'var(--border-subtle)',
+  // Typography
+  fontUi: "var(--font-sans, 'Inter', system-ui, sans-serif)",
+  fontMono: "var(--font-mono, 'JetBrains Mono', ui-monospace, monospace)",
+} as const
+
+// ─── Card System ───────────────────────────────────────
 
 const CARD = {
   surface: {
-    border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+    borderRadius: 10,
     overflow: 'hidden' as const,
-    margin: '0 8px 10px',
+    margin: '0 6px',
   },
 }
 
-// ─── Status Badge ──────────────────────────────────────
+// ─── Status Badge (theme-aware) ────────────────────────
 
 const STYLE: Record<string, { letter: string; bg: string; fg: string }> = {
-  M: { letter: 'M', bg: 'rgba(234,179,8,0.2)', fg: '#eab308' },
-  A: { letter: 'A', bg: 'rgba(34,197,94,0.2)', fg: '#22c55e' },
-  D: { letter: 'D', bg: 'rgba(239,68,68,0.2)', fg: '#ef4444' },
-  R: { letter: 'R', bg: 'rgba(59,130,246,0.2)', fg: '#3b82f6' },
-  '??': { letter: 'U', bg: 'rgba(156,163,175,0.12)', fg: '#9ca3af' },
-  UU: { letter: '!', bg: 'rgba(239,68,68,0.25)', fg: '#ef4444' },
+  M: { letter: 'M', bg: 'color-mix(in srgb, var(--text-amber, #eab308) 15%, transparent)', fg: 'var(--text-amber, #eab308)' },
+  A: { letter: 'A', bg: 'color-mix(in srgb, var(--text-green, #34d399) 15%, transparent)', fg: 'var(--text-green, #34d399)' },
+  D: { letter: 'D', bg: 'color-mix(in srgb, var(--text-red, #f87171) 15%, transparent)', fg: 'var(--text-red, #f87171)' },
+  R: { letter: 'R', bg: 'color-mix(in srgb, var(--text-blue, #60a5fa) 15%, transparent)', fg: 'var(--text-blue, #60a5fa)' },
+  '??': { letter: 'U', bg: 'var(--bg-surface-container)', fg: GIT.muted },
+  UU: { letter: '!', bg: 'color-mix(in srgb, var(--text-red, #f87171) 20%, transparent)', fg: 'var(--text-red, #f87171)' },
 }
 
 function StatusBadge({ code }: { code: string }) {
@@ -150,19 +168,18 @@ function StatusBadge({ code }: { code: string }) {
   )
 }
 
-// ─── Glass Icon Button ─────────────────────────────────
+// ─── Icon Button ───────────────────────────────────────
 
 function GlassIconBtn({ icon, onClick, disabled, title }: {
   icon: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string
 }) {
   return (
     <button onClick={onClick} disabled={disabled} title={title}
-      className="flex items-center justify-center rounded-[6px] transition-all duration-150 disabled:opacity-30 hover:brightness-125 active:scale-[0.92]"
+      className="flex items-center justify-center rounded-md transition-all duration-100 disabled:opacity-25 hover:brightness-110 active:scale-95"
       style={{
         width: 26, height: 26,
-        background: 'var(--bg-surface-container-high)',
-        color: 'var(--text-outline-variant)',
-        border: '1px solid var(--border-subtle)',
+        background: 'transparent',
+        color: GIT.mutedSub,
         cursor: disabled ? 'default' : 'pointer',
       }}
     >{icon}</button>
@@ -186,34 +203,41 @@ const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, 
 
   return (
     <div
-      className="flex items-center gap-2 w-full transition-colors group"
-      style={{ padding: '5px 10px 5px 8px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+      className="flex items-center gap-2 w-full transition-colors group cursor-pointer"
+      style={{
+        padding: '4px 10px 4px 8px',
+        minHeight: 28,
+        borderBottom: `1px solid ${GIT.rowBorder}`,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container, rgba(0,0,0,0.03))' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
-      <button onClick={onToggle} className="shrink-0 flex items-center justify-center rounded-[4px] hover:brightness-150 transition-all"
+      <button onClick={onToggle} className="shrink-0 flex items-center justify-center rounded-sm transition-all"
         style={{ width: 18, height: 18 }}
       >
         {staged ? (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="9" fill="#22c55e" stroke="#22c55e" strokeWidth="2" />
+            <circle cx="12" cy="12" r="9" fill="var(--text-green, #34d399)" stroke="var(--text-green, #34d399)" strokeWidth="2" />
             <polyline points="8 12 11 15 16 9" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         ) : (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="9" fill="none" stroke="var(--text-outline-variant)" strokeWidth="1.5" opacity="0.35" />
+            <circle cx="12" cy="12" r="9" fill="none" stroke={GIT.mutedSub} strokeWidth="1.5" opacity="0.4" />
           </svg>
         )}
       </button>
       <StatusBadge code={statusCode} />
       <button onClick={onShowDiff} className="flex-1 text-left truncate min-w-0">
-        <span className="text-[10px] opacity-35">{dir}</span>
-        <span className="text-[11px] leading-tight" style={{ color: 'var(--text-on-surface)' }}>{fileName}</span>
+        <span style={{ fontSize: 10, color: GIT.muted, opacity: 0.4, fontFamily: GIT.fontMono }}>{dir}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-on-surface)', fontFamily: GIT.fontMono, lineHeight: 1.4 }}>{fileName}</span>
       </button>
       {onDiscard && !staged && (
-        <button onClick={handleDiscard} className="shrink-0 opacity-0 group-hover:opacity-100 transition-all text-[9px] px-1.5 py-0.5 rounded-[4px]"
+        <button onClick={handleDiscard} className="shrink-0 opacity-0 group-hover:opacity-100 transition-all rounded-sm"
           style={{
-            color: confirm ? '#ef4444' : 'var(--text-outline-variant)',
-            background: confirm ? 'rgba(239,68,68,0.12)' : 'transparent',
-            border: confirm ? '1px solid rgba(239,68,68,0.25)' : 'none',
+            fontSize: 9,
+            padding: '2px 6px',
+            color: confirm ? GIT.error : GIT.mutedSub,
+            background: confirm ? 'color-mix(in srgb, var(--text-red, #f87171) 12%, transparent)' : 'transparent',
           }}
         >{confirm ? 'Discard' : <I.RotateCcw s={10} />}</button>
       )}
@@ -225,9 +249,9 @@ const FileRow = memo(function FileRow({ filePath, statusCode, staged, onToggle, 
 
 function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 h-full" style={{ minHeight: 120 }}>
-      <span style={{ color: 'var(--text-outline-variant)', opacity: 0.2, display: 'flex' }}>{icon}</span>
-      <span className="text-[11px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.35 }}>{text}</span>
+    <div className="flex flex-col items-center justify-center gap-2 h-full" style={{ minHeight: 100 }}>
+      <span style={{ color: GIT.mutedSub, opacity: 0.15, display: 'flex' }}>{icon}</span>
+      <span style={{ fontSize: 11, color: GIT.mutedSub, opacity: 0.35, fontFamily: GIT.fontUi }}>{text}</span>
     </div>
   )
 }
@@ -263,10 +287,8 @@ function FilesList({ onShowDiff }: { onShowDiff: (f: string, s: boolean) => void
 
   return (
     <div style={{
-      margin: '0 6px',
-      border: '1px solid var(--border-default)',
-      borderRadius: 10,
-      overflow: 'hidden',
+      ...CARD.surface,
+      border: `1px solid ${GIT.cardBorder}`,
     }}>
       {hasConflicts && (
         <>
@@ -309,13 +331,15 @@ function BranchesTab() {
     <div className="flex flex-col">
       {branches.map((b) => (
         <div key={b.name}
-          className="flex items-center gap-2 w-full transition-colors group"
-          style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+          className="flex items-center gap-2 w-full transition-colors group cursor-pointer"
+          style={{ padding: '4px 14px', minHeight: 28, borderBottom: `1px solid ${GIT.rowBorder}` }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container, rgba(0,0,0,0.03))' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
-          <button onClick={() => checkout(b.name)} className="flex-1 flex items-center gap-2.5 min-w-0">
+          <button onClick={() => checkout(b.name)} className="flex-1 flex items-center gap-2 min-w-0">
             <span className="shrink-0 flex items-center justify-center" style={{ width: 16, height: 16 }}>
               {b.current ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent-primary)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill={GIT.accent}>
                   <circle cx="12" cy="12" r="10" />
                   <circle cx="12" cy="12" r="4" fill="var(--bg-surface)" />
                 </svg>
@@ -323,17 +347,17 @@ function BranchesTab() {
                 <I.Branch s={12} />
               )}
             </span>
-            <span className="text-[12px] truncate" style={{ color: b.current ? 'var(--text-on-surface)' : 'var(--text-outline-variant)', fontWeight: b.current ? 600 : 400 }}>{b.name}</span>
+            <span style={{ fontSize: 12, color: b.current ? 'var(--text-on-surface)' : GIT.mutedSub, fontWeight: b.current ? 600 : 400, fontFamily: GIT.fontMono }} className="truncate">{b.name}</span>
           </button>
           {!b.current && (
             <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
               {del === b.name ? (
                 <>
-                  <button onClick={() => { deleteBranch(b.name); setDel(null) }} className="text-[9px] font-medium px-1.5 py-0.5 rounded-[4px]" style={{ color: '#ef4444', background: 'rgba(239,68,68,0.12)' }}>Delete</button>
-                  <button onClick={() => setDel(null)} className="text-[9px] px-1.5 py-0.5 rounded-[4px]" style={{ color: 'var(--text-outline-variant)' }}>Cancel</button>
+                  <button onClick={() => { deleteBranch(b.name); setDel(null) }} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, color: GIT.error, background: 'color-mix(in srgb, var(--text-red, #f87171) 12%, transparent)' }}>Delete</button>
+                  <button onClick={() => setDel(null)} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, color: GIT.mutedSub }}>Cancel</button>
                 </>
               ) : (
-                <button onClick={() => setDel(b.name)} className="p-1 rounded-[4px] hover:bg-[var(--bg-surface-container)]" style={{ color: 'var(--text-outline-variant)' }}><I.Trash s={11} /></button>
+                <button onClick={() => setDel(b.name)} className="p-1 rounded-md hover:bg-[var(--bg-surface-container)]" style={{ color: GIT.mutedSub }}><I.Trash s={11} /></button>
               )}
             </div>
           )}
@@ -341,16 +365,16 @@ function BranchesTab() {
       ))}
       <AnimatePresence>
         {showNew ? (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex gap-1.5 px-4 py-3 overflow-hidden" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex gap-2 px-4 py-3 overflow-hidden" style={{ borderTop: `1px solid ${GIT.rowBorder}` }}>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="New branch name" autoFocus
-              className="flex-1 text-[11px] outline-none rounded-[6px] px-2.5 py-1.5 transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
-              style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)', border: '1px solid var(--border-subtle)' }}
+              className="flex-1 text-[11px] outline-none rounded-md px-2.5 py-1.5 transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
+              style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)', border: `1px solid ${GIT.rowBorder}` }}
               onKeyDown={(e) => { if (e.key === 'Enter') doCreate() }} />
-            <button onClick={doCreate} disabled={!name.trim()} className="text-[11px] font-semibold rounded-[6px] px-3 py-1.5" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none' }}>Create</button>
-            <button onClick={() => setShowNew(false)} className="px-2" style={{ color: 'var(--text-outline-variant)' }}><I.Close /></button>
+            <button onClick={doCreate} disabled={!name.trim()} className="text-[11px] font-semibold rounded-md px-3 py-1.5" style={{ background: GIT.accent, color: '#fff', border: 'none' }}>Create</button>
+            <button onClick={() => setShowNew(false)} className="px-2" style={{ color: GIT.mutedSub }}><I.Close /></button>
           </motion.div>
         ) : (
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 text-[11px] w-full py-2.5 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ color: 'var(--accent-primary)' }}>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 w-full py-2.5 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ fontSize: 11, color: GIT.accent, fontFamily: GIT.fontUi }}>
             <I.Plus s={9} /> New Branch
           </button>
         )}
@@ -380,16 +404,16 @@ function StashesTab() {
     <div className="flex flex-col">
       <AnimatePresence>
         {show && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-4 py-3 overflow-hidden" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-4 py-3 overflow-hidden" style={{ borderBottom: `1px solid ${GIT.rowBorder}` }}>
             <input type="text" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Message (optional)" autoFocus
-              className="w-full text-[11px] outline-none rounded-[6px] px-2.5 py-1.5 mb-1.5 transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
-              style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)', border: '1px solid var(--border-subtle)' }}
+              className="w-full text-[11px] outline-none rounded-md px-2.5 py-1.5 mb-1.5 transition-all focus:ring-1 focus:ring-[var(--accent-primary)]"
+              style={{ background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface)', border: `1px solid ${GIT.rowBorder}` }}
               onKeyDown={(e) => { if (e.key === 'Enter') doStash() }} />
-            <label className="flex items-center gap-1.5 text-[10px] mb-2 cursor-pointer" style={{ color: 'var(--text-outline-variant)' }}>
-              <input type="checkbox" checked={untracked} onChange={(e) => setUntracked(e.target.checked)} style={{ width: 12, height: 12, accentColor: 'var(--accent-primary)' }} />
+            <label className="flex items-center gap-1.5 mb-2 cursor-pointer" style={{ fontSize: 10, color: GIT.mutedSub, fontFamily: GIT.fontUi }}>
+              <input type="checkbox" checked={untracked} onChange={(e) => setUntracked(e.target.checked)} style={{ width: 12, height: 12, accentColor: GIT.accent }} />
               Include untracked
             </label>
-            <button onClick={doStash} className="text-[11px] font-semibold rounded-[6px] px-3 py-1.5 w-full transition-all hover:brightness-110" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none' }}>
+            <button onClick={doStash} className="text-[11px] font-semibold rounded-md px-3 py-1.5 w-full transition-all hover:brightness-110" style={{ background: GIT.accent, color: '#fff', border: 'none' }}>
               {loading ? 'Stashing…' : 'Stash'}
             </button>
           </motion.div>
@@ -400,26 +424,28 @@ function StashesTab() {
 
       {stashes.map((s) => (
         <div key={s.hash}
-          className="flex items-center gap-2 w-full transition-colors group"
-          style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)' }}
+          className="flex items-center gap-2 w-full transition-colors group cursor-pointer"
+          style={{ padding: '4px 14px', minHeight: 28, borderBottom: `1px solid ${GIT.rowBorder}` }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container, rgba(0,0,0,0.03))' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           <div className="flex-1 min-w-0">
-            <div className="text-[12px] truncate leading-tight" style={{ color: 'var(--text-on-surface)' }}>{s.message}</div>
-            <div className="text-[9px] flex items-center gap-2 mt-0.5" style={{ color: 'var(--text-outline-variant)', opacity: 0.45 }}>
-              <span className="font-mono">{s.hash.slice(0, 7)}</span>
+            <div style={{ fontSize: 12, color: 'var(--text-on-surface)', fontFamily: GIT.fontUi, lineHeight: 1.4 }} className="truncate">{s.message}</div>
+            <div className="flex items-center gap-2 mt-0.5" style={{ fontSize: 9, color: GIT.mutedSub, opacity: 0.45 }}>
+              <span style={{ fontFamily: GIT.fontMono }}>{s.hash.slice(0, 7)}</span>
               <span>{new Date(s.date).toLocaleDateString()}</span>
             </div>
           </div>
           <div className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => stashPop(s.index)} className="p-1 rounded-[4px] hover:bg-[var(--bg-surface-container)]" title="Pop" style={{ color: 'var(--text-on-surface)' }}><I.Down s={11} /></button>
-            <button onClick={() => stashApply(s.index)} className="p-1 rounded-[4px] hover:bg-[var(--bg-surface-container)]" title="Apply" style={{ color: 'var(--text-outline-variant)' }}><I.Check s={11} /></button>
-            <button onClick={() => stashDrop(s.index)} className="p-1 rounded-[4px] hover:bg-[rgba(239,68,68,0.1)]" title="Drop" style={{ color: '#ef4444' }}><I.Trash s={11} /></button>
+            <button onClick={() => stashPop(s.index)} className="p-1 rounded-md hover:bg-[var(--bg-surface-container)]" title="Pop" style={{ color: 'var(--text-on-surface)' }}><I.Down s={11} /></button>
+            <button onClick={() => stashApply(s.index)} className="p-1 rounded-md hover:bg-[var(--bg-surface-container)]" title="Apply" style={{ color: GIT.mutedSub }}><I.Check s={11} /></button>
+            <button onClick={() => stashDrop(s.index)} className="p-1 rounded-md hover:bg-[rgba(239,68,68,0.1)]" title="Drop" style={{ color: GIT.error }}><I.Trash s={11} /></button>
           </div>
         </div>
       ))}
 
       {!show && stashes.length > 0 && (
-        <button onClick={() => setShow(true)} className="flex items-center gap-1.5 text-[11px] w-full py-2.5 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ color: 'var(--accent-primary)' }}>
+        <button onClick={() => setShow(true)} className="flex items-center gap-1.5 w-full py-2.5 px-4 hover:bg-[var(--bg-surface-container-high)] transition-colors" style={{ fontSize: 11, color: GIT.accent, fontFamily: GIT.fontUi }}>
           <I.Plus s={9} /> Stash Changes
         </button>
       )}
@@ -446,26 +472,31 @@ function HistoryTab() {
       {log.slice(0, 30).map((c) => (
         <div key={c.hash}>
           <button onClick={() => selectedCommitHash === c.hash ? clearCommitDiff() : fetchCommitDiff(c.hash)}
-            className="flex items-center gap-2 w-full text-left transition-colors"
-            style={{ padding: '5px 14px', minHeight: 30, borderBottom: '1px solid var(--border-subtle)', background: selectedCommitHash === c.hash ? 'var(--bg-surface-container-high)' : 'transparent' }}
+            className="flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
+            style={{
+              padding: '4px 14px',
+              minHeight: 28,
+              borderBottom: `1px solid ${GIT.rowBorder}`,
+              background: selectedCommitHash === c.hash ? 'var(--bg-surface-container)' : 'transparent',
+            }}
           >
-            <span className="text-[9px] font-mono shrink-0" style={{ color: 'var(--accent-primary)', opacity: 0.55 }}>{c.hash.slice(0, 7)}</span>
+            <span className="shrink-0" style={{ fontSize: 9, fontFamily: GIT.fontMono, color: GIT.accent, opacity: 0.55 }}>{c.hash.slice(0, 7)}</span>
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] truncate leading-tight" style={{ color: 'var(--text-on-surface)' }}>{c.message}</div>
-              <div className="text-[9px] mt-0.5" style={{ color: 'var(--text-outline-variant)', opacity: 0.4 }}>{new Date(c.date).toLocaleDateString()}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-on-surface)', fontFamily: GIT.fontUi, lineHeight: 1.4 }} className="truncate">{c.message}</div>
+              <div className="mt-0.5" style={{ fontSize: 9, color: GIT.mutedSub, opacity: 0.4 }}>{new Date(c.date).toLocaleDateString()}</div>
             </div>
-            <motion.span animate={{ rotate: selectedCommitHash === c.hash ? 180 : 0 }} transition={{ duration: 0.15 }} className="shrink-0" style={{ color: 'var(--text-outline-variant)', opacity: 0.3 }}>
+            <motion.span animate={{ rotate: selectedCommitHash === c.hash ? 180 : 0 }} transition={{ duration: 0.15 }} className="shrink-0" style={{ color: GIT.mutedSub, opacity: 0.3 }}>
               <I.ChevronDn s={11} />
             </motion.span>
           </button>
           <AnimatePresence>
             {selectedCommitHash === c.hash && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div style={{ borderLeft: '2px solid var(--border-subtle)', margin: '2px 0 2px 24px', padding: '6px 0' }}>
+                <div style={{ borderLeft: `2px solid ${GIT.rowBorder}`, margin: '2px 0 2px 24px', padding: '6px 0' }}>
                   {loading ? (
-                    <div className="flex items-center justify-center py-3 gap-1.5 text-[10px]" style={{ color: 'var(--text-outline-variant)' }}><I.Spinner s={9} /> Loading diff…</div>
+                    <div className="flex items-center justify-center py-3 gap-1.5" style={{ fontSize: 10, color: GIT.mutedSub, fontFamily: GIT.fontUi }}><I.Spinner s={9} /> Loading diff…</div>
                   ) : commitDiff ? commitDiff.split('\n').map((l, i) => <DiffLine key={i} line={l} />)
-                  : <div className="text-[10px] text-center py-3" style={{ color: 'var(--text-outline-variant)', opacity: 0.35 }}>No diff to show</div>}
+                  : <div className="text-center py-3" style={{ fontSize: 10, color: GIT.mutedSub, opacity: 0.35, fontFamily: GIT.fontUi }}>No diff to show</div>}
                 </div>
               </motion.div>
             )}
@@ -528,28 +559,28 @@ export function GitView() {
 
   if (!cwd) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-[11px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.5 }}>No workspace selected</div>
+      <div style={{ fontSize: 11, color: GIT.mutedSub, opacity: 0.5, fontFamily: GIT.fontUi }}>No workspace selected</div>
     </div>
   )
 
   if (error && !status) {
     if (error.toLowerCase().includes('not a git repository')) return (
-      <div style={{ ...CARD.surface, overflow: 'visible', margin: '16px 8px' }}>
+      <div style={{ ...CARD.surface, overflow: 'visible', margin: '16px 8px', border: `1px solid ${GIT.cardBorder}` }}>
         <div className="flex flex-col items-center gap-3 py-8">
-          <span style={{ color: 'var(--text-outline-variant)', opacity: 0.2, display: 'flex' }}><I.Git s={28} /></span>
-          <div className="text-[11px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.5 }}>Not a git repository</div>
+          <span style={{ color: GIT.mutedSub, opacity: 0.15, display: 'flex' }}><I.Git s={28} /></span>
+          <div style={{ fontSize: 11, color: GIT.mutedSub, opacity: 0.5, fontFamily: GIT.fontUi }}>Not a git repository</div>
           <button onClick={init} disabled={loading}
-            className="text-[12px] font-semibold rounded-[8px] px-4 py-2 transition-all hover:brightness-110 active:scale-[0.97]"
-            style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}
+            className="font-medium rounded-md px-4 py-2 transition-all hover:brightness-110 active:scale-95"
+            style={{ fontSize: 12, background: GIT.accent, color: '#fff', border: 'none', fontFamily: GIT.fontUi }}
           >{loading ? 'Initializing…' : 'Init Repository'}</button>
         </div>
       </div>
     )
     return (
-      <div style={{ ...CARD.surface, overflow: 'visible', margin: '16px 8px', borderColor: 'rgba(239,68,68,0.3)' }}>
+      <div style={{ ...CARD.surface, overflow: 'visible', margin: '16px 8px', border: `1px solid color-mix(in srgb, var(--text-red, #f87171) 30%, transparent)` }}>
         <div className="flex flex-col items-center gap-2 py-6 px-4">
-          <span style={{ color: '#ef4444', opacity: 0.6, display: 'flex' }}><I.Alert s={16} /></span>
-          <div className="text-[11px] text-center leading-relaxed" style={{ color: '#ef4444', opacity: 0.8 }}>{error}</div>
+          <span style={{ color: GIT.error, opacity: 0.6, display: 'flex' }}><I.Alert s={16} /></span>
+          <div className="text-center leading-relaxed" style={{ fontSize: 11, color: GIT.error, opacity: 0.8, fontFamily: GIT.fontUi }}>{error}</div>
         </div>
       </div>
     )
@@ -557,7 +588,7 @@ export function GitView() {
 
   if (loading && !status) return (
     <div className="flex items-center justify-center h-full">
-      <div className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
+      <div className="flex items-center gap-2" style={{ fontSize: 11, color: GIT.mutedSub, fontFamily: GIT.fontUi }}>
         <I.Spinner s={11} /> Loading…
       </div>
     </div>
@@ -569,10 +600,10 @@ export function GitView() {
       <AnimatePresence>
         {error && (
           <motion.div initial={{ opacity: 0, y: -6, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: -6, height: 0 }} className="overflow-hidden">
-            <div style={{ margin: '4px 8px 0', padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ margin: '4px 8px 0', padding: '8px 12px', background: 'color-mix(in srgb, var(--text-red, #f87171) 10%, transparent)', border: `1px solid color-mix(in srgb, var(--text-red, #f87171) 25%, transparent)`, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
               <I.Alert s={11} />
-              <span className="flex-1 text-[10px]" style={{ color: '#ef4444' }}>{error}</span>
-              <button onClick={clearError} className="hover:opacity-70 transition-opacity" style={{ color: '#ef4444' }}><I.Close s={8} /></button>
+              <span className="flex-1" style={{ fontSize: 10, color: GIT.error, fontFamily: GIT.fontUi }}>{error}</span>
+              <button onClick={clearError} className="hover:opacity-70 transition-opacity" style={{ color: GIT.error }}><I.Close s={8} /></button>
             </div>
           </motion.div>
         )}
@@ -582,43 +613,47 @@ export function GitView() {
       {branch && (
         <div className="flex flex-col shrink-0" style={{ padding: '7px 12px 0' }}>
           <div className="flex items-center gap-1.5">
-            <span className="shrink-0" style={{ color: 'var(--accent-primary)' }}><I.Branch s={13} /></span>
-            <span className="text-[12px] font-semibold truncate min-w-0 flex-1" style={{ color: 'var(--text-on-surface)' }}>{branch}</span>
+            <span className="shrink-0" style={{ color: GIT.accent }}><I.Branch s={13} /></span>
+            <span className="truncate min-w-0 flex-1" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', fontFamily: GIT.fontMono }}>{branch}</span>
             {(status!.ahead > 0 || status!.behind > 0) && (
               <div className="flex items-center gap-1 shrink-0">
                 {status!.ahead > 0 && (
-                  <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: 'var(--accent-primary)', background: 'rgba(59,130,246,0.12)' }}>
+                  <span className="flex items-center gap-0.5 tabular-nums px-1.5 py-0.5 rounded-full" style={{ fontSize: 9, fontWeight: 600, color: GIT.accent, background: 'color-mix(in srgb, var(--text-blue, #60a5fa) 12%, transparent)', fontFamily: GIT.fontUi }}>
                     <I.Up s={8} />{status!.ahead}
                   </span>
                 )}
                 {status!.behind > 0 && (
-                  <span className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full" style={{ color: '#ef4444', background: 'rgba(239,68,68,0.12)' }}>
+                  <span className="flex items-center gap-0.5 tabular-nums px-1.5 py-0.5 rounded-full" style={{ fontSize: 9, fontWeight: 600, color: GIT.error, background: 'color-mix(in srgb, var(--text-red, #f87171) 12%, transparent)', fontFamily: GIT.fontUi }}>
                     <I.Down s={8} />{status!.behind}
                   </span>
                 )}
               </div>
             )}
-            <div className="shrink-0 flex items-center gap-0.5" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 8, marginLeft: 2 }}>
+            <div className="shrink-0 flex items-center gap-0.5" style={{ borderLeft: `1px solid ${GIT.rowBorder}`, paddingLeft: 8, marginLeft: 2 }}>
               <GlassIconBtn icon={<I.RotateCcw s={10} />} title="Refresh" onClick={refresh} disabled={loading} />
               <GlassIconBtn icon={sync === 'pull' ? <I.Spinner s={9} /> : <I.Down s={9} />} title="Pull" onClick={() => { setSync('pull'); pull().finally(() => setSync(null)) }} disabled={!!sync} />
               <GlassIconBtn icon={sync === 'push' ? <I.Spinner s={9} /> : <I.Up s={9} />} title="Push" onClick={() => { setSync('push'); push().finally(() => setSync(null)) }} disabled={!!sync} />
               <GlassIconBtn icon={sync === 'fetch' ? <I.Spinner s={9} /> : <I.Fetch s={9} />} title="Fetch" onClick={() => { setSync('fetch'); gitFetch().finally(() => setSync(null)) }} disabled={!!sync} />
             </div>
           </div>
-          <div style={{ margin: '6px 10% 0', borderTop: '2px solid var(--border-subtle)' }} />
+          <div style={{ margin: '6px 10% 0', borderTop: `2px solid ${GIT.rowBorder}` }} />
         </div>
       )}
 
       {/* ── Tab Bar ── */}
-      <div className="flex items-center shrink-0" style={{ padding: '4px 12px 8px 16px', gap: 0 }}>
+      <div className="flex items-center shrink-0" style={{ padding: '4px 12px 6px 16px', gap: 0 }}>
         {TABS.map((t, i) => (
           <span key={t.id} className="flex items-center shrink-0">
-            {i > 0 && <span style={{ borderLeft: '1px solid var(--border-subtle)', height: 14, margin: '0 8px', opacity: 0.5 }} />}
+            {i > 0 && <span style={{ borderLeft: `1px solid ${GIT.rowBorder}`, height: 14, margin: '0 8px', opacity: 0.5 }} />}
             <button
               onClick={() => setActiveTab(t.id)}
-              className="flex items-center gap-1.5 px-1.5 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150"
+              className="flex items-center gap-1.5 px-1.5 py-1.5 rounded-md transition-all duration-100"
               style={{
-                color: activeTab === t.id ? 'var(--accent-primary)' : '#8a8a8e',
+                fontSize: 11,
+                fontWeight: 500,
+                fontFamily: GIT.fontUi,
+                color: activeTab === t.id ? GIT.accent : GIT.mutedSub,
+                background: activeTab === t.id ? 'color-mix(in srgb, var(--accent-primary) 8%, transparent)' : 'transparent',
               }}
             >
               {t.icon}
@@ -654,11 +689,11 @@ export function GitView() {
 
       {/* ── Commit Area (sticky bottom, only for Changes tab) ── */}
       {activeTab === 'changes' && (
-        <div className="shrink-0" style={{ padding: '8px 6px 8px', borderTop: '1.5px solid var(--border-default)' }}>
+        <div className="shrink-0" style={{ padding: '8px 6px 8px', borderTop: `1.5px solid ${GIT.cardBorder}` }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: 'var(--bg-surface-container-high)',
-            border: '1px solid var(--border-subtle)',
+            border: `1px solid ${GIT.rowBorder}`,
             borderRadius: 10,
             padding: '6px 8px',
           }}>
@@ -667,16 +702,16 @@ export function GitView() {
               placeholder="Commit message…"
               rows={1}
               className="flex-1 text-[12px] outline-none resize-none bg-transparent"
-              style={{ color: 'var(--text-on-surface)', minHeight: 20, maxHeight: 80 }}
+              style={{ color: 'var(--text-on-surface)', minHeight: 20, maxHeight: 80, fontFamily: GIT.fontUi }}
               onInput={(e) => { e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px' }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doCommit() }
               }}
             />
             <button onClick={doCommit} disabled={!msg.trim() || loading}
-              className="shrink-0 flex items-center justify-center rounded-[7px] transition-all duration-150 disabled:opacity-30 hover:brightness-110 active:scale-[0.95]"
+              className="shrink-0 flex items-center justify-center rounded-lg transition-all duration-100 disabled:opacity-30 hover:brightness-110 active:scale-95"
               style={{
-                background: 'var(--accent-primary)', color: '#fff', border: 'none',
+                background: GIT.accent, color: '#fff', border: 'none',
                 cursor: loading ? 'wait' : 'pointer',
                 width: 30, height: 30,
               }}
