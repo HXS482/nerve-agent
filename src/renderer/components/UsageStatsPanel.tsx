@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useChatStore } from '../stores/chatStore'
 import { UsageStats } from '../../shared/types'
 
 const ROWS = 7 // Sun=0 .. Sat=6
-
-interface MonthLabel { name: string; col: number }
 
 /** UTC-safe date key — avoids toISOString timezone offset */
 function toDateKey(d: Date): string {
@@ -13,7 +12,7 @@ function toDateKey(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { grid: (number | null)[][]; months: MonthLabel[]; maxVal: number } {
+function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { grid: (number | null)[][]; maxVal: number } {
   const now = new Date()
   const todayDow = now.getUTCDay()
 
@@ -35,11 +34,8 @@ function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { g
   const totalWeeks = Math.ceil(totalMs / (7 * 86_400_000)) + 1
 
   const grid: (number | null)[][] = Array.from({ length: ROWS }, () => new Array(totalWeeks).fill(null))
-  const months: MonthLabel[] = []
-  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
   let maxVal = 0
-  let lastMonth = -1
 
   for (let week = 0; week < totalWeeks; week++) {
     for (let day = 0; day < ROWS; day++) {
@@ -51,15 +47,10 @@ function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { g
       const count = countMap[key] || 0
       grid[day][week] = count
       if (count > maxVal) maxVal = count
-
-      if (day === 0) {
-        const m = cellDate.getUTCMonth()
-        if (m !== lastMonth) { months.push({ name: MONTH_NAMES[m], col: week }); lastMonth = m }
-      }
     }
   }
 
-  return { grid, months, maxVal }
+  return { grid, maxVal }
 }
 
 const CELL = 10
@@ -68,6 +59,7 @@ const GAP = 2
 export function UsageStatsPanel() {
   const [stats, setStats] = useState<UsageStats | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const theme = useChatStore((s) => s.theme)
   const scrollRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const [scrollRatio, setScrollRatio] = useState(0)
@@ -79,8 +71,8 @@ export function UsageStatsPanel() {
     window.claude.getUsageStats().then((s: UsageStats) => setStats(s)).catch(() => {})
   }, [])
 
-  const { grid, months, maxVal } = useMemo(() => {
-    if (!stats) return { grid: [], months: [], maxVal: 0 }
+  const { grid, maxVal } = useMemo(() => {
+    if (!stats) return { grid: [], maxVal: 0 }
     return buildYearGrid(stats.dailyActivity)
   }, [stats])
 
@@ -136,9 +128,6 @@ export function UsageStatsPanel() {
 
   if (!stats || grid.length === 0) return null
 
-  const totalWeeks = grid[0]?.length || 0
-  const gridWidth = totalWeeks * (CELL + GAP)
-
   return (
     <div style={{ marginBottom: 4 }}>
       {/* Header */}
@@ -165,70 +154,55 @@ export function UsageStatsPanel() {
 
       {!collapsed && (
         <div style={{ padding: '0 6px 6px' }}>
-          {/* Heatmap card — hairline only, no shadow */}
+          {/* Heatmap card — glassmorphism like functional island */}
           <div
-            className="rounded-lg"
+            className={`rounded-[10px] ${theme === 'aurora' ? 'dynamic-island' : ''}`}
             style={{
-              background: 'var(--bg-surface-container)',
-              border: '1px solid var(--border-subtle)',
+              background: theme === 'aurora'
+                ? undefined
+                : theme === 'light'
+                  ? 'rgba(255, 255, 255, 0.6)'
+                  : 'rgba(30, 30, 32, 0.6)',
+              backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
+              border: theme === 'aurora'
+                ? '1px solid var(--glass-border)'
+                : theme === 'light'
+                  ? '1px solid rgba(0,0,0,0.06)'
+                  : '1px solid rgba(255,255,255,0.08)',
               overflow: 'hidden',
             }}
           >
             <div
               ref={scrollRef}
-              style={{ overflowX: 'hidden', overflowY: 'hidden', padding: '10px 8px 4px' }}
+              style={{ overflowX: 'hidden', overflowY: 'hidden', padding: '8px' }}
             >
-              {/* Month labels */}
-              <div style={{ position: 'relative', height: 14, marginLeft: 22, width: gridWidth }}>
-                {months.map((m) => (
-                  <span
-                    key={m.name + m.col}
-                    className="text-[8px] absolute"
-                    style={{ color: 'var(--text-outline-variant)', left: m.col * (CELL + GAP), top: 0, letterSpacing: '0.3px' }}
-                  >
-                    {m.name}
-                  </span>
+              {/* Grid — fills container uniformly */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: GAP, flexShrink: 0 }}>
+                {grid.map((row, ri) => (
+                  <div key={ri} style={{ display: 'flex', gap: GAP }}>
+                    {row.map((val, ci) => {
+                      const intensity = maxVal > 0 && val !== null ? val / maxVal : 0
+                      const isNull = val === null
+                      return (
+                        <div
+                          key={ci}
+                          style={{
+                            width: CELL,
+                            height: CELL,
+                            borderRadius: 2,
+                            background: isNull
+                              ? 'transparent'
+                              : intensity > 0
+                                ? `rgba(99, 148, 255, ${0.12 + intensity * 0.88})`
+                                : theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
                 ))}
-              </div>
-
-              {/* Grid body */}
-              <div style={{ display: 'flex', gap: GAP }}>
-                {/* Day-of-week labels */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: GAP, paddingRight: 3 }}>
-                  {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((label, i) => (
-                    <div key={i} style={{ width: 22, height: CELL, display: 'flex', alignItems: 'center' }}>
-                      <span className="text-[8px]" style={{ color: 'var(--text-outline-variant)', letterSpacing: '0.3px' }}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Cells */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: GAP, flexShrink: 0 }}>
-                  {grid.map((row, ri) => (
-                    <div key={ri} style={{ display: 'flex', gap: GAP }}>
-                      {row.map((val, ci) => {
-                        const intensity = maxVal > 0 && val !== null ? val / maxVal : 0
-                        const isNull = val === null
-                        return (
-                          <div
-                            key={ci}
-                            style={{
-                              width: CELL,
-                              height: CELL,
-                              borderRadius: 2,
-                              background: isNull
-                                ? 'transparent'
-                                : intensity > 0
-                                  ? `rgba(99, 148, 255, ${0.12 + intensity * 0.88})`
-                                  : 'var(--bg-surface-container-highest)',
-                              flexShrink: 0,
-                            }}
-                          />
-                        )
-                      })}
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -239,7 +213,7 @@ export function UsageStatsPanel() {
             style={{
               height: 2,
               borderRadius: 1,
-              background: 'var(--bg-surface-container-highest)',
+              background: theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)',
               marginTop: 8,
               position: 'relative',
               cursor: 'pointer',
@@ -248,6 +222,19 @@ export function UsageStatsPanel() {
             }}
             onClick={handleTrackClick}
           >
+            {/* Invisible hit area for easier grabbing */}
+            <div
+              style={{
+                position: 'absolute',
+                top: -8,
+                left: 0,
+                right: 0,
+                height: 18,
+                cursor: 'grab',
+              }}
+              onMouseDown={(e) => { e.stopPropagation(); handleDragStart(e) }}
+            />
+            {/* Visible dot */}
             <div
               style={{
                 position: 'absolute',
@@ -256,12 +243,11 @@ export function UsageStatsPanel() {
                 height: 8,
                 borderRadius: '50%',
                 background: 'var(--text-on-surface-variant)',
-                transform: `translate(-50%, -50%)`,
+                transform: 'translate(-50%, -50%)',
                 left: `${Math.min(scrollRatio * 100, 100)}%`,
-                cursor: 'grab',
+                pointerEvents: 'none',
                 transition: dragging.current ? 'none' : 'left 0.1s ease-out',
               }}
-              onMouseDown={handleDragStart}
             />
           </div>
         </div>
