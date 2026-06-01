@@ -802,6 +802,11 @@ export class ClaudeService {
     return this.registry.listProviders()
   }
 
+  async getUsageStats() {
+    const store = await this.ensureSessionStore()
+    return store.getUsageStats()
+  }
+
   async close() {
     if (this.memoryCore) {
       await this.memoryCore.destroy().catch((err) => console.error('[TDAI] destroy failed:', err))

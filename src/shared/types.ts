@@ -53,6 +53,8 @@ export const IPC_CHANNELS = {
   GET_PROVIDERS: 'nerve:get-providers',
   // Session usage
   GET_SESSION_USAGE: 'nerve:get-session-usage',
+  // Aggregate usage stats
+  GET_USAGE_STATS: 'nerve:get-usage-stats',
   // Images / Gallery
   IMAGE_SAVE: 'nerve:image-save',
   IMAGE_LIST: 'nerve:image-list',
@@ -261,6 +263,22 @@ export interface SessionUsage {
   totalTokens: number
   compactionCount: number
   maxContextTokens: number
+}
+
+// Aggregate usage stats across all sessions
+export interface UsageStats {
+  totalSessions: number
+  totalMessages: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  // ISO date string → { messages, tokens }
+  dailyActivity: Record<string, { messages: number; tokens: number }>
+  // 24-slot hourly distribution (message counts)
+  hourlyDistribution: number[]
+  // model alias → message count
+  modelUsage: Record<string, number>
+  // earliest session timestamp (ms)
+  firstSessionAt: number
 }
 
 // Provider info

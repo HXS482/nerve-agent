@@ -150,6 +150,10 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     return claude.getSessionUsage(sessionId)
   })
 
+  ipcMain.handle(IPC_CHANNELS.GET_USAGE_STATS, () => {
+    return claude.getUsageStats()
+  })
+
   // Pet skins
   ipcMain.handle(IPC_CHANNELS.PET_LIST_SKINS, () => {
     return skinManager.listSkins()

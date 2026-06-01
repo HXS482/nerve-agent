@@ -107,6 +107,8 @@ const api = {
   // Session usage
   getSessionUsage: (sessionId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_SESSION_USAGE, sessionId),
+  // Aggregate usage stats
+  getUsageStats: () => ipcRenderer.invoke(IPC_CHANNELS.GET_USAGE_STATS),
   // Images / Gallery
   saveImage: (filename: string, buffer: ArrayBuffer, source?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.IMAGE_SAVE, { filename, buffer, source }),

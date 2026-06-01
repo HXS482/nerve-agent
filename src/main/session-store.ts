@@ -252,6 +252,86 @@ export class FileSessionStore {
     return summaries
   }
 
+  async getUsageStats(): Promise<{
+    totalSessions: number
+    totalMessages: number
+    totalInputTokens: number
+    totalOutputTokens: number
+    dailyActivity: Record<string, { messages: number; tokens: number }>
+    hourlyDistribution: number[]
+    modelUsage: Record<string, number>
+    firstSessionAt: number
+  }> {
+    const sessions = await this.listSessions()
+    let totalSessions = 0
+    let totalMessages = 0
+    let totalInputTokens = 0
+    let totalOutputTokens = 0
+    const dailyActivity: Record<string, { messages: number; tokens: number }> = {}
+    const hourlyDistribution = new Array(24).fill(0)
+    const modelUsage: Record<string, number> = {}
+    let firstSessionAt = Infinity
+
+    for (const { sessionId, mtime } of sessions) {
+      totalSessions++
+      if (mtime < firstSessionAt) firstSessionAt = mtime
+
+      let entries: unknown[] | null
+      try {
+        entries = await this.load({ sessionId })
+      } catch { continue }
+      if (!entries) continue
+
+      for (const entry of entries) {
+        const e = entry as Record<string, unknown>
+        const rawTs = e.timestamp
+        const ts = typeof rawTs === 'number' ? rawTs
+          : typeof rawTs === 'string' ? new Date(rawTs).getTime() || mtime
+          : mtime
+
+        if (e.type === 'user' || e.type === 'assistant') {
+          totalMessages++
+          const dateKey = new Date(ts).toISOString().slice(0, 10)
+          if (!dailyActivity[dateKey]) dailyActivity[dateKey] = { messages: 0, tokens: 0 }
+          dailyActivity[dateKey].messages++
+
+          const hour = new Date(ts).getHours()
+          hourlyDistribution[hour]++
+        }
+
+        if (e.type === 'assistant') {
+          const usage = e.usage as Record<string, number> | undefined
+          if (usage) {
+            const inp = usage.inputTokens || 0
+            const out = usage.outputTokens || 0
+            totalInputTokens += inp
+            totalOutputTokens += out
+            const dateKey = new Date(ts).toISOString().slice(0, 10)
+            if (dailyActivity[dateKey]) dailyActivity[dateKey].tokens += inp + out
+          }
+          const model = e.model as string | undefined
+          if (model) {
+            const alias = model.includes('/') ? model.split('/').pop()! : model
+            modelUsage[alias] = (modelUsage[alias] || 0) + 1
+          }
+        }
+      }
+    }
+
+    if (firstSessionAt === Infinity) firstSessionAt = 0
+
+    return {
+      totalSessions,
+      totalMessages,
+      totalInputTokens,
+      totalOutputTokens,
+      dailyActivity,
+      hourlyDistribution,
+      modelUsage,
+      firstSessionAt,
+    }
+  }
+
   async delete(key: SessionKey): Promise<void> {
     const filePath = this.entryPath(key.sessionId)
     try {

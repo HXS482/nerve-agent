@@ -5,6 +5,7 @@ import { PetPixelArt, ColorScheme } from './PetPixelArt'
 import { PetSkin } from '../../shared/types'
 import { GradientButtonGroup } from './GradientButtonGroup'
 import { MemoryBrowser } from './MemoryBrowser'
+import { UsageStatsPanel } from './UsageStatsPanel'
 
 interface SidebarProps {
   onNewChat: () => void
@@ -186,6 +187,8 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '12px 10px' }}>
+        <UsageStatsPanel />
+
         <h3
           className="px-1.5 mb-1.5 uppercase tracking-wider text-[10px] font-medium cursor-pointer select-none"
           style={{ color: 'var(--text-outline-variant)', letterSpacing: '0.6px' }}
