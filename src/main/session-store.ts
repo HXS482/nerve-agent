@@ -291,7 +291,8 @@ export class FileSessionStore {
 
         if (e.type === 'user' || e.type === 'assistant') {
           totalMessages++
-          const dateKey = new Date(ts).toISOString().slice(0, 10)
+          const d = new Date(ts)
+          const dateKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
           if (!dailyActivity[dateKey]) dailyActivity[dateKey] = { messages: 0, tokens: 0 }
           dailyActivity[dateKey].messages++
 
@@ -306,7 +307,8 @@ export class FileSessionStore {
             const out = usage.outputTokens || 0
             totalInputTokens += inp
             totalOutputTokens += out
-            const dateKey = new Date(ts).toISOString().slice(0, 10)
+            const td = new Date(ts)
+            const dateKey = `${td.getUTCFullYear()}-${String(td.getUTCMonth() + 1).padStart(2, '0')}-${String(td.getUTCDate()).padStart(2, '0')}`
             if (dailyActivity[dateKey]) dailyActivity[dateKey].tokens += inp + out
           }
           const model = e.model as string | undefined

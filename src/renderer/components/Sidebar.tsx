@@ -190,10 +190,14 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
         <UsageStatsPanel />
 
         <h3
-          className="px-1.5 mb-1.5 uppercase tracking-wider text-[10px] font-medium cursor-pointer select-none"
-          style={{ color: 'var(--text-outline-variant)', letterSpacing: '0.6px' }}
+          className="flex items-center gap-1.5 px-1.5 mb-1.5 text-[11px] font-medium cursor-pointer select-none"
+          style={{ color: 'var(--text-on-surface-variant)', letterSpacing: '0.4px', paddingLeft: '7px' }}
           onClick={() => setRecentOpen(!recentOpen)}
         >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
           Recent
         </h3>
         {recentOpen && (

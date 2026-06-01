@@ -5,18 +5,32 @@ const ROWS = 7 // Sun=0 .. Sat=6
 
 interface MonthLabel { name: string; col: number }
 
-function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { grid: (number | null)[][]; months: MonthLabel[]; maxVal: number } {
-  const today = new Date()
-  const todayDow = today.getDay()
-  const endDate = new Date(today)
-  const startDate = new Date(today)
-  startDate.setDate(startDate.getDate() - todayDow - 52 * 7)
+/** UTC-safe date key — avoids toISOString timezone offset */
+function toDateKey(d: Date): string {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
+function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { grid: (number | null)[][]; months: MonthLabel[]; maxVal: number } {
+  const now = new Date()
+  const todayDow = now.getUTCDay()
+
+  // End = today (UTC)
+  const endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+
+  // Start = 52 weeks before the Sunday of today's week
+  const startDate = new Date(endDate)
+  startDate.setUTCDate(startDate.getUTCDate() - todayDow - 52 * 7)
+
+  // Build count map
   const countMap: Record<string, number> = {}
   for (const [k, v] of Object.entries(dailyActivity)) {
     countMap[k] = v.messages
   }
 
+  // Compute total weeks
   const totalMs = endDate.getTime() - startDate.getTime()
   const totalWeeks = Math.ceil(totalMs / (7 * 86_400_000)) + 1
 
@@ -30,14 +44,16 @@ function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { g
   for (let week = 0; week < totalWeeks; week++) {
     for (let day = 0; day < ROWS; day++) {
       const cellDate = new Date(startDate)
-      cellDate.setDate(cellDate.getDate() + week * 7 + day)
+      cellDate.setUTCDate(cellDate.getUTCDate() + week * 7 + day)
       if (cellDate > endDate) { grid[day][week] = null; continue }
-      const key = cellDate.toISOString().slice(0, 10)
+
+      const key = toDateKey(cellDate)
       const count = countMap[key] || 0
       grid[day][week] = count
       if (count > maxVal) maxVal = count
+
       if (day === 0) {
-        const m = cellDate.getMonth()
+        const m = cellDate.getUTCMonth()
         if (m !== lastMonth) { months.push({ name: MONTH_NAMES[m], col: week }); lastMonth = m }
       }
     }
@@ -46,15 +62,15 @@ function buildYearGrid(dailyActivity: Record<string, { messages: number }>): { g
   return { grid, months, maxVal }
 }
 
-const CELL = 8
+const CELL = 10
 const GAP = 2
 
 export function UsageStatsPanel() {
   const [stats, setStats] = useState<UsageStats | null>(null)
   const [collapsed, setCollapsed] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
   const [scrollRatio, setScrollRatio] = useState(0)
-  const [thumbWidth, setThumbWidth] = useState(100)
   const dragging = useRef(false)
   const dragStartX = useRef(0)
   const dragStartScroll = useRef(0)
@@ -68,20 +84,12 @@ export function UsageStatsPanel() {
     return buildYearGrid(stats.dailyActivity)
   }, [stats])
 
-  // Sync scroll position → thumb position
   const syncScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const maxScroll = el.scrollWidth - el.clientWidth
-    if (maxScroll <= 0) {
-      setThumbWidth(100)
-      setScrollRatio(0)
-      return
-    }
+    if (maxScroll <= 0) { setScrollRatio(0); return }
     setScrollRatio(el.scrollLeft / maxScroll)
-    // Thumb width proportional to visible/total ratio
-    const ratio = el.clientWidth / el.scrollWidth
-    setThumbWidth(Math.max(20, ratio * 100))
   }, [])
 
   useEffect(() => {
@@ -92,25 +100,19 @@ export function UsageStatsPanel() {
     return () => el.removeEventListener('scroll', syncScroll)
   }, [syncScroll, collapsed])
 
-  // Drag handlers for custom thumb
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     dragging.current = true
     dragStartX.current = e.clientX
-    const el = scrollRef.current
-    dragStartScroll.current = el ? el.scrollLeft : 0
+    dragStartScroll.current = scrollRef.current?.scrollLeft || 0
 
     const onMove = (ev: MouseEvent) => {
-      if (!dragging.current || !scrollRef.current) return
+      if (!dragging.current || !scrollRef.current || !trackRef.current) return
       const el = scrollRef.current
       const maxScroll = el.scrollWidth - el.clientWidth
       if (maxScroll <= 0) return
-      const trackEl = (e.target as HTMLElement).parentElement
-      if (!trackEl) return
-      const trackWidth = trackEl.clientWidth
       const dx = ev.clientX - dragStartX.current
-      const scrollDx = (dx / trackWidth) * maxScroll
-      el.scrollLeft = dragStartScroll.current + scrollDx
+      el.scrollLeft = dragStartScroll.current + (dx / trackRef.current.clientWidth) * maxScroll
     }
 
     const onUp = () => {
@@ -123,20 +125,15 @@ export function UsageStatsPanel() {
     document.addEventListener('mouseup', onUp)
   }, [])
 
-  // Click on track to jump
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
     const el = scrollRef.current
     if (!el) return
     const maxScroll = el.scrollWidth - el.clientWidth
     if (maxScroll <= 0) return
-    const track = e.currentTarget as HTMLElement
-    const rect = track.getBoundingClientRect()
-    const clickX = e.clientX - rect.left
-    const ratio = clickX / rect.width
-    el.scrollLeft = ratio * maxScroll
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    el.scrollLeft = ((e.clientX - rect.left) / rect.width) * maxScroll
   }, [])
 
-  const totalTokens = stats ? stats.totalInputTokens + stats.totalOutputTokens : 0
   if (!stats || grid.length === 0) return null
 
   const totalWeeks = grid[0]?.length || 0
@@ -147,7 +144,7 @@ export function UsageStatsPanel() {
       {/* Header */}
       <div
         className="flex items-center justify-between cursor-pointer select-none"
-        style={{ padding: '6px 6px 4px' }}
+        style={{ padding: '6px 6px 4px 6px' }}
         onClick={() => setCollapsed(!collapsed)}
       >
         <div className="flex items-center gap-1.5">
@@ -168,7 +165,7 @@ export function UsageStatsPanel() {
 
       {!collapsed && (
         <div style={{ padding: '0 6px 6px' }}>
-          {/* Heatmap card */}
+          {/* Heatmap card — hairline only, no shadow */}
           <div
             className="rounded-lg"
             style={{
@@ -177,10 +174,9 @@ export function UsageStatsPanel() {
               overflow: 'hidden',
             }}
           >
-            {/* Hidden overflow scroll container */}
             <div
               ref={scrollRef}
-              style={{ overflowX: 'hidden', overflowY: 'hidden', padding: '8px 6px 2px' }}
+              style={{ overflowX: 'hidden', overflowY: 'hidden', padding: '10px 8px 4px' }}
             >
               {/* Month labels */}
               <div style={{ position: 'relative', height: 14, marginLeft: 22, width: gridWidth }}>
@@ -216,10 +212,10 @@ export function UsageStatsPanel() {
                         return (
                           <div
                             key={ci}
-                            className="rounded-sm"
                             style={{
                               width: CELL,
                               height: CELL,
+                              borderRadius: 2,
                               background: isNull
                                 ? 'transparent'
                                 : intensity > 0
@@ -237,8 +233,9 @@ export function UsageStatsPanel() {
             </div>
           </div>
 
-          {/* Custom external scrollbar — dot on line */}
+          {/* Scrollbar — dot on line, no shadow */}
           <div
+            ref={trackRef}
             style={{
               height: 2,
               borderRadius: 1,
@@ -255,19 +252,16 @@ export function UsageStatsPanel() {
               style={{
                 position: 'absolute',
                 top: '50%',
-                width: 10,
-                height: 10,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
                 background: 'var(--text-on-surface-variant)',
-                transform: `translate(-50%, -50%) translateX(${scrollRatio * 100}%)`,
+                transform: `translate(-50%, -50%)`,
                 left: `${Math.min(scrollRatio * 100, 100)}%`,
                 cursor: 'grab',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-                transition: dragging.current ? 'none' : 'box-shadow 0.15s',
+                transition: dragging.current ? 'none' : 'left 0.1s ease-out',
               }}
               onMouseDown={handleDragStart}
-              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,148,255,0.25), 0 1px 4px rgba(0,0,0,0.3)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.3)' }}
             />
           </div>
         </div>
