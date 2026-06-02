@@ -135,6 +135,14 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
       if (abortSignal?.aborted) break
 
       onToolCall?.(block.id, block.name, block.input)
+
+      if ((block as any)._jsonParseError) {
+        const errorContent = `Tool "${block.name}" received malformed arguments from model (JSON parse failed)`
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: errorContent, is_error: true })
+        onToolResult?.(block.id, errorContent, true)
+        continue
+      }
+
       const executor = toolExecutors.get(block.name)
 
       if (!executor) {
@@ -151,8 +159,9 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
           `tool:${block.name}`,
         )
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr.slice(0, 50000) })
-        onToolResult?.(block.id, resultStr.slice(0, 50000))
+        const isToolError = typeof result === 'object' && result !== null && 'error' in result
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr.slice(0, 50000), ...(isToolError ? { is_error: true } : {}) })
+        onToolResult?.(block.id, resultStr.slice(0, 50000), isToolError || undefined)
         onAfterToolCall?.(block.name, block.id, block.input, result)
       } catch (err: any) {
         const errMsg = err.message || 'Tool execution failed'
@@ -311,8 +320,9 @@ async function callStreaming(
             content.push({ type: 'thinking', thinking: thinkingText, reasoning_content: thinkingText })
           } else if (currentBlock.type === 'tool_use') {
             let parsedInput: any = {}
-            try { parsedInput = currentJsonInput ? JSON.parse(currentJsonInput) : {} } catch { parsedInput = {} }
-            content.push({ type: 'tool_use', id: currentBlock.id, name: currentBlock.name, input: parsedInput })
+            let jsonOk = true
+            try { parsedInput = currentJsonInput ? JSON.parse(currentJsonInput) : {} } catch { jsonOk = false; console.error(`[Stream] tool_use JSON parse failed: ${currentBlock.name}`, currentJsonInput.slice(0, 200)) }
+            content.push({ type: 'tool_use', id: currentBlock.id, name: currentBlock.name, input: parsedInput, ...(jsonOk ? {} : { _jsonParseError: true }) })
           }
           currentBlock = null
         }
@@ -333,8 +343,9 @@ async function callStreaming(
         content.push({ type: 'thinking', thinking: t, reasoning_content: t })
       } else if (currentBlock.type === 'tool_use') {
         let parsedInput: any = {}
-        try { parsedInput = currentJsonInput ? JSON.parse(currentJsonInput) : {} } catch { parsedInput = {} }
-        content.push({ type: 'tool_use', id: currentBlock.id, name: currentBlock.name, input: parsedInput })
+        let jsonOk = true
+        try { parsedInput = currentJsonInput ? JSON.parse(currentJsonInput) : {} } catch { jsonOk = false; console.error(`[Stream] tool_use JSON parse failed (flush): ${currentBlock.name}`, currentJsonInput.slice(0, 200)) }
+        content.push({ type: 'tool_use', id: currentBlock.id, name: currentBlock.name, input: parsedInput, ...(jsonOk ? {} : { _jsonParseError: true }) })
       }
       currentBlock = null
     }
@@ -475,9 +486,15 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
     try {
     for await (const chunk of stream) {
       if (abortSignal?.aborted || callAbort.signal.aborted) break
-      const delta = chunk.choices[0]?.delta
+
+      // Usage-only chunk (final chunk with include_usage) has empty choices
+      totalInput += chunk.usage?.prompt_tokens ?? 0
+      totalOutput += chunk.usage?.completion_tokens ?? 0
+
       const choice = chunk.choices[0]
-      if (choice?.finish_reason) finishReason = choice.finish_reason
+      if (!choice) continue
+      if (choice.finish_reason) finishReason = choice.finish_reason
+      const delta = choice.delta
       if (!delta) continue
 
       if (delta.content) {
@@ -502,8 +519,6 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         }
       }
 
-      totalInput += chunk.usage?.prompt_tokens ?? 0
-      totalOutput += chunk.usage?.completion_tokens ?? 0
     }
     } finally {
       clearTimeout(timeout)
@@ -537,7 +552,8 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
     for (const [, acc] of toolCallAccumulators) {
       let input: any
-      try { input = JSON.parse(acc.arguments) } catch { input = {} }
+      let jsonOk = true
+      try { input = JSON.parse(acc.arguments) } catch { jsonOk = false; input = {}; console.error(`[AgenticLoop] tool_call JSON parse failed: ${acc.name}`, acc.arguments.slice(0, 200)) }
 
       assistantMsg.tool_calls.push({
         id: acc.id,
@@ -546,6 +562,14 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       })
 
       onToolCall?.(acc.id, acc.name, input)
+
+      if (!jsonOk) {
+        const errorContent = `Tool "${acc.name}" received malformed arguments from model (JSON parse failed)`
+        toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: errorContent })
+        onToolResult?.(acc.id, errorContent, true)
+        continue
+      }
+
       const executor = toolExecutors.get(acc.name)
       if (!executor) {
         const errorContent = `Tool "${acc.name}" not found`
@@ -556,8 +580,9 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       try {
         const result = await withTimeout(executor(input), TOOL_TIMEOUT_MS, `tool:${acc.name}`)
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
+        const isToolError = typeof result === 'object' && result !== null && 'error' in result
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: resultStr.slice(0, 50000) })
-        onToolResult?.(acc.id, resultStr.slice(0, 50000))
+        onToolResult?.(acc.id, resultStr.slice(0, 50000), isToolError || undefined)
         onAfterToolCall?.(acc.name, acc.id, input, result)
       } catch (err: any) {
         const errMsg = err.message || 'Tool execution failed'
