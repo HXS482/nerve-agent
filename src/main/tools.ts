@@ -201,7 +201,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             return { output: output + `\n\n[Auto-saved ${saved.join(', ')}]`, savedImages: movedImages, savedArtifacts: movedArtifacts }
           }
 
-          return { output }
+          return { output, ...(err ? { error: err } : {}) }
         } catch (err: any) {
           if (err.killed) return { error: 'Command timed out (120s)' }
           const out = (err.stdout || '').replace(/\r\n/g, '\n')
@@ -495,9 +495,10 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
           gitNotify?.refresh()
           const result = `Committed: ${message} [${steps.join(' → ')}]`
-          return warnings.length > 0
-            ? { success: true, message: result, warnings }
-            : { success: true, message: result }
+          if (warnings.length > 0) {
+            return { success: true, message: result, warnings, error: warnings.join('; ') }
+          }
+          return { success: true, message: result }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Commit failed' }
         }
