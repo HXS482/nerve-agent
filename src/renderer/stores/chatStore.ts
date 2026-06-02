@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { ChatMessage, ClaudeConfig, Theme, ModelInfo, SessionUsage, ProviderInfo } from '../../shared/types'
+import { ChatMessage, ClaudeConfig, Theme, ModelInfo, SessionUsage, ProviderInfo, ToolApprovalRequest } from '../../shared/types'
 
 const MAX_FLOW_ITEMS = 30
 
@@ -63,6 +63,11 @@ interface ChatState {
 
   // Flow event stream
   flowItems: FlowItem[]
+
+  // Tool approvals
+  pendingApprovals: ToolApprovalRequest[]
+  addApproval: (req: ToolApprovalRequest) => void
+  removeApproval: (approvalId: string) => void
 
   // Chat actions
   addMessage: (msg: ChatMessage) => void
@@ -164,6 +169,11 @@ export const useChatStore = create<ChatState>()(
 
       // Flow event stream
       flowItems: [],
+
+      // Tool approvals
+      pendingApprovals: [],
+      addApproval: (req) => set((s) => ({ pendingApprovals: [...s.pendingApprovals, req] })),
+      removeApproval: (approvalId) => set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.approvalId !== approvalId) })),
 
       // Chat actions
       addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),

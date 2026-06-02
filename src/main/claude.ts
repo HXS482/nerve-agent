@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
-import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, PetState, SessionUsage, ProviderInfo, ContentBlock, FileAttachment } from '../shared/types'
+import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, PetState, SessionUsage, ProviderInfo, ContentBlock, FileAttachment, ToolApprovalRequest, ToolApprovalResponse } from '../shared/types'
 
 function buildUserContentBlocks(payload: SendMessagePayload): ContentBlock[] {
   const blocks: ContentBlock[] = []
@@ -74,6 +74,7 @@ export class ClaudeService {
   private registry: ProviderRegistry
   private mcpPool: McpPool
   private pendingToolCalls = new Map<string, { name: string; input: any }>()
+  private pendingApprovals = new Map<string, { resolve: (approved: boolean) => void }>()
   private flowContentHashes = new Set<string>()
   private memoryCore: MemoryTdaiCore | null = null
   private offloadBridge: OffloadBridge | null = null
@@ -441,6 +442,20 @@ export class ClaudeService {
             })
             this.sendPetState('running-left')
           },
+          onToolApproval: this.config.permissionMode === 'bypassPermissions'
+            ? undefined
+            : async (id, name, input) => {
+                if (!this.needsApproval(name)) return true
+                const approvalId = `approve-${id}`
+                this.send(IPC_CHANNELS.TOOL_APPROVAL_REQUEST, {
+                  approvalId,
+                  toolName: name,
+                  toolInput: input,
+                } as ToolApprovalRequest)
+                return new Promise<boolean>((resolve) => {
+                  this.pendingApprovals.set(approvalId, { resolve })
+                })
+              },
           onToolResult: (id, content, isError) => {
             allToolResults.push({ toolCallId: id, content: content.slice(0, 50000), is_error: isError })
             const toolInfo = this.pendingToolCalls.get(id)
@@ -626,7 +641,35 @@ export class ClaudeService {
     if (this.currentAbort) {
       this.currentAbort.abort()
       this.pendingToolCalls.clear()
+      // Deny all pending approvals
+      for (const [, p] of this.pendingApprovals) p.resolve(false)
+      this.pendingApprovals.clear()
       this.sendPetState('idle')
+    }
+  }
+
+  // Tool risk classification
+  private static READ_ONLY_TOOLS = new Set(['Read', 'Glob', 'Grep'])
+  private static WRITE_TOOLS = new Set(['Write', 'Edit', 'GitStageAll', 'GitCommit', 'GitPull', 'GitInit'])
+
+  private needsApproval(toolName: string): boolean {
+    const mode = this.config.permissionMode
+    if (mode === 'bypassPermissions') return false
+    if (ClaudeService.READ_ONLY_TOOLS.has(toolName)) return false
+    if (mode === 'auto') return false // auto approves everything except read-only is already filtered
+    if (mode === 'acceptEdits') {
+      // Approve read + write, ask for destructive (Bash, subagents, etc.)
+      return !ClaudeService.WRITE_TOOLS.has(toolName)
+    }
+    // default: ask for everything non-read
+    return true
+  }
+
+  handleToolApprovalResponse(response: ToolApprovalResponse) {
+    const pending = this.pendingApprovals.get(response.approvalId)
+    if (pending) {
+      pending.resolve(response.approved)
+      this.pendingApprovals.delete(response.approvalId)
     }
   }
 

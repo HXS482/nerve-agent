@@ -65,6 +65,9 @@ export const IPC_CHANNELS = {
   // Brain
   BRAIN_SCAN: 'nerve:brain-scan',
   BRAIN_READ_FILE: 'nerve:brain-read-file',
+  // Tool approval
+  TOOL_APPROVAL_REQUEST: 'nerve:tool-approval-request',
+  TOOL_APPROVAL_RESPONSE: 'nerve:tool-approval-response',
   // Flow
   FLOW_ITEM: 'nerve:flow-item',
   OPEN_IN_BROWSER: 'nerve:open-in-browser',
@@ -203,7 +206,7 @@ export type ColorScheme = 'purple' | 'blue' | 'green' | 'pink' | 'orange'
 export type MessageRole = 'user' | 'assistant' | 'system'
 
 export interface ContentBlock {
-  type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image' | 'file'
+  type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image' | 'file' | 'approval'
   text?: string
   thinking?: string
   src?: string
@@ -217,6 +220,9 @@ export interface ContentBlock {
   fileSize?: number
   mimeType?: string
   fileContent?: string
+  approvalId?: string
+  approved?: boolean
+  reason?: string
 }
 
 export interface ChatMessage {
@@ -395,4 +401,15 @@ export interface GitStashEntry {
   message: string
   date: string
   index: number
+}
+
+export interface ToolApprovalRequest {
+  approvalId: string
+  toolName: string
+  toolInput: Record<string, unknown>
+}
+
+export interface ToolApprovalResponse {
+  approvalId: string
+  approved: boolean
 }
