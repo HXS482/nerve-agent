@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
-import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment } from '../../shared/types'
+import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment, ToolApprovalRequest, ToolApprovalResponse } from '../../shared/types'
 
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
 
@@ -16,6 +16,8 @@ declare global {
       setProvider: (providerId: string) => Promise<void>
       setCwd: (cwd: string) => Promise<void>
       setPermissionMode: (mode: string) => Promise<void>
+      respondToolApproval: (response: ToolApprovalResponse) => Promise<void>
+      onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => () => void
       pickDirectory: () => Promise<string | null>
       pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
@@ -473,6 +475,11 @@ export function useClaude() {
       })
     })
 
+    // Tool approval requests from main process
+    const unsubApproval = window.claude.onToolApprovalRequest((req) => {
+      useChatStore.getState().addApproval(req)
+    })
+
     return () => {
       if (flushTimer.current) {
         clearTimeout(flushTimer.current)
@@ -484,6 +491,7 @@ export function useClaude() {
       unsubDone()
       unsubStreamClear()
       unsubFlowItem()
+      unsubApproval()
     }
   }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions])
 
@@ -608,6 +616,11 @@ export function useClaude() {
     return window.claude.branchSession(sessionId, fromEntryId, branchName)
   }, [])
 
+  const respondApproval = useCallback((approvalId: string, approved: boolean) => {
+    useChatStore.getState().removeApproval(approvalId)
+    window.claude.respondToolApproval({ approvalId, approved })
+  }, [])
+
   return {
     messages,
     isLoading,
@@ -622,5 +635,6 @@ export function useClaude() {
     listBranches,
     switchBranch,
     branchSession,
+    respondApproval,
   }
 }

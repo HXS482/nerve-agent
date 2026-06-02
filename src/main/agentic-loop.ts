@@ -22,6 +22,7 @@ export interface AgenticLoopParams {
   onThinkingDelta?: (thinking: string) => void
   onToolCall?: (id: string, name: string, input: unknown) => void
   onToolResult?: (id: string, content: string, isError?: boolean) => void
+  onToolApproval?: (id: string, name: string, input: Record<string, unknown>) => Promise<boolean>
   onBeforeStep?: (messages: Array<{ role: string; content: unknown }>) => Promise<void>
   onAfterToolCall?: (toolName: string, toolCallId: string, params: unknown, result: unknown) => void
 }
@@ -59,7 +60,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // --- Anthropic streaming + non-streaming fallback ---
 
 async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
-  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onThinkingDelta, onToolCall, onToolResult, onBeforeStep, onAfterToolCall } = params
+  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onThinkingDelta, onToolCall, onToolResult, onToolApproval, onBeforeStep, onAfterToolCall } = params
   const maxSteps = params.maxSteps ?? 50
   const anthropic = client as Anthropic
 
@@ -135,6 +136,17 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
       if (abortSignal?.aborted) break
 
       onToolCall?.(block.id, block.name, block.input)
+
+      // Approval gate — ask user before executing (if onToolApproval is set)
+      if (onToolApproval) {
+        const approved = await onToolApproval(block.id, block.name, block.input)
+        if (!approved) {
+          const denyContent = `Tool "${block.name}" was denied by user`
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: denyContent, is_error: true })
+          onToolResult?.(block.id, denyContent, true)
+          continue
+        }
+      }
 
       if ((block as any)._jsonParseError) {
         const errorContent = `Tool "${block.name}" received malformed arguments from model (JSON parse failed)`
@@ -400,7 +412,7 @@ async function callNonStreaming(
 // --- OpenAI streaming loop ---
 
 async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
-  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onToolCall, onToolResult, onBeforeStep, onAfterToolCall } = params
+  const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onToolCall, onToolResult, onToolApproval, onBeforeStep, onAfterToolCall } = params
   const maxSteps = params.maxSteps ?? 50
   const openai = client as OpenAI
 
@@ -562,6 +574,17 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       })
 
       onToolCall?.(acc.id, acc.name, input)
+
+      // Approval gate
+      if (onToolApproval) {
+        const approved = await onToolApproval(acc.id, acc.name, input)
+        if (!approved) {
+          const denyContent = `Tool "${acc.name}" was denied by user`
+          toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: denyContent })
+          onToolResult?.(acc.id, denyContent, true)
+          continue
+        }
+      }
 
       if (!jsonOk) {
         const errorContent = `Tool "${acc.name}" received malformed arguments from model (JSON parse failed)`

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, FileAttachment } from '../shared/types'
+import { IPC_CHANNELS, FileAttachment, ToolApprovalRequest, ToolApprovalResponse } from '../shared/types'
 
 const api = {
   sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) =>
@@ -11,6 +11,13 @@ const api = {
   setCwd: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_CWD, cwd),
   setPermissionMode: (mode: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_PERMISSION_MODE, mode),
+  respondToolApproval: (response: ToolApprovalResponse) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TOOL_APPROVAL_RESPONSE, response),
+  onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => {
+    const handler = (_event: any, data: ToolApprovalRequest) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.TOOL_APPROVAL_REQUEST, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.TOOL_APPROVAL_REQUEST, handler)
+  },
   pickDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.PICK_DIRECTORY),
   pickAndReadFiles: (): Promise<FileAttachment[]> => ipcRenderer.invoke(IPC_CHANNELS.PICK_AND_READ_FILES),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),

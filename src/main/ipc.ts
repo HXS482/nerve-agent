@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { readdirSync, statSync, readFileSync } from 'fs'
 import { join, relative, extname, basename } from 'path'
-import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment } from '../shared/types'
+import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
 import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels } from './settings'
@@ -36,6 +36,10 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   ipcMain.handle(IPC_CHANNELS.SET_PERMISSION_MODE, (_event, mode: string) => {
     claude.setPermissionMode(mode as ClaudeConfig['permissionMode'])
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TOOL_APPROVAL_RESPONSE, (_event, response: ToolApprovalResponse) => {
+    claude.handleToolApprovalResponse(response)
   })
 
   ipcMain.handle(IPC_CHANNELS.PICK_DIRECTORY, async () => {
