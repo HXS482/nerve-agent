@@ -105,6 +105,7 @@ export function UsageStatsPanel() {
       if (maxScroll <= 0) return
       const dx = ev.clientX - dragStartX.current
       el.scrollLeft = dragStartScroll.current + (dx / trackRef.current.clientWidth) * maxScroll
+      syncScroll()
     }
 
     const onUp = () => {
@@ -115,7 +116,7 @@ export function UsageStatsPanel() {
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [])
+  }, [syncScroll])
 
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
     const el = scrollRef.current
@@ -124,7 +125,8 @@ export function UsageStatsPanel() {
     if (maxScroll <= 0) return
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     el.scrollLeft = ((e.clientX - rect.left) / rect.width) * maxScroll
-  }, [])
+    syncScroll()
+  }, [syncScroll])
 
   if (!stats || grid.length === 0) return null
 
