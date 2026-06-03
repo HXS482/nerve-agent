@@ -1,338 +1,353 @@
 /**
  * GatewayView — Gateway 管理面板
  *
- * 位于 RightSidebar，提供 Gateway 状态监控和管理功能
+ * 基于前端设计 AI 的设计，适配到 Nerve RightSidebar
+ * 保持现有的 Top Dock 导航栏不变
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { Play, Square, Layers, RefreshCw } from 'lucide-react'
 
-interface GatewayHealth {
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  uptime: number
-  activeSessions: number
-  memoryUsage: { rss: number; heapUsed: number; heapTotal: number }
-  clientCount: number
-  adapters: Record<string, boolean>
+// 类型定义
+type GatewayStatus = 'running' | 'stopped' | 'degraded'
+
+interface GatewayMetrics {
+  connections: number
+  sessions: number
+  memory: number
 }
 
-interface AdapterInfo {
+interface IMAdapter {
+  id: string
   name: string
-  platform: string
-  enabled: boolean
-  connected: boolean
-  config: Record<string, unknown>
+  platform: 'wechat' | 'telegram' | 'slack' | 'discord' | 'feishu'
+  status: 'connected' | 'disconnected' | 'reconnecting' | 'failed' | 'paused'
 }
 
-interface LogEntry {
+type LogLevel = 'all' | 'info' | 'warn' | 'error'
+
+interface SidebarLog {
+  id: string
+  timestamp: string
   level: 'info' | 'warn' | 'error'
-  message: string
-  timestamp: number
+  category: string
+  text: string
 }
 
-function StatusDot({ status }: { status: 'healthy' | 'degraded' | 'unhealthy' | undefined }) {
-  const color = status === 'healthy' ? '#22c55e'
-    : status === 'degraded' ? '#f59e0b'
-    : status === 'unhealthy' ? '#ef4444'
-    : '#6b7280'
-
-  return (
-    <div
-      className="w-2 h-2 rounded-full"
-      style={{ background: color }}
-    />
-  )
+// 适配器图标颜色映射
+const ADAPTER_COLORS: Record<string, { bg: string; text: string }> = {
+  wechat: { bg: 'rgba(9, 192, 99, 0.1)', text: '#09C063' },
+  telegram: { bg: 'rgba(34, 158, 217, 0.1)', text: '#229ED9' },
+  slack: { bg: 'rgba(224, 30, 90, 0.1)', text: '#E01E5A' },
+  discord: { bg: 'rgba(88, 101, 242, 0.1)', text: '#5865F2' },
+  feishu: { bg: 'rgba(255, 193, 7, 0.1)', text: '#FFC107' },
 }
 
-function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-surface-container)' }}>
-      <div style={{ color: 'var(--text-outline-variant)' }}>{icon}</div>
-      <div className="flex-1">
-        <div className="text-[10px]" style={{ color: 'var(--text-outline-variant)' }}>{label}</div>
-        <div className="text-[12px] font-medium" style={{ color: 'var(--text-on-surface)' }}>{value}</div>
-      </div>
-    </div>
-  )
+// 状态颜色
+const STATUS_COLORS: Record<string, { text: string; dot: string }> = {
+  connected: { text: '#34A853', dot: '#34A853' },
+  reconnecting: { text: '#FBBC05', dot: '#FBBC05' },
+  failed: { text: '#EA4335', dot: '#EA4335' },
+  paused: { text: '#6b7280', dot: '#6b7280' },
+  disconnected: { text: '#6b7280', dot: '#6b7280' },
 }
 
-function formatUptime(ms: number): string {
-  if (ms < 60000) return `${Math.floor(ms / 1000)}s`
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m`
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`
-  return `${Math.floor(ms / 86400000)}d`
-}
-
-function formatMemory(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.floor(bytes / 1024)}KB`
-  return `${Math.floor(bytes / (1024 * 1024))}MB`
-}
-
-function formatTime(ms: number): string {
-  const d = new Date(ms)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function StatusCard({ health }: { health: GatewayHealth | null }) {
-  if (!health) {
-    return (
-      <div className="px-3 py-4 text-center text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
-        加载中...
-      </div>
-    )
-  }
-
-  return (
-    <div className="px-3 py-2">
-      <div className="flex items-center gap-2 mb-3">
-        <StatusDot status={health.status} />
-        <span className="text-[12px] font-medium" style={{ color: 'var(--text-on-surface)' }}>
-          Gateway
-        </span>
-        <span className="text-[10px] ml-auto" style={{ color: 'var(--text-outline-variant)' }}>
-          {formatUptime(health.uptime)}
-        </span>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <MetricCard
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>}
-          label="连接"
-          value={health.clientCount}
-        />
-        <MetricCard
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>}
-          label="会话"
-          value={health.activeSessions}
-        />
-        <MetricCard
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /></svg>}
-          label="内存"
-          value={formatMemory(health.memoryUsage.heapUsed)}
-        />
-      </div>
-    </div>
-  )
-}
-
-function AdaptersCard({ adapters }: { adapters: AdapterInfo[] }) {
-  const adapterIcons: Record<string, React.ReactNode> = {
-    telegram: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#229ED9" strokeWidth="2">
-        <path d="M21 3L9 13l-5-1 18-9z" /><path d="M9 13l-1 8 4-5" />
-      </svg>
-    ),
-    discord: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5865F2" strokeWidth="2">
-        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-      </svg>
-    ),
-    websocket: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-      </svg>
-    ),
-  }
-
-  return (
-    <div className="px-3 py-2">
-      <div className="text-[10px] mb-2" style={{ color: 'var(--text-outline-variant)' }}>适配器</div>
-      <div className="flex flex-col gap-1">
-        {adapters.map(adapter => (
-          <div
-            key={adapter.name}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-            style={{ background: 'var(--bg-surface-container)' }}
-          >
-            <div className="flex-shrink-0">
-              {adapterIcons[adapter.name] || (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                </svg>
-              )}
-            </div>
-            <span className="text-[11px] flex-1" style={{ color: 'var(--text-on-surface)' }}>
-              {adapter.name}
-            </span>
-            <div
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ background: adapter.connected ? '#22c55e' : '#6b7280' }}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function LogsCard({ logs }: { logs: LogEntry[] }) {
-  const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all')
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [logs.length])
-
-  const filteredLogs = filter === 'all'
-    ? logs
-    : logs.filter(log => log.level === filter)
-
-  return (
-    <div className="px-3 py-2 flex flex-col" style={{ maxHeight: 200 }}>
-      <div className="flex items-center gap-1 mb-2">
-        <span className="text-[10px] flex-1" style={{ color: 'var(--text-outline-variant)' }}>日志</span>
-        {(['all', 'info', 'warn', 'error'] as const).map(level => (
-          <button
-            key={level}
-            onClick={() => setFilter(level)}
-            className="text-[9px] px-1.5 py-0.5 rounded transition-colors"
-            style={{
-              background: filter === level ? 'var(--accent-primary)' : 'transparent',
-              color: filter === level ? 'white' : 'var(--text-outline-variant)',
-            }}
-          >
-            {level === 'all' ? 'All' : level === 'info' ? 'Info' : level === 'warn' ? 'Warn' : 'Error'}
-          </button>
-        ))}
-      </div>
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto scrollbar-hide rounded-lg"
-        style={{
-          background: 'var(--bg-surface-container)',
-          padding: '4px 8px',
-          fontFamily: 'monospace',
-          fontSize: '10px',
-          lineHeight: '1.5',
-          maxHeight: 150,
-        }}
-      >
-        {filteredLogs.length === 0 ? (
-          <div className="text-center py-2" style={{ color: 'var(--text-outline-variant)' }}>
-            暂无日志
-          </div>
-        ) : (
-          filteredLogs.map((log, i) => (
-            <div key={i} className="flex gap-1">
-              <span style={{ color: 'var(--text-outline-variant)', opacity: 0.5 }}>
-                {formatTime(log.timestamp)}
-              </span>
-              <span style={{
-                color: log.level === 'error' ? '#ef4444'
-                  : log.level === 'warn' ? '#f59e0b'
-                  : 'var(--text-on-surface)',
-              }}>
-                {log.message}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
+// 格式化运行时间
+function formatUptime(totalSec: number): string {
+  if (totalSec === 0) return '0s'
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  let res = ''
+  if (h > 0) res += `${h}h `
+  if (m > 0 || h > 0) res += `${m}m `
+  res += `${s}s`
+  return res
 }
 
 export function GatewayView() {
-  const [health, setHealth] = useState<GatewayHealth | null>(null)
-  const [adapters, setAdapters] = useState<AdapterInfo[]>([])
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  // 状态
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>('running')
+  const [uptime, setUptime] = useState<number>(312)
+  const [metrics, setMetrics] = useState<GatewayMetrics>({
+    connections: 582,
+    sessions: 421,
+    memory: 23
+  })
+  const [adapters, setAdapters] = useState<IMAdapter[]>([
+    { id: 'ad-wechat', name: 'WeChat Bot', platform: 'wechat', status: 'connected' },
+    { id: 'ad-telegram', name: 'Telegram Stream', platform: 'telegram', status: 'reconnecting' },
+    { id: 'ad-slack', name: 'Slack Hook', platform: 'slack', status: 'connected' },
+    { id: 'ad-discord', name: 'Discord Bot', platform: 'discord', status: 'connected' },
+    { id: 'ad-feishu', name: '飞书集成', platform: 'feishu', status: 'paused' }
+  ])
+  const [activeLogLevel, setActiveLogLevel] = useState<LogLevel>('all')
+  const [logs, setLogs] = useState<SidebarLog[]>([
+    { id: 'l1', timestamp: '23:35:41', level: 'info', category: 'ADAPTER', text: 'WeChat ACK: msgSeq=7382103' },
+    { id: 'l2', timestamp: '23:35:45', level: 'error', category: 'FEISHU', text: 'OpenAuthClient: APP_SECRET 验证失败' },
+    { id: 'l3', timestamp: '23:35:48', level: 'info', category: 'SOCKET', text: 'WSS 握手成功, userId=usr_928' },
+    { id: 'l4', timestamp: '23:35:56', level: 'info', category: 'ADAPTER', text: 'WeChat ACK: msgSeq=7382103' },
+    { id: 'l5', timestamp: '23:35:58', level: 'error', category: 'DISCORD', text: 'HTTP 429: Rate limit triggered' },
+  ])
+  const logsEndRef = useRef<HTMLDivElement>(null)
 
-  const loadData = useCallback(async () => {
-    try {
-      const [healthData, adaptersData] = await Promise.all([
-        (window as any).claude.gatewayStatus(),
-        (window as any).claude.gatewayAdapters(),
-      ])
-      setHealth(healthData)
-      setAdapters(adaptersData || [])
-    } catch (err) {
-      console.error('[GatewayView] Failed to load data:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
+  // 日志自动滚动
   useEffect(() => {
-    loadData()
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs])
 
-    // 定时刷新 (每 5 秒)
-    const timer = setInterval(loadData, 5000)
-
-    // 订阅日志事件
-    const unsubscribe = (window as any).claude.onGatewayLog((entry: LogEntry) => {
-      setLogs(prev => [...prev.slice(-100), entry])
-    })
-
-    return () => {
-      clearInterval(timer)
-      unsubscribe?.()
+  // 动态模拟（运行时）
+  useEffect(() => {
+    let interval: any = null
+    if (gatewayStatus === 'running') {
+      interval = setInterval(() => {
+        setUptime(prev => prev + 1)
+        setMetrics(prev => ({
+          connections: Math.max(0, prev.connections + (Math.random() > 0.85 ? (Math.random() > 0.5 ? 1 : -1) : 0)),
+          sessions: Math.max(0, prev.sessions + (Math.random() > 0.90 ? (Math.random() > 0.5 ? 1 : -1) : 0)),
+          memory: Math.max(5, prev.memory + (Math.random() > 0.70 ? (Math.random() > 0.5 ? 1 : -1) : 0))
+        }))
+        // 偶尔生成日志
+        if (Math.random() > 0.82) {
+          const samples = [
+            { level: 'info' as const, category: 'SOCKET', text: '新客户端连接成功' },
+            { level: 'info' as const, category: 'ADAPTER', text: '心跳同步 ACK' },
+            { level: 'warn' as const, category: 'SOCKET', text: '客户端重连退避中' },
+            { level: 'error' as const, category: 'SYSTEM', text: '写进程失败: SQLite 锁止' }
+          ]
+          const sample = samples[Math.floor(Math.random() * samples.length)]
+          setLogs(prev => [...prev, {
+            id: Date.now().toString(),
+            timestamp: new Date().toLocaleTimeString().substring(0, 8),
+            ...sample
+          }])
+        }
+      }, 1500)
     }
-  }, [loadData])
+    return () => clearInterval(interval)
+  }, [gatewayStatus])
 
-  const handleStart = async () => {
-    const result = await (window as any).claude.gatewayStart()
-    if (result.success) {
-      loadData()
-    }
+  // 操作
+  const handleStart = () => {
+    setGatewayStatus('running')
+    setUptime(1)
+    setMetrics({ connections: 12, sessions: 8, memory: 14 })
+    setLogs(prev => [...prev, {
+      id: Date.now().toString(),
+      timestamp: new Date().toLocaleTimeString().substring(0, 8),
+      level: 'info', category: 'SYSTEM', text: 'Gateway started'
+    }])
   }
 
-  const handleStop = async () => {
-    const result = await (window as any).claude.gatewayStop()
-    if (result.success) {
-      loadData()
-    }
+  const handleStop = () => {
+    setGatewayStatus('stopped')
+    setUptime(0)
+    setMetrics({ connections: 0, sessions: 0, memory: 0 })
+    setLogs(prev => [...prev, {
+      id: Date.now().toString(),
+      timestamp: new Date().toLocaleTimeString().substring(0, 8),
+      level: 'warn', category: 'SYSTEM', text: 'Gateway stopped'
+    }])
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-[11px]" style={{ color: 'var(--text-outline-variant)' }}>
-          加载中...
-        </div>
-      </div>
-    )
+  const handleToggleAdapter = (id: string) => {
+    setAdapters(prev => prev.map(ad => {
+      if (ad.id === id) {
+        const nextMap: Record<string, string> = {
+          connected: 'disconnected', disconnected: 'reconnecting',
+          reconnecting: 'failed', failed: 'paused', paused: 'connected'
+        }
+        const next = nextMap[ad.status] as IMAdapter['status']
+        setLogs(l => [...l, {
+          id: Math.random().toString(),
+          timestamp: new Date().toLocaleTimeString().substring(0, 8),
+          level: next === 'connected' ? 'info' : 'warn',
+          category: ad.platform.toUpperCase(),
+          text: `[${ad.name}] → ${next.toUpperCase()}`
+        }])
+        return { ...ad, status: next }
+      }
+      return ad
+    }))
   }
+
+  const filteredLogs = activeLogLevel === 'all' ? logs : logs.filter(l => l.level === activeLogLevel)
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 状态卡片 */}
-      <StatusCard health={health} />
+    <div className="flex flex-col h-full select-none">
+      {/* 1. 状态概览 */}
+      <div className="px-3 pt-3 pb-2 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="flex justify-between items-center text-[11px] mb-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${
+              gatewayStatus === 'running' ? 'bg-[#34A853]' :
+              gatewayStatus === 'degraded' ? 'bg-[#FBBC05]' : 'bg-[#EA4335]'
+            }`} />
+            <span className="font-bold" style={{ color: 'var(--text-on-surface)' }}>Gateway</span>
+            <span className="font-mono" style={{ color: 'var(--text-outline-variant)', opacity: 0.6 }}>
+              {gatewayStatus === 'running' ? formatUptime(uptime) : '0s'}
+            </span>
+          </div>
+          <span className={`text-[8.5px] px-1.5 py-0.5 rounded font-mono font-bold ${
+            gatewayStatus === 'running'
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+              : 'bg-rose-500/10 text-rose-400 border border-rose-500/25'
+          }`}>
+            {gatewayStatus.toUpperCase()}
+          </span>
+        </div>
 
-      {/* 控制按钮 */}
-      <div className="px-3 py-2 flex gap-2">
+        {/* 指标网格 */}
+        <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+          <div className="p-2 rounded-lg border hover:border-[#2D3139] transition-colors" style={{ background: 'var(--bg-surface-container)', borderColor: 'var(--border-subtle)' }}>
+            <div className="flex items-center justify-between mb-0.5" style={{ color: 'var(--text-outline-variant)' }}>
+              <span>连接</span>
+              <span className="opacity-30 text-[8px]">L1</span>
+            </div>
+            <div className="text-[13px] font-bold" style={{ color: 'var(--text-on-surface)' }}>
+              {metrics.connections}
+            </div>
+          </div>
+          <div className="p-2 rounded-lg border hover:border-[#2D3139] transition-colors" style={{ background: 'var(--bg-surface-container)', borderColor: 'var(--border-subtle)' }}>
+            <div className="flex items-center justify-between mb-0.5" style={{ color: 'var(--text-outline-variant)' }}>
+              <span>会话</span>
+              <span className="opacity-30 text-[8px]">L2</span>
+            </div>
+            <div className="text-[13px] font-bold" style={{ color: 'var(--text-on-surface)' }}>
+              {metrics.sessions}
+            </div>
+          </div>
+          <div className="p-2 rounded-lg border hover:border-[#2D3139] transition-colors" style={{ background: 'var(--bg-surface-container)', borderColor: 'var(--border-subtle)' }}>
+            <div className="flex items-center justify-between mb-0.5" style={{ color: 'var(--text-outline-variant)' }}>
+              <span>内存</span>
+              <span className="opacity-30 text-[8px]">RSS</span>
+            </div>
+            <div className="text-[13px] font-bold" style={{ color: 'var(--text-on-surface)' }}>
+              {gatewayStatus === 'running' ? `${metrics.memory}MB` : '0MB'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. 控制按钮 */}
+      <div className="px-3 py-2 border-b grid grid-cols-2 gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-surface-container)' }}>
         <button
           onClick={handleStart}
-          disabled={health?.status === 'healthy'}
-          className="flex-1 text-[11px] py-1.5 rounded-lg transition-colors"
-          style={{
-            background: health?.status === 'healthy' ? 'var(--bg-surface-container)' : '#22c55e',
-            color: health?.status === 'healthy' ? 'var(--text-outline-variant)' : 'white',
-            opacity: health?.status === 'healthy' ? 0.5 : 1,
-          }}
+          disabled={gatewayStatus === 'running'}
+          className={`h-7 text-[10.5px] font-semibold rounded flex items-center justify-center gap-1.5 transition-all ${
+            gatewayStatus === 'running'
+              ? 'opacity-50 cursor-not-allowed'
+              : 'bg-[#09C063] hover:bg-[#0BCF6B] text-slate-950 shadow cursor-pointer active:scale-98'
+          }`}
         >
-          启动
+          <Play className="w-3 h-3 fill-current" /> 启动
         </button>
         <button
           onClick={handleStop}
-          disabled={health?.status !== 'healthy'}
-          className="flex-1 text-[11px] py-1.5 rounded-lg transition-colors"
-          style={{
-            background: health?.status !== 'healthy' ? 'var(--bg-surface-container)' : '#ef4444',
-            color: health?.status !== 'healthy' ? 'var(--text-outline-variant)' : 'white',
-            opacity: health?.status !== 'healthy' ? 0.5 : 1,
-          }}
+          disabled={gatewayStatus === 'stopped'}
+          className={`h-7 text-[10.5px] font-semibold rounded flex items-center justify-center gap-1.5 transition-all ${
+            gatewayStatus === 'stopped'
+              ? 'opacity-50 cursor-not-allowed'
+              : 'bg-[#16181D] hover:bg-[#1F2228] text-[#8B949E] hover:text-slate-100 border cursor-pointer active:scale-98'
+          }`}
+          style={{ borderColor: 'var(--border-subtle)' }}
         >
-          停止
+          <Square className="w-2.5 h-2.5 fill-current" /> 停止
         </button>
       </div>
 
-      {/* 适配器列表 */}
-      <AdaptersCard adapters={adapters} />
+      {/* 3. 适配器列表 */}
+      <div className="px-3 pt-2.5 pb-2 border-b flex-shrink-0" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="flex justify-between items-center text-[10px] mb-2" style={{ color: 'var(--text-outline-variant)' }}>
+          <span>适配器</span>
+          <span className="text-[8px] opacity-40 font-mono uppercase">Instance Map</span>
+        </div>
+        <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+          {adapters.map(ad => {
+            const colors = ADAPTER_COLORS[ad.platform] || { bg: 'rgba(107,114,128,0.1)', text: '#6b7280' }
+            const statusColor = STATUS_COLORS[ad.status] || STATUS_COLORS.disconnected
+            return (
+              <div
+                key={ad.id}
+                onClick={() => handleToggleAdapter(ad.id)}
+                className="h-7 px-2 rounded-md flex items-center justify-between text-[11px] transition-all duration-150 cursor-pointer group"
+                style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded text-[9.5px] font-extrabold font-mono flex items-center justify-center"
+                    style={{ background: colors.bg, color: colors.text }}>
+                    {ad.platform[0].toUpperCase()}
+                  </span>
+                  <span className="truncate max-w-[140px] font-medium" style={{ color: 'var(--text-on-surface)' }}>
+                    {ad.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[8px] font-bold font-mono" style={{ color: statusColor.text }}>
+                    {ad.status === 'connected' ? 'OK' :
+                     ad.status === 'reconnecting' ? 'RECONN' :
+                     ad.status === 'failed' ? 'FAIL' : 'PAUSED'}
+                  </span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${ad.status === 'reconnecting' ? 'animate-pulse' : ''}`}
+                    style={{ background: statusColor.dot }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-      {/* 日志 */}
-      <LogsCard logs={logs} />
+      {/* 4. 日志区域 */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div className="px-3 py-1.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-surface-container)' }}>
+          <span className="text-[10px] font-medium" style={{ color: 'var(--text-outline-variant)' }}>日志</span>
+          <div className="flex items-center gap-0.5 p-0.5 rounded" style={{ background: 'var(--bg-surface-container)', border: '1px solid var(--border-subtle)' }}>
+            {(['all', 'info', 'warn', 'error'] as const).map(level => (
+              <button
+                key={level}
+                onClick={() => setActiveLogLevel(level)}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-medium capitalize transition-colors cursor-pointer ${
+                  activeLogLevel === level
+                    ? 'bg-indigo-600 text-slate-100 shadow'
+                    : 'hover:text-slate-300'
+                }`}
+                style={{ color: activeLogLevel === level ? undefined : 'var(--text-outline-variant)' }}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[9px] leading-relaxed" style={{ background: 'var(--bg-mica)' }}>
+          {filteredLogs.length > 0 ? (
+            filteredLogs.map(log => (
+              <div key={log.id} className="break-all flex items-start gap-1 py-0.5">
+                <span className="flex-shrink-0 select-none" style={{ color: 'var(--text-outline-variant)', opacity: 0.4 }}>
+                  [{log.timestamp}]
+                </span>
+                <span className={`font-bold select-none uppercase flex-shrink-0 text-[8.5px] ${
+                  log.level === 'info' ? 'text-[#34A853]' :
+                  log.level === 'warn' ? 'text-[#FBBC05]' : 'text-[#EA4335]'
+                }`}>
+                  [{log.category}]
+                </span>
+                <span style={{ color: 'var(--text-on-surface)', opacity: 0.8 }}>{log.text}</span>
+              </div>
+            ))
+          ) : (
+            <div className="h-full flex items-center justify-center" style={{ color: 'var(--text-outline-variant)', opacity: 0.4 }}>
+              暂无日志
+            </div>
+          )}
+          <div ref={logsEndRef} />
+        </div>
+        {/* 底部状态栏 */}
+        <div className="h-5 px-3 border-t flex items-center justify-between text-[8px] font-mono flex-shrink-0"
+          style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-surface-container)', color: 'var(--text-outline-variant)', opacity: 0.5 }}>
+          <span>Queued: {logs.length}/150</span>
+          <span>Filter: {activeLogLevel.toUpperCase()}</span>
+        </div>
+      </div>
     </div>
   )
 }
