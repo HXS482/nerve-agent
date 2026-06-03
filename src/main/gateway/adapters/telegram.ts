@@ -12,8 +12,7 @@
 import { Telegraf, Context } from 'telegraf'
 import { Message } from 'telegraf/types'
 import { BaseAdapter, IncomingMessage, MessageAttachment, AdapterConfig } from './base-adapter'
-import { existsSync } from 'fs'
-import { readFile } from 'fs/promises'
+import { StreamBufferManager } from '../stream-buffer'
 
 export interface TelegramAdapterConfig extends AdapterConfig {
   token: string
@@ -30,16 +29,7 @@ export class TelegramAdapter extends BaseAdapter {
 
   private bot: Telegraf | null = null
   private config: TelegramAdapterConfig
-
-  // 流式更新缓冲区
-  private streamBuffers = new Map<string, {
-    chatId: string
-    messageId: string
-    buffer: string
-    timer: NodeJS.Timeout | null
-    lastUpdate: number
-    sending: boolean  // 防止并发 sendText
-  }>()
+  private streamBufferManager: StreamBufferManager
 
   constructor(config: TelegramAdapterConfig) {
     super(config)
@@ -49,8 +39,12 @@ export class TelegramAdapter extends BaseAdapter {
       ...config,
     }
 
-    // 定期清理过期的流式缓冲区（5 分钟）
-    setInterval(() => this.cleanupStreamBuffers(), 60_000)
+    // 初始化流式缓冲区管理器
+    this.streamBufferManager = new StreamBufferManager(
+      { updateInterval: this.config.streamUpdateInterval },
+      (chatId, text) => this.sendText(chatId, text),
+      (chatId, messageId, text) => this.editMessage(chatId, messageId, text),
+    )
   }
 
   async connect(): Promise<void> {
@@ -177,104 +171,21 @@ export class TelegramAdapter extends BaseAdapter {
    * 返回一个 bufferKey，用于后续追加内容和完成
    */
   startStream(chatId: string, initialText: string = ''): string {
-    const bufferKey = `${chatId}:${Date.now()}`
-
-    this.streamBuffers.set(bufferKey, {
-      chatId,
-      messageId: '',
-      buffer: initialText,
-      timer: null,
-      lastUpdate: Date.now(),
-      sending: false,
-    })
-
-    // 如果有初始文本，立即发送
-    if (initialText) {
-      this.sendText(chatId, initialText).then((messageId) => {
-        const buf = this.streamBuffers.get(bufferKey)
-        if (buf && messageId) {
-          buf.messageId = messageId
-        }
-      })
-    }
-
-    return bufferKey
+    return this.streamBufferManager.create(chatId, initialText)
   }
 
   /**
    * 追加流式内容
    */
   appendStream(bufferKey: string, delta: string) {
-    const buf = this.streamBuffers.get(bufferKey)
-    if (!buf) return
-
-    buf.buffer += delta
-    buf.lastUpdate = Date.now()
-
-    // 如果还没有发送第一条消息，先发送
-    // 使用 sending 标志防止并发 sendText
-    if (!buf.messageId && !buf.sending) {
-      buf.sending = true
-      this.sendText(buf.chatId, buf.buffer).then((messageId) => {
-        buf.sending = false
-        if (messageId) {
-          buf.messageId = messageId
-        }
-      }).catch(() => {
-        buf.sending = false
-      })
-      return
-    }
-
-    // 设置定时更新（只有在 messageId 已设置时才更新）
-    if (!buf.timer && buf.messageId) {
-      buf.timer = setTimeout(() => {
-        this.flushStream(bufferKey)
-      }, this.config.streamUpdateInterval)
-    }
+    this.streamBufferManager.append(bufferKey, delta)
   }
 
   /**
    * 完成流式更新
    */
   async finishStream(bufferKey: string): Promise<void> {
-    const buf = this.streamBuffers.get(bufferKey)
-    if (!buf) return
-
-    // 清除定时器
-    if (buf.timer) {
-      clearTimeout(buf.timer)
-      buf.timer = null
-    }
-
-    // 最终更新
-    if (buf.messageId) {
-      await this.editMessage(buf.chatId, buf.messageId, buf.buffer)
-    }
-
-    // 清理缓冲区
-    this.streamBuffers.delete(bufferKey)
-  }
-
-  private flushStream(bufferKey: string) {
-    const buf = this.streamBuffers.get(bufferKey)
-    if (!buf || !buf.messageId) return
-
-    // 编辑消息
-    this.editMessage(buf.chatId, buf.messageId, buf.buffer).catch((err) => {
-      console.warn('[TelegramAdapter] Stream flush failed:', err)
-    })
-
-    // 重置定时器
-    buf.timer = null
-
-    // 如果距离上次更新超过间隔，设置新的定时器
-    const elapsed = Date.now() - buf.lastUpdate
-    if (elapsed < this.config.streamUpdateInterval!) {
-      buf.timer = setTimeout(() => {
-        this.flushStream(bufferKey)
-      }, this.config.streamUpdateInterval! - elapsed)
-    }
+    await this.streamBufferManager.finish(bufferKey)
   }
 
   private handleText(ctx: Context) {
@@ -394,23 +305,5 @@ export class TelegramAdapter extends BaseAdapter {
     })
 
     this.emit('message', incoming)
-  }
-
-  /**
-   * 清理过期的流式缓冲区（5 分钟未更新）
-   */
-  private cleanupStreamBuffers() {
-    const now = Date.now()
-    const maxAge = 5 * 60 * 1000 // 5 分钟
-
-    for (const [key, buf] of this.streamBuffers.entries()) {
-      if (now - buf.lastUpdate > maxAge) {
-        if (buf.timer) {
-          clearTimeout(buf.timer)
-        }
-        this.streamBuffers.delete(key)
-        console.log(`[TelegramAdapter] Cleaned up expired stream buffer: ${key}`)
-      }
-    }
   }
 }
