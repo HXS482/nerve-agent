@@ -54,6 +54,8 @@ export const AgentRequestSchema = z.object({
       isImage: z.boolean(),
     })).optional(),
     idempotencyKey: z.string().optional(),
+    /** 请求时间戳（用于防重放攻击） */
+    timestamp: z.number().optional(),
   }),
 })
 

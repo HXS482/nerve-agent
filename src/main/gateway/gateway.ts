@@ -171,7 +171,8 @@ export class NerveGateway {
   }
 
   private async handleAdapterMessage(adapter: BaseAdapter, msg: IncomingMessage) {
-    console.log(`[Gateway] Message from ${adapter.name}: ${msg.content.slice(0, 50)}...`)
+    // 不记录消息内容（隐私保护）
+    console.log(`[Gateway] Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)
 
     // 解析或创建会话
     const sessionId = this.sessionRouter.resolve(adapter.platform, msg.userId, msg.chatId)
@@ -272,6 +273,16 @@ export class NerveGateway {
       }
     }
 
+    // 时间戳校验（防重放攻击，允许 30 秒误差）
+    if (params.timestamp) {
+      const now = Date.now()
+      const diff = Math.abs(now - params.timestamp)
+      if (diff > 30_000) {
+        this.server.sendResponse(client.id, createResponse(id, false, undefined, 'Invalid request: timestamp expired (max 30 seconds)'))
+        return
+      }
+    }
+
     // 解析或创建会话
     // Gateway 模式下，使用 client.deviceId 或 client.id 作为用户标识
     const userId = client.deviceId || client.id
@@ -310,11 +321,26 @@ export class NerveGateway {
   }
 
   private async handleSessionList(client: WSClient, requestId: string) {
-    const sessions = await this.agentCore.listSessions()
-    this.server.sendResponse(client.id, createResponse(requestId, true, sessions))
+    // 只返回该客户端关联的会话
+    const allSessions = await this.agentCore.listSessions()
+    const clientSessions = allSessions.filter(session => {
+      // 检查该会话是否与当前客户端关联
+      const mappings = this.sessionRouter.getAllMappings()
+      return mappings.some(m => m.sessionId === session.sessionId && m.platform === 'gateway' && m.userId === (client.deviceId || client.id))
+    })
+    this.server.sendResponse(client.id, createResponse(requestId, true, clientSessions))
   }
 
   private async handleSessionDelete(client: WSClient, request: { params: { sessionId: string } }, requestId: string) {
+    // 检查该会话是否属于当前客户端
+    const mappings = this.sessionRouter.getAllMappings()
+    const sessionMapping = mappings.find(m => m.sessionId === request.params.sessionId)
+
+    if (!sessionMapping || sessionMapping.userId !== (client.deviceId || client.id)) {
+      this.server.sendResponse(client.id, createResponse(requestId, false, undefined, 'Permission denied: session does not belong to this client'))
+      return
+    }
+
     await this.agentCore.deleteSession(request.params.sessionId)
     this.server.sendResponse(client.id, createResponse(requestId, true))
   }
