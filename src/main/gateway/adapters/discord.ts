@@ -47,6 +47,9 @@ export class DiscordAdapter extends BaseAdapter {
       maxMessageLength: 1900, // Discord 限制 2000 字符
       ...config,
     }
+
+    // 定期清理过期的流式缓冲区（5 分钟）
+    setInterval(() => this.cleanupStreamBuffers(), 60_000)
   }
 
   async connect(): Promise<void> {
@@ -335,5 +338,23 @@ export class DiscordAdapter extends BaseAdapter {
     if (contentType.startsWith('video/')) return 'video'
     if (contentType.startsWith('audio/')) return 'voice'
     return 'file'
+  }
+
+  /**
+   * 清理过期的流式缓冲区（5 分钟未更新）
+   */
+  private cleanupStreamBuffers() {
+    const now = Date.now()
+    const maxAge = 5 * 60 * 1000 // 5 分钟
+
+    for (const [key, buf] of this.streamBuffers.entries()) {
+      if (now - buf.lastUpdate > maxAge) {
+        if (buf.timer) {
+          clearTimeout(buf.timer)
+        }
+        this.streamBuffers.delete(key)
+        console.log(`[DiscordAdapter] Cleaned up expired stream buffer: ${key}`)
+      }
+    }
   }
 }

@@ -239,6 +239,39 @@ export class NerveGateway {
   private async handleAgent(client: WSClient, request: { id: string; params: { sessionId?: string; message: string; files?: any[]; idempotencyKey?: string } }) {
     const { id, params } = request
 
+    // 校验请求体
+    if (!params.message || typeof params.message !== 'string') {
+      this.server.sendResponse(client.id, createResponse(id, false, undefined, 'Invalid request: message is required and must be a string'))
+      return
+    }
+
+    // 校验消息长度
+    if (params.message.length > 100_000) {
+      this.server.sendResponse(client.id, createResponse(id, false, undefined, 'Invalid request: message too long (max 100,000 characters)'))
+      return
+    }
+
+    // 校验文件
+    if (params.files) {
+      if (!Array.isArray(params.files)) {
+        this.server.sendResponse(client.id, createResponse(id, false, undefined, 'Invalid request: files must be an array'))
+        return
+      }
+
+      for (const file of params.files) {
+        if (!file.name || !file.mimeType || !file.data) {
+          this.server.sendResponse(client.id, createResponse(id, false, undefined, 'Invalid request: each file must have name, mimeType, and data'))
+          return
+        }
+
+        // 校验文件大小（base64 编码后约 10MB）
+        if (file.data.length > 13_000_000) {
+          this.server.sendResponse(client.id, createResponse(id, false, undefined, 'Invalid request: file too large (max ~10MB)'))
+          return
+        }
+      }
+    }
+
     // 解析或创建会话
     // Gateway 模式下，使用 client.deviceId 或 client.id 作为用户标识
     const userId = client.deviceId || client.id

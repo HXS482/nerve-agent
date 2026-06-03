@@ -1,10 +1,9 @@
 /**
- * OutputChannel — 输出通道抽象接口
+ * OutputChannel — 核心输出通道接口
  *
  * 解耦 Agent 核心与具体输出目标（Electron IPC / WebSocket / IM 适配器）
  * 所有 Agent 输出都通过此接口，不直接依赖 BrowserWindow
  */
-
 export interface OutputChannel {
   /** 发送流式文本增量 */
   sendStreamDelta(text: string): void
@@ -24,20 +23,34 @@ export interface OutputChannel {
   /** 发送错误 */
   sendError(message: string): void
 
-  /** 发送宠物状态变化（可选，Electron 特有） */
-  sendPetState?(state: string): void
-
-  /** 发送 Flow 项目（可选，Electron 特有） */
-  sendFlowItem?(type: string, content: string, meta?: Record<string, unknown>): void
-
-  /** 发送 Git 刷新事件（可选，Electron 特有） */
-  sendGitRefresh?(): void
-
-  /** 发送工具审批请求（可选，需要交互式审批时） */
-  sendToolApprovalRequest?(approvalId: string, toolName: string, toolInput: unknown): void
-
   /** 检查通道是否可用 */
   isReady(): boolean
+}
+
+/**
+ * ElectronOutputChannel — Electron 特有的输出通道接口
+ *
+ * 扩展核心 OutputChannel，添加 Electron/UI 特有的方法
+ */
+export interface ElectronOutputChannel extends OutputChannel {
+  /** 发送宠物状态变化 */
+  sendPetState(state: string): void
+
+  /** 发送 Flow 项目 */
+  sendFlowItem(type: string, content: string, meta?: Record<string, unknown>): void
+
+  /** 发送 Git 刷新事件 */
+  sendGitRefresh(): void
+
+  /** 发送工具审批请求 */
+  sendToolApprovalRequest(approvalId: string, toolName: string, toolInput: unknown): void
+}
+
+/**
+ * 检查通道是否支持 Electron 特有功能
+ */
+export function isElectronChannel(channel: OutputChannel): channel is ElectronOutputChannel {
+  return 'sendPetState' in channel && typeof channel.sendPetState === 'function'
 }
 
 /**

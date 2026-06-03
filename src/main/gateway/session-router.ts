@@ -51,6 +51,9 @@ export class SessionRouter {
   // 持久化文件路径
   private mappingsPath: string
 
+  // debounce 定时器
+  private saveTimer: NodeJS.Timeout | null = null
+
   constructor(private agentCore: AgentCore, dataDir: string) {
     this.mappingsPath = join(dataDir, 'gateway-sessions.json')
     this.loadMappings()
@@ -229,15 +232,28 @@ export class SessionRouter {
   }
 
   private saveMappings() {
-    try {
-      const { writeFileSync } = require('fs')
-      const data: Record<string, SessionMapping> = {}
-      for (const [key, value] of this.mappings.entries()) {
-        data[key] = value
-      }
-      writeFileSync(this.mappingsPath, JSON.stringify(data, null, 2), 'utf-8')
-    } catch (err) {
-      console.warn('[SessionRouter] Failed to save mappings:', err)
+    // 使用 debounce 合并短时间内的多次写入
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer)
     }
+
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null
+
+      try {
+        const { writeFile } = require('fs')
+        const data: Record<string, SessionMapping> = {}
+        for (const [key, value] of this.mappings.entries()) {
+          data[key] = value
+        }
+        writeFile(this.mappingsPath, JSON.stringify(data, null, 2), 'utf-8', (err: any) => {
+          if (err) {
+            console.warn('[SessionRouter] Failed to save mappings:', err)
+          }
+        })
+      } catch (err) {
+        console.warn('[SessionRouter] Failed to save mappings:', err)
+      }
+    }, 100) // 100ms debounce
   }
 }

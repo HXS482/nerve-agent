@@ -20,6 +20,7 @@ import { runAgenticLoop } from '../agentic-loop'
 import { MemoryTdaiCore } from '../memory-tdai'
 import { OffloadBridge } from '../offload-bridge'
 import type { OutputChannel } from './output-channel'
+import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
 
@@ -240,7 +241,7 @@ export class AgentCore {
     const pendingApprovals = ctx.pendingApprovals
 
     // 通知通道开始
-    if (channel.sendPetState) channel.sendPetState('jumping')
+    if (isElectronChannel(channel)) channel.sendPetState('jumping')
 
     try {
       let mcpTools: Record<string, any> = {}
@@ -379,7 +380,7 @@ export class AgentCore {
       // Build tools
       const builtinTools = getBuiltinTools(this.projectDir, {
         refresh: () => {
-          if (channel.sendGitRefresh) channel.sendGitRefresh()
+          if (isElectronChannel(channel)) channel.sendGitRefresh()
         },
       }, this.sourceDir)
 
@@ -429,7 +430,7 @@ export class AgentCore {
           onTextDelta: (text) => {
             textDeltas.push(text)
             channel.sendStreamDelta(text)
-            if (channel.sendPetState) channel.sendPetState('working')
+            if (isElectronChannel(channel)) channel.sendPetState('working')
           },
           onThinkingDelta: (thinking) => {
             fullThinkingParts.push(thinking)
@@ -439,14 +440,14 @@ export class AgentCore {
             allToolCalls.push({ id, name, input })
             pendingToolCalls.set(id, { name, input })
             channel.sendToolCall(id, name, input)
-            if (channel.sendPetState) channel.sendPetState('running-left')
+            if (isElectronChannel(channel)) channel.sendPetState('running-left')
           },
           onToolApproval: this.config.permissionMode === 'bypassPermissions'
             ? undefined
             : async (id, name, input) => {
                 if (!this.needsApproval(name)) return true
                 const approvalId = `approve-${id}`
-                if (channel.sendToolApprovalRequest) {
+                if (isElectronChannel(channel)) {
                   channel.sendToolApprovalRequest(approvalId, name, input)
                 }
                 return new Promise<boolean>((resolve) => {
@@ -506,7 +507,7 @@ export class AgentCore {
           const maxContextTokens = CONTEXT_WINDOWS[modelId] || 200000
 
           channel.sendDone(sessionId, cost, maxContextTokens)
-          if (channel.sendPetState) channel.sendPetState('happy')
+          if (isElectronChannel(channel)) channel.sendPetState('happy')
 
           // Memory capture
           if (fullText && this.memoryCore) {
@@ -583,18 +584,18 @@ export class AgentCore {
         const maxContextTokens = CONTEXT_WINDOWS[modelId] || 200000
 
         channel.sendDone(sessionId, cost, maxContextTokens)
-        if (channel.sendPetState) channel.sendPetState('happy')
+        if (isElectronChannel(channel)) channel.sendPetState('happy')
       }
     } catch (err: unknown) {
       if (ctx.abort.signal.aborted) {
         channel.sendDone(sessionId, 0, 0)
-        if (channel.sendPetState) channel.sendPetState('idle')
+        if (isElectronChannel(channel)) channel.sendPetState('idle')
         return
       }
       const errorMsg = err instanceof Error ? err.message : String(err)
       console.error('[AgentCore] sendMessage error:', errorMsg)
       channel.sendError(errorMsg)
-      if (channel.sendPetState) channel.sendPetState('error')
+      if (isElectronChannel(channel)) channel.sendPetState('error')
     } finally {
       // 清理会话上下文（如果不再需要）
       // 注意：不删除上下文，因为可能还有后续消息
@@ -691,7 +692,7 @@ export class AgentCore {
   }
 
   private emitFlowItem(channel: OutputChannel, toolName: string, input: any, resultText: string) {
-    if (!channel.sendFlowItem) return
+    if (!isElectronChannel(channel)) return
 
     if ((toolName === 'Write' || toolName === 'Bash') && input) {
       const filePath = input.file_path || input.path || ''
