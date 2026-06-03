@@ -13,6 +13,7 @@ import { initImagesDir } from './images'
 import { injectSettingsEnv } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
+import { createTray } from './tray'
 import OpenAI from 'openai'
 
 // Suppress noisy AI SDK warnings (MiMo reasoning metadata not recognized by Anthropic SDK)
@@ -34,7 +35,10 @@ ipcMain.on('window:maximize', () => {
   if (currentMainWindow?.isMaximized()) currentMainWindow.unmaximize()
   else currentMainWindow?.maximize()
 })
-ipcMain.on('window:close', () => currentMainWindow?.close())
+ipcMain.on('window:close', () => {
+  // 最小化到托盘，而不是关闭窗口
+  currentMainWindow?.hide()
+})
 
 function buildRoundedWindowShape(width: number, height: number, radius: number) {
   const rects: Electron.Rectangle[] = []
@@ -305,6 +309,9 @@ app.whenReady().then(() => {
   const { petWin, setMainWindow } = createPetWindow()
   setMainWindow(mainWindow)
 
+  // 创建系统托盘 — 窗口关闭时最小化到托盘，不退出应用
+  createTray(() => currentMainWindow)
+
   // Setup Claude service, Git service, and IPC
   const projectDir = process.cwd()
   injectSettingsEnv()
@@ -362,7 +369,11 @@ app.whenReady().then(() => {
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    // macOS dock 点击：显示窗口或创建新窗口
+    if (currentMainWindow && !currentMainWindow.isDestroyed()) {
+      currentMainWindow.show()
+      currentMainWindow.focus()
+    } else if (BrowserWindow.getAllWindows().length === 0) {
       const newWindow = createWindow()
       const gitService = new GitService()
       claude.setWindow(newWindow)
@@ -377,10 +388,15 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('window-all-closed', async () => {
+app.on('window-all-closed', () => {
+  // 托盘常驻模式：窗口关闭不退出应用
+  // 记忆引擎和 Claude 服务保持运行
+  // 用户可以通过托盘图标重新打开窗口
+  // 真正退出通过托盘右键菜单的"退出 Nerve"
+})
+
+// 应用退出前清理
+app.on('before-quit', async () => {
   await memoryCore.destroy().catch(() => {})
   await claude.close()
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
 })
