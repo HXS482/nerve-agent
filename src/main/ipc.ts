@@ -8,8 +8,9 @@ import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, get
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
+import { NerveGateway } from './gateway'
 
-export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService) {
+export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway) {
   ipcMain.handle(IPC_CHANNELS.SEND_MESSAGE, async (_event, payload: SendMessagePayload) => {
     await claude.sendMessage(payload)
   })
@@ -426,4 +427,54 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       shell.openExternal(`file://${file}`)
     }
   })
+
+  // Gateway
+  if (gateway) {
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_STATUS, async () => {
+      return gateway.getHealth()
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_ADAPTERS, async () => {
+      return gateway.getAdapters().map(adapter => ({
+        name: adapter.name,
+        platform: adapter.platform,
+        enabled: true,
+        connected: adapter.isConnected,
+        config: {},
+      }))
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_ADAPTER_TOGGLE, async (_event, name: string, enabled: boolean) => {
+      // TODO: 实现适配器启用/禁用
+      console.log(`[Gateway] Toggle adapter ${name}: ${enabled}`)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_SESSIONS, async () => {
+      // TODO: 实现会话列表
+      return []
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_SESSION_DELETE, async (_event, sessionId: string) => {
+      // TODO: 实现会话删除
+      console.log(`[Gateway] Delete session: ${sessionId}`)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_START, async () => {
+      try {
+        await gateway.start()
+        return { success: true }
+      } catch (err: any) {
+        return { success: false, error: err.message }
+      }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GATEWAY_STOP, async () => {
+      try {
+        await gateway.stop()
+        return { success: true }
+      } catch (err: any) {
+        return { success: false, error: err.message }
+      }
+    })
+  }
 }

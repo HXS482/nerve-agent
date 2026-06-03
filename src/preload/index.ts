@@ -177,6 +177,21 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.GIT_REFRESH, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_REFRESH, handler)
   },
+  // Gateway
+  gatewayStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STATUS),
+  gatewayAdapters: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_ADAPTERS),
+  gatewayAdapterToggle: (name: string, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_ADAPTER_TOGGLE, name, enabled),
+  gatewaySessions: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_SESSIONS),
+  gatewaySessionDelete: (sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_SESSION_DELETE, sessionId),
+  gatewayStart: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_START),
+  gatewayStop: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STOP),
+  onGatewayLog: (callback: (entry: { level: string; message: string; timestamp: number }) => void) => {
+    const handler = (_event: any, entry: any) => callback(entry)
+    ipcRenderer.on(IPC_CHANNELS.GATEWAY_LOG, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.GATEWAY_LOG, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('claude', api)

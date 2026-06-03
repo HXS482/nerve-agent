@@ -14,6 +14,7 @@ import { injectSettingsEnv } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
+import { NerveGateway } from './gateway'
 import OpenAI from 'openai'
 
 // Suppress noisy AI SDK warnings (MiMo reasoning metadata not recognized by Anthropic SDK)
@@ -347,7 +348,16 @@ app.whenReady().then(() => {
     }
   }
 
-  setupIPC(mainWindow, claude, skinManager, gitService)
+  // 创建 Gateway 实例
+  const gateway = new NerveGateway({
+    port: 18789,
+    auth: { mode: 'token', secret: 'nerve-default-token' },
+    dataDir: join(homedir(), '.nerve'),
+    projectDir: projectDir,
+    sourceDir: projectDir,
+  })
+
+  setupIPC(mainWindow, claude, skinManager, gitService, gateway)
 
   // Handle pet-sprite:// protocol for serving local spritesheets
   const petsDir = join(homedir(), '.nerve', 'pets')

@@ -193,16 +193,6 @@ export class DiscordAdapter extends BaseAdapter {
   async finishStream(bufferKey: string): Promise<void> {
     await this.streamBufferManager.finish(bufferKey)
   }
-    buf.timer = null
-
-    // 如果距离上次更新超过间隔，设置新的定时器
-    const elapsed = Date.now() - buf.lastUpdate
-    if (elapsed < this.config.streamUpdateInterval!) {
-      buf.timer = setTimeout(() => {
-        this.flushStream(bufferKey)
-      }, this.config.streamUpdateInterval! - elapsed)
-    }
-  }
 
   private handleMessage(msg: Message) {
     // 忽略 bot 消息

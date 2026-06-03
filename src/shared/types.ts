@@ -97,6 +97,15 @@ export const IPC_CHANNELS = {
   GIT_FETCH: 'git:fetch',
   // Git UI refresh notification (main → renderer)
   GIT_REFRESH: 'git:refresh',
+  // Gateway
+  GATEWAY_STATUS: 'gateway:status',
+  GATEWAY_ADAPTERS: 'gateway:adapters',
+  GATEWAY_ADAPTER_TOGGLE: 'gateway:adapter:toggle',
+  GATEWAY_SESSIONS: 'gateway:sessions',
+  GATEWAY_SESSION_DELETE: 'gateway:session:delete',
+  GATEWAY_LOG: 'gateway:log',
+  GATEWAY_START: 'gateway:start',
+  GATEWAY_STOP: 'gateway:stop',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations
@@ -412,4 +421,36 @@ export interface ToolApprovalRequest {
 export interface ToolApprovalResponse {
   approvalId: string
   approved: boolean
+}
+
+// Gateway types
+export interface GatewayHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  uptime: number
+  activeSessions: number
+  memoryUsage: { rss: number; heapUsed: number; heapTotal: number }
+  clientCount: number
+  adapters: Record<string, boolean>
+}
+
+export interface AdapterInfo {
+  name: string
+  platform: string
+  enabled: boolean
+  connected: boolean
+  config: Record<string, unknown>
+}
+
+export interface SessionInfo {
+  sessionId: string
+  platform: string
+  userId: string
+  chatId: string
+  lastActive: number
+}
+
+export interface LogEntry {
+  level: 'info' | 'warn' | 'error'
+  message: string
+  timestamp: number
 }

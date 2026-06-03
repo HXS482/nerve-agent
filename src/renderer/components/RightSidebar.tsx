@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useCallback, useRef, useEffect, useState } from 'react'
 import { GitView } from './GitView'
 import { DiffView } from './DiffView'
+import { GatewayView } from './GatewayView'
 
 const VIEW_TRANSITION = {
   initial: { opacity: 0, x: 20, filter: 'blur(4px)' },
@@ -35,7 +36,7 @@ declare global {
   }
 }
 
-type RightSidebarView = 'flow' | 'folder' | 'git' | 'diff'
+type RightSidebarView = 'flow' | 'folder' | 'git' | 'diff' | 'gateway'
 
 interface DirEntry {
   name: string
@@ -89,6 +90,17 @@ const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
         <polyline points="14 2 14 8 20 8" />
         <line x1="10" y1="12" x2="14" y2="12" />
         <line x1="12" y1="10" x2="12" y2="14" />
+      </svg>
+    ),
+  },
+  {
+    id: 'gateway',
+    label: 'Gateway',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
       </svg>
     ),
   },
@@ -475,6 +487,7 @@ const VIEW_COMPONENTS: Record<RightSidebarView, React.FC> = {
   folder: FolderView,
   git: GitView,
   diff: DiffView,
+  gateway: GatewayView,
 }
 
 export function RightSidebar() {

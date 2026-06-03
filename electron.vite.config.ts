@@ -8,7 +8,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        external: ['better-sqlite3', 'sqlite-vec', 'js-tiktoken', '@tencentdb-agent-memory/tcvdb-text', '@node-rs/jieba', 'node-llama-cpp'],
+        external: ['better-sqlite3', 'sqlite-vec', 'js-tiktoken', '@tencentdb-agent-memory/tcvdb-text', '@node-rs/jieba', 'node-llama-cpp', 'ws', 'discord.js', 'telegraf'],
       },
     },
     resolve: {
