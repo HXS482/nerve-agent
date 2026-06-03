@@ -2,7 +2,6 @@ import { useChatStore } from '../stores/chatStore'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCallback, useRef, useEffect, useState } from 'react'
 import { GitView } from './GitView'
-import { DiffView } from './DiffView'
 import { GatewayView } from './GatewayView'
 
 const VIEW_TRANSITION = {
@@ -36,7 +35,7 @@ declare global {
   }
 }
 
-type RightSidebarView = 'flow' | 'folder' | 'git' | 'diff' | 'gateway'
+type RightSidebarView = 'flow' | 'folder' | 'git' | 'gateway'
 
 interface DirEntry {
   name: string
@@ -78,18 +77,6 @@ const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
         <circle cx="6" cy="19" r="2" />
         <circle cx="18" cy="5" r="2" />
         <path d="M18 7a11 11 0 01-11 11" />
-      </svg>
-    ),
-  },
-  {
-    id: 'diff',
-    label: 'Changes',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="10" y1="12" x2="14" y2="12" />
-        <line x1="12" y1="10" x2="12" y2="14" />
       </svg>
     ),
   },
@@ -486,7 +473,6 @@ const VIEW_COMPONENTS: Record<RightSidebarView, React.FC> = {
   flow: FlowView,
   folder: FolderView,
   git: GitView,
-  diff: DiffView,
   gateway: GatewayView,
 }
 
