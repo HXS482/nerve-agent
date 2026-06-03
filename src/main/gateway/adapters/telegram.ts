@@ -11,6 +11,7 @@
 
 import { Telegraf, Context } from 'telegraf'
 import { Message } from 'telegraf/types'
+import { existsSync } from 'fs'
 import { BaseAdapter, IncomingMessage, MessageAttachment, AdapterConfig } from './base-adapter'
 import { StreamBufferManager } from '../stream-buffer'
 
@@ -87,12 +88,7 @@ export class TelegramAdapter extends BaseAdapter {
     }
 
     // 清理流式缓冲区
-    for (const buffer of this.streamBuffers.values()) {
-      if (buffer.timer) {
-        clearTimeout(buffer.timer)
-      }
-    }
-    this.streamBuffers.clear()
+    this.streamBufferManager.destroy()
   }
 
   async sendText(chatId: string, text: string): Promise<string | undefined> {

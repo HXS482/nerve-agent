@@ -103,12 +103,7 @@ export class DiscordAdapter extends BaseAdapter {
     }
 
     // 清理流式缓冲区
-    for (const buffer of this.streamBuffers.values()) {
-      if (buffer.timer) {
-        clearTimeout(buffer.timer)
-      }
-    }
-    this.streamBuffers.clear()
+    this.streamBufferManager.destroy()
   }
 
   async sendText(channelId: string, text: string): Promise<string | undefined> {
