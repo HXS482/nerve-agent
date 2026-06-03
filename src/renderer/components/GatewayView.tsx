@@ -44,9 +44,7 @@ export interface SidebarLog {
 const INITIAL_ADAPTERS: IMAdapter[] = [
   { id: 'ad-wechat', name: 'WeChat Bot Service', platform: 'wechat', status: 'connected' },
   { id: 'ad-telegram', name: 'Telegram Event stream', platform: 'telegram', status: 'reconnecting' },
-  { id: 'ad-slack', name: 'Slack Enterprise Hook', platform: 'slack', status: 'connected' },
   { id: 'ad-discord', name: 'Discord Command Dispatcher', platform: 'discord', status: 'connected' },
-  { id: 'ad-feishu', name: '飞书核心集成助手', platform: 'feishu', status: 'paused' }
 ];
 
 // Initial mock logs matching your exact image logs
