@@ -38,6 +38,7 @@ export class TelegramAdapter extends BaseAdapter {
     buffer: string
     timer: NodeJS.Timeout | null
     lastUpdate: number
+    sending: boolean  // 防止并发 sendText
   }>()
 
   constructor(config: TelegramAdapterConfig) {
@@ -177,6 +178,7 @@ export class TelegramAdapter extends BaseAdapter {
       buffer: initialText,
       timer: null,
       lastUpdate: Date.now(),
+      sending: false,
     })
 
     // 如果有初始文本，立即发送
@@ -203,17 +205,22 @@ export class TelegramAdapter extends BaseAdapter {
     buf.lastUpdate = Date.now()
 
     // 如果还没有发送第一条消息，先发送
-    if (!buf.messageId) {
+    // 使用 sending 标志防止并发 sendText
+    if (!buf.messageId && !buf.sending) {
+      buf.sending = true
       this.sendText(buf.chatId, buf.buffer).then((messageId) => {
+        buf.sending = false
         if (messageId) {
           buf.messageId = messageId
         }
+      }).catch(() => {
+        buf.sending = false
       })
       return
     }
 
-    // 设置定时更新
-    if (!buf.timer) {
+    // 设置定时更新（只有在 messageId 已设置时才更新）
+    if (!buf.timer && buf.messageId) {
       buf.timer = setTimeout(() => {
         this.flushStream(bufferKey)
       }, this.config.streamUpdateInterval)

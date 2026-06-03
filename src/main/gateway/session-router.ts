@@ -8,8 +8,10 @@
  */
 
 import { randomUUID } from 'crypto'
+import { join } from 'path'
 import type { AgentCore } from '../core/agent-core'
 import type { OutputChannel } from '../core/output-channel'
+import type { SessionContext } from '../core/session-context'
 
 interface SessionMapping {
   sessionId: string
@@ -50,7 +52,7 @@ export class SessionRouter {
   private mappingsPath: string
 
   constructor(private agentCore: AgentCore, dataDir: string) {
-    this.mappingsPath = `${dataDir}/gateway-sessions.json`
+    this.mappingsPath = join(dataDir, 'gateway-sessions.json')
     this.loadMappings()
   }
 
@@ -117,10 +119,25 @@ export class SessionRouter {
   }
 
   /**
-   * 取消当前任务
+   * 取消指定 session 的当前任务
    */
   cancel(sessionId: string) {
-    this.agentCore.cancel()
+    // 清空该 session 的队列
+    const queue = this.queues.get(sessionId)
+    if (queue) {
+      // 拒绝所有排队的任务
+      for (const task of queue) {
+        task.reject(new Error('Cancelled'))
+      }
+      queue.length = 0
+    }
+
+    // 如果该 session 正在处理，取消 AgentCore
+    // 注意：这会取消所有正在进行的任务，因为 AgentCore 是单例
+    // TODO: P0-1 修复后，这里应该只取消特定 session 的任务
+    if (this.processing.has(sessionId)) {
+      this.agentCore.cancel()
+    }
   }
 
   /**
@@ -169,6 +186,10 @@ export class SessionRouter {
     // 标记为正在处理
     this.processing.add(sessionId)
 
+    // 获取或创建会话上下文（用于多 session 并发隔离）
+    const sessionContextManager = this.agentCore.getSessionContextManager()
+    const ctx = sessionContextManager.getOrCreate(sessionId)
+
     while (queue.length > 0) {
       const task = queue.shift()!
 
@@ -180,6 +201,7 @@ export class SessionRouter {
             files: task.files,
           },
           task.channel,
+          ctx,  // 传递会话上下文
         )
         task.resolve()
       } catch (err) {
@@ -193,9 +215,9 @@ export class SessionRouter {
 
   private loadMappings() {
     try {
-      const fs = require('fs')
-      if (fs.existsSync(this.mappingsPath)) {
-        const data = JSON.parse(fs.readFileSync(this.mappingsPath, 'utf-8'))
+      const { existsSync, readFileSync } = require('fs')
+      if (existsSync(this.mappingsPath)) {
+        const data = JSON.parse(readFileSync(this.mappingsPath, 'utf-8'))
         for (const [key, value] of Object.entries(data)) {
           this.mappings.set(key, value as SessionMapping)
         }
@@ -208,12 +230,12 @@ export class SessionRouter {
 
   private saveMappings() {
     try {
-      const fs = require('fs')
+      const { writeFileSync } = require('fs')
       const data: Record<string, SessionMapping> = {}
       for (const [key, value] of this.mappings.entries()) {
         data[key] = value
       }
-      fs.writeFileSync(this.mappingsPath, JSON.stringify(data, null, 2), 'utf-8')
+      writeFileSync(this.mappingsPath, JSON.stringify(data, null, 2), 'utf-8')
     } catch (err) {
       console.warn('[SessionRouter] Failed to save mappings:', err)
     }

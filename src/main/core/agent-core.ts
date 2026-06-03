@@ -21,6 +21,7 @@ import { MemoryTdaiCore } from '../memory-tdai'
 import { OffloadBridge } from '../offload-bridge'
 import type { OutputChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
+import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
 
 // 前向声明，避免循环依赖
 export type { OutputChannel }
@@ -48,9 +49,9 @@ const COST_PER_TOKEN: Record<string, { input: number; output: number }> = {
   'gemini-2.5-flash': { input: 0.000075, output: 0.0003 },
 }
 
-function buildUserContentBlocks(payload: SendMessagePayload): ContentBlock[] {
+function buildUserContentBlocks(files: FileAttachment[], prompt: string): ContentBlock[] {
   const blocks: ContentBlock[] = []
-  for (const file of payload.files!) {
+  for (const file of files) {
     if (file.isImage) {
       blocks.push({
         type: 'image',
@@ -69,7 +70,7 @@ function buildUserContentBlocks(payload: SendMessagePayload): ContentBlock[] {
       })
     }
   }
-  blocks.push({ type: 'text', text: payload.prompt })
+  blocks.push({ type: 'text', text: prompt })
   return blocks
 }
 
@@ -99,6 +100,9 @@ export class AgentCore {
   private flowContentHashes = new Set<string>()
   private memoryCore: MemoryTdaiCore | null = null
   private offloadBridge: OffloadBridge | null = null
+
+  // 会话上下文管理器（用于多 session 并发）
+  private sessionContextManager = new SessionContextManager()
 
   constructor(config: AgentCoreConfig) {
     this.settings = config.settings || loadSettings()
@@ -220,16 +224,23 @@ export class AgentCore {
    * 发送消息并处理 Agent 循环
    * @param payload 消息内容
    * @param channel 输出通道（解耦具体输出目标）
+   * @param sessionContext 可选的会话上下文（用于多 session 并发）
    */
-  async sendMessage(payload: SendMessagePayload, channel: OutputChannel): Promise<void> {
-    this.cancel()
-    const abort = new AbortController()
-    this.currentAbort = abort
+  async sendMessage(payload: SendMessagePayload, channel: OutputChannel, sessionContext?: SessionContext): Promise<void> {
+    // 获取或创建会话上下文
+    const sessionId = payload.sessionId || randomUUID()
+    const ctx = sessionContext || this.sessionContextManager.getOrCreate(sessionId)
+
+    // 取消该会话的前一个请求（不影响其他会话）
+    this.cancelSession(ctx.sessionId)
+    ctx.abort = new AbortController()
+
+    // 使用会话级的 pendingToolCalls 和 pendingApprovals
+    const pendingToolCalls = ctx.pendingToolCalls
+    const pendingApprovals = ctx.pendingApprovals
 
     // 通知通道开始
     if (channel.sendPetState) channel.sendPetState('jumping')
-
-    const sessionId = payload.sessionId || randomUUID()
 
     try {
       let mcpTools: Record<string, any> = {}
@@ -246,7 +257,7 @@ export class AgentCore {
       const store = await this.ensureSessionStore()
 
       const userContent = (payload.files && payload.files.length > 0)
-        ? buildUserContentBlocks(payload)
+        ? buildUserContentBlocks(payload.files, payload.prompt)
         : payload.prompt
       await store.append({ sessionId }, [
         { type: 'user', message: { content: userContent }, timestamp: new Date().toISOString() },
@@ -351,15 +362,15 @@ export class AgentCore {
         },
         onToolCall: (id, name, input) => {
           allToolCalls.push({ id, name, input })
-          this.pendingToolCalls.set(id, { name, input })
+          pendingToolCalls.set(id, { name, input })
           channel.sendToolCall(id, name, input)
         },
         onToolResult: (id, content, isError) => {
           allToolResults.push({ toolCallId: id, content: content.slice(0, 50000), is_error: isError })
-          const toolInfo = this.pendingToolCalls.get(id)
+          const toolInfo = pendingToolCalls.get(id)
           if (toolInfo) {
             this.emitFlowItem(channel, toolInfo.name, toolInfo.input, content)
-            this.pendingToolCalls.delete(id)
+            pendingToolCalls.delete(id)
           }
           channel.sendToolResult(id, content.slice(0, 50000), isError)
         },
@@ -414,7 +425,7 @@ export class AgentCore {
           tools: allToolDefs,
           toolExecutors: allToolExecutors,
           maxSteps: 50,
-          abortSignal: abort.signal,
+          abortSignal: ctx.abort.signal,
           onTextDelta: (text) => {
             textDeltas.push(text)
             channel.sendStreamDelta(text)
@@ -426,7 +437,7 @@ export class AgentCore {
           },
           onToolCall: (id, name, input) => {
             allToolCalls.push({ id, name, input })
-            this.pendingToolCalls.set(id, { name, input })
+            pendingToolCalls.set(id, { name, input })
             channel.sendToolCall(id, name, input)
             if (channel.sendPetState) channel.sendPetState('running-left')
           },
@@ -439,15 +450,15 @@ export class AgentCore {
                   channel.sendToolApprovalRequest(approvalId, name, input)
                 }
                 return new Promise<boolean>((resolve) => {
-                  this.pendingApprovals.set(approvalId, { resolve })
+                  pendingApprovals.set(approvalId, { resolve })
                 })
               },
           onToolResult: (id, content, isError) => {
             allToolResults.push({ toolCallId: id, content: content.slice(0, 50000), is_error: isError })
-            const toolInfo = this.pendingToolCalls.get(id)
+            const toolInfo = pendingToolCalls.get(id)
             if (toolInfo) {
               this.emitFlowItem(channel, toolInfo.name, toolInfo.input, content)
-              this.pendingToolCalls.delete(id)
+              pendingToolCalls.delete(id)
             }
             channel.sendToolResult(id, content.slice(0, 50000), isError)
           },
@@ -467,7 +478,7 @@ export class AgentCore {
       }
 
       // Handle stream error with partial content
-      if (streamError && !abort.signal.aborted) {
+      if (streamError && !ctx.abort.signal.aborted) {
         const hasContent = textDeltas.length > 0 || allToolCalls.length > 0
         if (hasContent) {
           const content: Array<Record<string, unknown>> = []
@@ -515,11 +526,11 @@ export class AgentCore {
         throw streamError
       }
 
-      if (streamError && abort.signal.aborted) {
+      if (streamError && ctx.abort.signal.aborted) {
         throw streamError
       }
 
-      if (!abort.signal.aborted) {
+      if (!ctx.abort.signal.aborted) {
         const content: Array<Record<string, unknown>> = []
         const fullThinking = fullThinkingParts.join('')
         if (fullThinking) content.push({ type: 'thinking', thinking: fullThinking })
@@ -575,7 +586,7 @@ export class AgentCore {
         if (channel.sendPetState) channel.sendPetState('happy')
       }
     } catch (err: unknown) {
-      if (abort.signal.aborted) {
+      if (ctx.abort.signal.aborted) {
         channel.sendDone(sessionId, 0, 0)
         if (channel.sendPetState) channel.sendPetState('idle')
         return
@@ -585,17 +596,41 @@ export class AgentCore {
       channel.sendError(errorMsg)
       if (channel.sendPetState) channel.sendPetState('error')
     } finally {
-      if (this.currentAbort === abort) this.currentAbort = null
+      // 清理会话上下文（如果不再需要）
+      // 注意：不删除上下文，因为可能还有后续消息
     }
   }
 
+  /**
+   * 取消所有会话（向后兼容）
+   */
   cancel() {
+    // 取消全局 abort
     if (this.currentAbort) {
       this.currentAbort.abort()
       this.pendingToolCalls.clear()
       for (const [, p] of this.pendingApprovals) p.resolve(false)
       this.pendingApprovals.clear()
     }
+
+    // 取消所有会话上下文
+    for (const sessionId of this.sessionContextManager.getSessionIds()) {
+      this.sessionContextManager.cancel(sessionId)
+    }
+  }
+
+  /**
+   * 取消指定会话
+   */
+  cancelSession(sessionId: string) {
+    this.sessionContextManager.cancel(sessionId)
+  }
+
+  /**
+   * 获取会话上下文管理器
+   */
+  getSessionContextManager(): SessionContextManager {
+    return this.sessionContextManager
   }
 
   // Tool risk classification
@@ -613,7 +648,24 @@ export class AgentCore {
     return true
   }
 
-  handleToolApprovalResponse(approvalId: string, approved: boolean) {
+  /**
+   * 处理工具审批响应
+   */
+  handleToolApprovalResponse(approvalId: string, approved: boolean, sessionId?: string) {
+    // 如果指定了 sessionId，只在该会话中查找
+    if (sessionId) {
+      const ctx = this.sessionContextManager.get(sessionId)
+      if (ctx) {
+        const pending = ctx.pendingApprovals.get(approvalId)
+        if (pending) {
+          pending.resolve(approved)
+          ctx.pendingApprovals.delete(approvalId)
+          return
+        }
+      }
+    }
+
+    // 向后兼容：在全局 pendingApprovals 中查找
     const pending = this.pendingApprovals.get(approvalId)
     if (pending) {
       pending.resolve(approved)

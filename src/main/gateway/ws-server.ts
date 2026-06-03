@@ -187,8 +187,9 @@ export class GatewayWSServer {
           }
 
           // 注册客户端
+          // role 由服务端决定，不接受客户端自声明（防止提权）
           clearTimeout(handshakeTimeout)
-          client.role = raw.params?.role || 'client'
+          client.role = 'client'
           client.deviceId = raw.params?.deviceId
           this.clients.set(clientId, client)
 

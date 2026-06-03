@@ -279,17 +279,46 @@ export class NerveGateway {
 
   private async handleConfigSet(client: WSClient, request: { params: { model?: string; provider?: string; effort?: string; permissionMode?: string } }, requestId: string) {
     const { params } = request
+
+    // 只允许修改安全的配置项
     if (params.model) this.agentCore.setModel(params.model)
     if (params.provider) this.agentCore.setProvider(params.provider)
     if (params.effort) this.agentCore.setEffort(params.effort as any)
-    if (params.permissionMode) this.agentCore.setPermissionMode(params.permissionMode as any)
+
+    // 禁止通过 Gateway 修改 permissionMode（防止提权）
+    // permissionMode 只能通过 Electron UI 或配置文件修改
+    if (params.permissionMode) {
+      console.warn(`[Gateway] Client ${client.id} attempted to set permissionMode (blocked)`)
+    }
+
     this.server.sendResponse(client.id, createResponse(requestId, true))
   }
 
   private async handleConfigGet(client: WSClient, requestId: string) {
     const config = this.agentCore.getConfig()
     const settings = this.agentCore.getSettings()
-    this.server.sendResponse(client.id, createResponse(requestId, true, { config, settings }))
+
+    // 过滤敏感信息，不返回 token/key
+    const safeSettings = {
+      model: settings.model,
+      defaultProvider: settings.defaultProvider,
+      defaultModel: settings.defaultModel,
+      cwd: settings.cwd,
+      // 不返回 providers 中的 authToken
+      providers: Object.fromEntries(
+        Object.entries(settings.providers || {}).map(([id, provider]) => [
+          id,
+          {
+            type: provider.type,
+            baseURL: provider.baseURL,
+            models: provider.models,
+            // authToken: '[REDACTED]'
+          },
+        ])
+      ),
+    }
+
+    this.server.sendResponse(client.id, createResponse(requestId, true, { config, settings: safeSettings }))
   }
 
   private async handleCancel(client: WSClient, request: { params?: { sessionId?: string } }, requestId: string) {
