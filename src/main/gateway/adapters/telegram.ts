@@ -71,10 +71,6 @@ export class TelegramAdapter extends BaseAdapter {
     this.connected = true
 
     console.log('[TelegramAdapter] Connected')
-
-    // 优雅关闭
-    process.once('SIGINT', () => this.bot?.stop('SIGINT'))
-    process.once('SIGTERM', () => this.bot?.stop('SIGTERM'))
   }
 
   async disconnect(): Promise<void> {

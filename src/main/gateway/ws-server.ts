@@ -9,7 +9,7 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws'
-import { randomUUID } from 'crypto'
+import { randomUUID, timingSafeEqual } from 'crypto'
 import { MessageSchema, createResponse, createEvent } from './protocol'
 import type { GatewayRequest, GatewayResponse, GatewayEvent } from './protocol'
 
@@ -19,6 +19,10 @@ export interface WSClient {
   role: 'client' | 'node'
   deviceId?: string
   connectedAt: number
+  /** 速率限制：消息计数器 */
+  messageCount: number
+  /** 速率限制：窗口开始时间 */
+  rateLimitWindowStart: number
 }
 
 export interface WSServerConfig {
@@ -27,14 +31,22 @@ export interface WSServerConfig {
     mode: 'token' | 'none'
     secret?: string
   }
+  /** 最大连接数 */
+  maxConnections?: number
+  /** 最大消息大小（字节） */
+  maxPayload?: number
+  /** 每客户端每秒最大消息数 */
+  rateLimit?: number
 }
 
 export type MessageHandler = (client: WSClient, request: GatewayRequest) => Promise<void>
+export type DisconnectHandler = (clientId: string) => void
 
 export class GatewayWSServer {
   private wss: WebSocketServer | null = null
   private clients = new Map<string, WSClient>()
   private messageHandler: MessageHandler | null = null
+  private disconnectHandler: DisconnectHandler | null = null
   private seqCounter = 0
 
   constructor(private config: WSServerConfig) {}
@@ -47,6 +59,7 @@ export class GatewayWSServer {
       this.wss = new WebSocketServer({
         port: this.config.port,
         host: '127.0.0.1', // 只监听本地
+        maxPayload: this.config.maxPayload || 1024 * 1024, // 默认 1MB
       })
 
       this.wss.on('listening', () => {
@@ -94,6 +107,13 @@ export class GatewayWSServer {
    */
   onMessage(handler: MessageHandler) {
     this.messageHandler = handler
+  }
+
+  /**
+   * 设置断开连接处理器
+   */
+  onDisconnect(handler: DisconnectHandler) {
+    this.disconnectHandler = handler
   }
 
   /**
@@ -149,12 +169,22 @@ export class GatewayWSServer {
   }
 
   private handleConnection(ws: WebSocket, req: any) {
+    // 连接数限制
+    const maxConnections = this.config.maxConnections || 50
+    if (this.clients.size >= maxConnections) {
+      console.warn(`[GatewayWS] Max connections (${maxConnections}) reached, rejecting new connection`)
+      ws.close(4004, 'Max connections reached')
+      return
+    }
+
     const clientId = randomUUID()
     const client: WSClient = {
       id: clientId,
       ws,
       role: 'client',
       connectedAt: Date.now(),
+      messageCount: 0,
+      rateLimitWindowStart: Date.now(),
     }
 
     console.log(`[GatewayWS] Client connected: ${clientId}`)
@@ -170,6 +200,30 @@ export class GatewayWSServer {
       try {
         const raw = JSON.parse(data.toString())
 
+        // 速率限制检查（已注册的客户端）
+        if (this.clients.has(clientId)) {
+          const now = Date.now()
+          const rateLimit = this.config.rateLimit || 10 // 默认每秒 10 条消息
+
+          // 重置窗口（每秒）
+          if (now - client.rateLimitWindowStart > 1000) {
+            client.messageCount = 0
+            client.rateLimitWindowStart = now
+          }
+
+          client.messageCount++
+          if (client.messageCount > rateLimit) {
+            console.warn(`[GatewayWS] Rate limit exceeded for client ${clientId}`)
+            this.sendResponse(clientId, createResponse(
+              raw.id || 'unknown',
+              false,
+              undefined,
+              'Rate limit exceeded'
+            ))
+            return
+          }
+        }
+
         // 第一个帧必须是 connect
         if (!this.clients.has(clientId)) {
           if (raw.method !== 'connect') {
@@ -177,10 +231,18 @@ export class GatewayWSServer {
             return
           }
 
-          // 认证检查
+          // 认证检查（使用 timingSafeEqual 防止时序攻击）
           if (this.config.auth?.mode === 'token') {
             const token = raw.params?.auth?.token
-            if (token !== this.config.auth.secret) {
+            if (!token || !this.config.auth.secret) {
+              ws.close(4003, 'Authentication failed')
+              return
+            }
+
+            const tokenBuf = Buffer.from(token)
+            const secretBuf = Buffer.from(this.config.auth.secret)
+
+            if (tokenBuf.length !== secretBuf.length || !timingSafeEqual(tokenBuf, secretBuf)) {
               ws.close(4003, 'Authentication failed')
               return
             }
@@ -245,6 +307,11 @@ export class GatewayWSServer {
       clearTimeout(handshakeTimeout)
       this.clients.delete(clientId)
       console.log(`[GatewayWS] Client disconnected: ${clientId} (code: ${code})`)
+
+      // 通知断开连接处理器
+      if (this.disconnectHandler) {
+        this.disconnectHandler(clientId)
+      }
     })
 
     ws.on('error', (err) => {

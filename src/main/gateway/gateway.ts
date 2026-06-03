@@ -59,6 +59,9 @@ export class NerveGateway {
 
     // 设置消息处理器
     this.server.onMessage(this.handleMessage.bind(this))
+
+    // 设置断开连接处理器（清理 channels Map）
+    this.server.onDisconnect(this.handleDisconnect.bind(this))
   }
 
   /**
@@ -182,6 +185,12 @@ export class NerveGateway {
       console.error(`[Gateway] Adapter message error:`, errorMsg)
       adapter.send(msg.chatId, `❌ Error: ${errorMsg}`)
     })
+  }
+
+  private handleDisconnect(clientId: string) {
+    // 清理该客户端的所有 channel 引用
+    this.channels.delete(clientId)
+    console.log(`[Gateway] Cleaned up channels for client: ${clientId}`)
   }
 
   private async handleMessage(client: WSClient, request: GatewayRequest): Promise<void> {

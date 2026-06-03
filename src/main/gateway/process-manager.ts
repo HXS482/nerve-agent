@@ -90,6 +90,7 @@ export class GatewayProcessManager extends EventEmitter {
       const timeout = setTimeout(() => {
         // 超时强制杀死
         this.process?.kill('SIGKILL')
+        this.process = null
         resolve()
       }, 5000)
 
