@@ -42,6 +42,14 @@ export interface MessageAttachment {
 export interface AdapterConfig {
   enabled: boolean
   allowedUsers?: string[]
+  /** 是否启用自动重连 */
+  autoReconnect?: boolean
+  /** 最大重试次数 */
+  maxRetries?: number
+  /** 重试窗口（ms） */
+  retryWindow?: number
+  /** 退避时间列表（ms） */
+  backoff?: number[]
   [key: string]: any
 }
 
@@ -51,10 +59,20 @@ export abstract class BaseAdapter extends EventEmitter {
 
   protected config: AdapterConfig
   protected connected = false
+  private retryCount = 0
+  private retryTimestamps: number[] = []
+  private reconnectTimer: NodeJS.Timeout | null = null
+  private stopping = false
 
   constructor(config: AdapterConfig) {
     super()
-    this.config = config
+    this.config = {
+      autoReconnect: true,
+      maxRetries: 5,
+      retryWindow: 60_000,
+      backoff: [1000, 2000, 5000, 10000, 30000],
+      ...config,
+    }
   }
 
   /**
@@ -163,6 +181,89 @@ export abstract class BaseAdapter extends EventEmitter {
       attachments: raw.attachments,
       raw,
     }
+  }
+
+  /**
+   * 标记为断开连接（子类调用）
+   */
+  protected markDisconnected() {
+    this.connected = false
+    this.emit('disconnected')
+
+    // 如果未主动停止且启用了自动重连，尝试重连
+    if (!this.stopping && this.config.autoReconnect) {
+      this.scheduleReconnect()
+    }
+  }
+
+  /**
+   * 标记为连接错误（子类调用）
+   */
+  protected markError(error: Error) {
+    this.emit('error', error)
+  }
+
+  /**
+   * 调度重连
+   */
+  private scheduleReconnect() {
+    const now = Date.now()
+
+    // 清理过期的重试时间戳
+    this.retryTimestamps = this.retryTimestamps.filter(
+      (t) => now - t < this.config.retryWindow!
+    )
+
+    // 检查是否超过最大重试次数
+    if (this.retryTimestamps.length >= this.config.maxRetries!) {
+      console.error(`[${this.name}] Max retries (${this.config.maxRetries}) exceeded in ${this.config.retryWindow}ms window`)
+      this.emit('max-retries-exceeded')
+      return
+    }
+
+    // 计算退避时间
+    const backoffIndex = Math.min(this.retryCount, this.config.backoff!.length - 1)
+    const delay = this.config.backoff![backoffIndex]
+
+    console.log(`[${this.name}] Reconnecting in ${delay}ms (attempt ${this.retryCount + 1}/${this.config.maxRetries})`)
+
+    this.retryCount++
+    this.retryTimestamps.push(now)
+
+    this.reconnectTimer = setTimeout(async () => {
+      if (this.stopping) return
+
+      try {
+        await this.connect()
+        console.log(`[${this.name}] Reconnected successfully`)
+        this.retryCount = 0
+        this.retryTimestamps = []
+        this.emit('reconnected')
+      } catch (err) {
+        console.error(`[${this.name}] Reconnect failed:`, err)
+        this.scheduleReconnect()
+      }
+    }, delay)
+  }
+
+  /**
+   * 停止重连
+   */
+  protected stopReconnect() {
+    this.stopping = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
+  /**
+   * 重置重连状态
+   */
+  protected resetReconnect() {
+    this.retryCount = 0
+    this.retryTimestamps = []
+    this.stopping = false
   }
 
   /**

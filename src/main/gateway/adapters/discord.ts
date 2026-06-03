@@ -70,14 +70,34 @@ export class DiscordAdapter extends BaseAdapter {
     this.client.on('messageCreate', (msg) => this.handleMessage(msg))
     this.client.on('messageUpdate', (oldMsg, newMsg) => this.handleMessageUpdate(oldMsg, newMsg))
 
-    // 登录
-    await this.client.login(this.config.token)
-    this.connected = true
+    // 连接断开事件
+    this.client.on('disconnect', () => {
+      console.warn('[DiscordAdapter] Disconnected from Discord')
+      this.markDisconnected()
+    })
 
-    console.log(`[DiscordAdapter] Connected as ${this.client.user?.tag}`)
+    // 错误事件
+    this.client.on('error', (err) => {
+      console.error('[DiscordAdapter] Error:', err)
+      this.markError(err)
+    })
+
+    // 登录
+    try {
+      await this.client.login(this.config.token)
+      this.connected = true
+      this.resetReconnect()
+      console.log(`[DiscordAdapter] Connected as ${this.client.user?.tag}`)
+    } catch (err) {
+      console.error('[DiscordAdapter] Connection failed:', err)
+      this.markError(err instanceof Error ? err : new Error(String(err)))
+      throw err
+    }
   }
 
   async disconnect(): Promise<void> {
+    this.stopReconnect()
+
     if (this.client) {
       this.client.destroy()
       this.client = null

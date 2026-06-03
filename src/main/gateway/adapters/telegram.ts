@@ -67,13 +67,21 @@ export class TelegramAdapter extends BaseAdapter {
     this.bot.on('voice', (ctx) => this.handleVoice(ctx))
 
     // 启动 bot
-    await this.bot.launch()
-    this.connected = true
-
-    console.log('[TelegramAdapter] Connected')
+    try {
+      await this.bot.launch()
+      this.connected = true
+      this.resetReconnect()
+      console.log('[TelegramAdapter] Connected')
+    } catch (err) {
+      console.error('[TelegramAdapter] Connection failed:', err)
+      this.markError(err instanceof Error ? err : new Error(String(err)))
+      throw err
+    }
   }
 
   async disconnect(): Promise<void> {
+    this.stopReconnect()
+
     if (this.bot) {
       this.bot.stop('disconnect')
       this.bot = null
