@@ -244,179 +244,30 @@ export class AgentCore {
     if (isElectronChannel(channel)) channel.sendPetState('jumping')
 
     try {
-      let mcpTools: Record<string, any> = {}
-      try {
-        mcpTools = await this.mcpPool.ensureConnected()
-      } catch (mcpErr) {
-        console.warn('[AgentCore] MCP connection failed, continuing without MCP tools:', mcpErr)
-      }
+      // 准备消息和系统提示
+      const { messages, systemPrompt, mcpTools } = await this.prepareMessages(payload, sessionId)
 
-      const history = payload.sessionId
-        ? await this.loadConversationHistory(payload.sessionId)
-        : []
-
-      const store = await this.ensureSessionStore()
-
-      const userContent = (payload.files && payload.files.length > 0)
-        ? buildUserContentBlocks(payload.files, payload.prompt)
-        : payload.prompt
-      await store.append({ sessionId }, [
-        { type: 'user', message: { content: userContent }, timestamp: new Date().toISOString() },
-      ])
-
-      const messages = [...history]
-
-      let systemPrompt = ''
-      const nerveClaudeMd = join(homedir(), '.nerve', 'CLAUDE.md')
-      if (existsSync(nerveClaudeMd)) {
-        systemPrompt = readFileSync(nerveClaudeMd, 'utf-8')
-      }
-
-      if (payload.prompt.startsWith('[语音指令]')) {
-        systemPrompt += '\n\n## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
-      }
-
-      // Memory recall via TencentDB (500ms timeout to avoid blocking user input)
-      if (this.memoryCore) {
-        try {
-          const recall = await Promise.race([
-            this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
-            new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) =>
-              setTimeout(() => r({}), 500),
-            ),
-          ])
-          if (recall.appendSystemContext) systemPrompt += '\n\n' + recall.appendSystemContext
-          if (recall.prependContext) messages.push({ role: 'user', content: recall.prependContext })
-        } catch (err) {
-          console.warn('[Nerve] memory recall failed:', err)
-        }
-      }
-
-      if (payload.files && payload.files.length > 0) {
-        console.log('[AgentCore] sendMessage with', payload.files.length, 'file(s):', payload.files.map(f => `${f.name}(${f.mimeType},${f.size}bytes,isImage:${f.isImage})`).join(', '))
-        const contentBlocks: Array<Record<string, unknown>> = []
-        for (const file of payload.files) {
-          if (file.isImage) {
-            contentBlocks.push({
-              type: 'image',
-              source: { type: 'base64', media_type: file.mimeType, data: file.data },
-            })
-          } else if (file.mimeType === 'application/pdf') {
-            contentBlocks.push({
-              type: 'document',
-              source: { type: 'base64', media_type: file.mimeType, data: file.data },
-            })
-          } else {
-            contentBlocks.push({
-              type: 'text',
-              text: `[File: ${file.name}]\n\`\`\`\n${file.data}\n\`\`\``,
-            })
-          }
-        }
-        contentBlocks.push({ type: 'text', text: payload.prompt })
-        console.log('[AgentCore] user content blocks:', contentBlocks.map(b => b.type).join(', '))
-        messages.push({ role: 'user', content: contentBlocks })
-      } else {
-        messages.push({ role: 'user', content: payload.prompt })
-      }
-
-      // Resolve provider
-      const providerId = this.config.provider
-        || (this.config.model.startsWith('gpt') || this.config.model.startsWith('o1') || this.config.model.startsWith('o3') || this.config.model.startsWith('o4')
-          ? 'openai'
-          : this.config.model.startsWith('gemini')
-            ? 'google'
-            : this.settings.defaultProvider || 'anthropic')
-
+      // 解析 provider 和 model
+      const providerId = this.resolveProvider()
       const modelId = this.resolveModel(this.config.model, providerId)
       console.log('[AgentCore] send model:', this.config.model, '→', modelId, 'provider:', providerId)
 
-      const skills = (await getSkills(this.sourceDir)).filter((s) => s.enabled)
-      if (skills.length > 0) {
-        const skillsDir = join(this.sourceDir, '.agents', 'skills')
-        for (const skill of skills) {
-          const skillDir = join(skillsDir, skill.id)
-          const resolvedPrompt = skill.prompt
-            .replace(/\$\{CLAUDE_SKILL_DIR\}/g, skillDir)
-            .replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId)
-          systemPrompt += `\n\n---\n\n# Skill: ${skill.name}\n\nBase directory for this skill: ${skillDir}\n\n${resolvedPrompt}`
-        }
-      }
-
+      // 获取 client
       const { client, modelId: resolvedModelId, providerType } = await this.registry.getClientAndModel(providerId, modelId)
 
-      const textDeltas: string[] = []
-      const fullThinkingParts: string[] = []
-      const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
-      const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
+      // 构建工具
+      const { allToolDefs, allToolExecutors, orchestratorTools } = await this.buildTools(
+        client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls
+      )
 
-      const orchestratorTools = getOrchestratorTools({
-        client,
-        modelId: resolvedModelId,
-        providerType,
-        projectDir: this.projectDir,
-        mcpTools,
-        effort: this.config.effort,
-        createClient: async () => {
-          const fresh = this.registry.createFreshClient(providerId)
-          return { client: fresh.client }
-        },
-        onToolCall: (id, name, input) => {
-          allToolCalls.push({ id, name, input })
-          pendingToolCalls.set(id, { name, input })
-          channel.sendToolCall(id, name, input)
-        },
-        onToolResult: (id, content, isError) => {
-          allToolResults.push({ toolCallId: id, content: content.slice(0, 50000), is_error: isError })
-          const toolInfo = pendingToolCalls.get(id)
-          if (toolInfo) {
-            this.emitFlowItem(channel, toolInfo.name, toolInfo.input, content)
-            pendingToolCalls.delete(id)
-          }
-          channel.sendToolResult(id, content.slice(0, 50000), isError)
-        },
-      })
+      // 运行 Agent 循环
+      const result = await this.runAgentLoop(
+        client, resolvedModelId, providerType, messages, systemPrompt,
+        allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals
+      )
 
-      // Build tools
-      const builtinTools = getBuiltinTools(this.projectDir, {
-        refresh: () => {
-          if (isElectronChannel(channel)) channel.sendGitRefresh()
-        },
-      }, this.sourceDir)
-
-      const allToolDefs = [
-        ...Object.entries(builtinTools).map(([name, tool]) => ({
-          name,
-          description: tool.description,
-          input_schema: tool.input_schema,
-        })),
-        ...Object.entries(mcpTools).map(([name, tool]) => ({
-          name,
-          description: (tool as any).description || '',
-          input_schema: (tool as any).input_schema || (tool as any).parameters || {},
-        })),
-        ...Object.entries(orchestratorTools).map(([name, tool]) => ({
-          name,
-          description: (tool as any).description || '',
-          input_schema: (tool as any).input_schema || {},
-        })),
-      ]
-
-      const allToolExecutors = new Map<string, (args: any) => Promise<any>>()
-      for (const [name, tool] of Object.entries(builtinTools)) {
-        allToolExecutors.set(name, tool.execute)
-      }
-      for (const [name, tool] of Object.entries(orchestratorTools)) {
-        allToolExecutors.set(name, (tool as any).execute)
-      }
-      for (const [name, executor] of this.mcpPool.getAllToolExecutors()) {
-        allToolExecutors.set(name, executor)
-      }
-
-      const allUsage = { inputTokens: 0, outputTokens: 0 }
-      let streamError: Error | null = null
-
-      try {
+      // 处理结果
+      await this.handleResult(result, sessionId, payload, channel, ctx)
         const result = await runAgenticLoop({
           client,
           modelId: resolvedModelId,
@@ -600,6 +451,350 @@ export class AgentCore {
       // 清理会话上下文（如果不再需要）
       // 注意：不删除上下文，因为可能还有后续消息
     }
+  }
+
+  /**
+   * 准备消息和系统提示
+   */
+  private async prepareMessages(payload: SendMessagePayload, sessionId: string) {
+    // 获取 MCP 工具
+    let mcpTools: Record<string, any> = {}
+    try {
+      mcpTools = await this.mcpPool.ensureConnected()
+    } catch (mcpErr) {
+      console.warn('[AgentCore] MCP connection failed, continuing without MCP tools:', mcpErr)
+    }
+
+    // 加载历史消息
+    const history = payload.sessionId
+      ? await this.loadConversationHistory(payload.sessionId)
+      : []
+
+    // 保存用户消息
+    const store = await this.ensureSessionStore()
+    const userContent = (payload.files && payload.files.length > 0)
+      ? buildUserContentBlocks(payload.files, payload.prompt)
+      : payload.prompt
+    await store.append({ sessionId }, [
+      { type: 'user', message: { content: userContent }, timestamp: new Date().toISOString() },
+    ])
+
+    const messages = [...history]
+
+    // 构建系统提示
+    let systemPrompt = ''
+    const nerveClaudeMd = join(homedir(), '.nerve', 'CLAUDE.md')
+    if (existsSync(nerveClaudeMd)) {
+      systemPrompt = readFileSync(nerveClaudeMd, 'utf-8')
+    }
+
+    if (payload.prompt.startsWith('[语音指令]')) {
+      systemPrompt += '\n\n## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
+    }
+
+    // Memory recall via TencentDB (500ms timeout to avoid blocking user input)
+    if (this.memoryCore) {
+      try {
+        const recall = await Promise.race([
+          this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
+          new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) =>
+            setTimeout(() => r({}), 500),
+          ),
+        ])
+        if (recall.appendSystemContext) systemPrompt += '\n\n' + recall.appendSystemContext
+        if (recall.prependContext) messages.push({ role: 'user', content: recall.prependContext })
+      } catch (err) {
+        console.warn('[Nerve] memory recall failed:', err)
+      }
+    }
+
+    // 构建用户消息
+    if (payload.files && payload.files.length > 0) {
+      console.log('[AgentCore] sendMessage with', payload.files.length, 'file(s):', payload.files.map(f => `${f.name}(${f.mimeType},${f.size}bytes,isImage:${f.isImage})`).join(', '))
+      const contentBlocks: Array<Record<string, unknown>> = []
+      for (const file of payload.files) {
+        if (file.isImage) {
+          contentBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: file.mimeType, data: file.data },
+          })
+        } else if (file.mimeType === 'application/pdf') {
+          contentBlocks.push({
+            type: 'document',
+            source: { type: 'base64', media_type: file.mimeType, data: file.data },
+          })
+        } else {
+          contentBlocks.push({
+            type: 'text',
+            text: `[File: ${file.name}]\n\`\`\`\n${file.data}\n\`\`\``,
+          })
+        }
+      }
+      contentBlocks.push({ type: 'text', text: payload.prompt })
+      console.log('[AgentCore] user content blocks:', contentBlocks.map(b => b.type).join(', '))
+      messages.push({ role: 'user', content: contentBlocks })
+    } else {
+      messages.push({ role: 'user', content: payload.prompt })
+    }
+
+    // 注入 Skills
+    const skills = (await getSkills(this.sourceDir)).filter((s) => s.enabled)
+    if (skills.length > 0) {
+      const skillsDir = join(this.sourceDir, '.agents', 'skills')
+      for (const skill of skills) {
+        const skillDir = join(skillsDir, skill.id)
+        const resolvedPrompt = skill.prompt
+          .replace(/\$\{CLAUDE_SKILL_DIR\}/g, skillDir)
+          .replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId)
+        systemPrompt += `\n\n---\n\n# Skill: ${skill.name}\n\nBase directory for this skill: ${skillDir}\n\n${resolvedPrompt}`
+      }
+    }
+
+    return { messages, systemPrompt, mcpTools }
+  }
+
+  /**
+   * 解析 provider
+   */
+  private resolveProvider(): string {
+    return this.config.provider
+      || (this.config.model.startsWith('gpt') || this.config.model.startsWith('o1') || this.config.model.startsWith('o3') || this.config.model.startsWith('o4')
+        ? 'openai'
+        : this.config.model.startsWith('gemini')
+          ? 'google'
+          : this.settings.defaultProvider || 'anthropic')
+  }
+
+  /**
+   * 构建工具定义和执行器
+   */
+  private async buildTools(
+    client: any,
+    modelId: string,
+    providerType: string,
+    mcpTools: Record<string, any>,
+    channel: OutputChannel,
+    pendingToolCalls: Map<string, { name: string; input: any }>
+  ) {
+    const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
+    const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
+
+    const orchestratorTools = getOrchestratorTools({
+      client,
+      modelId,
+      providerType,
+      projectDir: this.projectDir,
+      mcpTools,
+      effort: this.config.effort,
+      createClient: async () => {
+        const fresh = this.registry.createFreshClient(this.resolveProvider())
+        return { client: fresh.client }
+      },
+      onToolCall: (id, name, input) => {
+        allToolCalls.push({ id, name, input })
+        pendingToolCalls.set(id, { name, input })
+        channel.sendToolCall(id, name, input)
+      },
+      onToolResult: (id, content, isError) => {
+        allToolResults.push({ toolCallId: id, content: content.slice(0, 50000), is_error: isError })
+        const toolInfo = pendingToolCalls.get(id)
+        if (toolInfo) {
+          this.emitFlowItem(channel, toolInfo.name, toolInfo.input, content)
+          pendingToolCalls.delete(id)
+        }
+        channel.sendToolResult(id, content.slice(0, 50000), isError)
+      },
+    })
+
+    // Build tools
+    const builtinTools = getBuiltinTools(this.projectDir, {
+      refresh: () => {
+        if (isElectronChannel(channel)) channel.sendGitRefresh()
+      },
+    }, this.sourceDir)
+
+    const allToolDefs = [
+      ...Object.entries(builtinTools).map(([name, tool]) => ({
+        name,
+        description: tool.description,
+        input_schema: tool.input_schema,
+      })),
+      ...Object.entries(mcpTools).map(([name, tool]) => ({
+        name,
+        description: (tool as any).description || '',
+        input_schema: (tool as any).input_schema || (tool as any).parameters || {},
+      })),
+      ...Object.entries(orchestratorTools).map(([name, tool]) => ({
+        name,
+        description: (tool as any).description || '',
+        input_schema: (tool as any).input_schema || {},
+      })),
+    ]
+
+    const allToolExecutors = new Map<string, (args: any) => Promise<any>>()
+    for (const [name, tool] of Object.entries(builtinTools)) {
+      allToolExecutors.set(name, tool.execute)
+    }
+    for (const [name, tool] of Object.entries(orchestratorTools)) {
+      allToolExecutors.set(name, (tool as any).execute)
+    }
+    for (const [name, executor] of this.mcpPool.getAllToolExecutors()) {
+      allToolExecutors.set(name, executor)
+    }
+
+    return { allToolDefs, allToolExecutors, orchestratorTools, allToolCalls, allToolResults }
+  }
+
+  /**
+   * 运行 Agent 循环
+   */
+  private async runAgentLoop(
+    client: any,
+    modelId: string,
+    providerType: string,
+    messages: Array<{ role: string; content: unknown }>,
+    systemPrompt: string,
+    allToolDefs: any[],
+    allToolExecutors: Map<string, (args: any) => Promise<any>>,
+    ctx: SessionContext,
+    channel: OutputChannel,
+    pendingToolCalls: Map<string, { name: string; input: any }>,
+    pendingApprovals: Map<string, { resolve: (approved: boolean) => void }>
+  ) {
+    const textDeltas: string[] = []
+    const fullThinkingParts: string[] = []
+    const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
+    const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
+
+    const result = await runAgenticLoop({
+      client,
+      modelId,
+      providerType,
+      messages,
+      system: systemPrompt || undefined,
+      tools: allToolDefs,
+      toolExecutors: allToolExecutors,
+      maxSteps: 50,
+      abortSignal: ctx.abort.signal,
+      onTextDelta: (text) => {
+        textDeltas.push(text)
+        channel.sendStreamDelta(text)
+        if (isElectronChannel(channel)) channel.sendPetState('working')
+      },
+      onThinkingDelta: (thinking) => {
+        fullThinkingParts.push(thinking)
+        channel.sendThinkingDelta(thinking)
+      },
+      onToolCall: (id, name, input) => {
+        allToolCalls.push({ id, name, input })
+        pendingToolCalls.set(id, { name, input })
+        channel.sendToolCall(id, name, input)
+        if (isElectronChannel(channel)) channel.sendPetState('running-left')
+      },
+      onToolApproval: this.config.permissionMode === 'bypassPermissions'
+        ? undefined
+        : async (id, name, input) => {
+            if (!this.needsApproval(name)) return true
+            const approvalId = `approve-${id}`
+            if (isElectronChannel(channel)) {
+              channel.sendToolApprovalRequest(approvalId, name, input)
+            }
+            return new Promise<boolean>((resolve) => {
+              pendingApprovals.set(approvalId, { resolve })
+            })
+          },
+      onToolResult: (id, content, isError) => {
+        allToolResults.push({ toolCallId: id, content: content.slice(0, 50000), is_error: isError })
+        const toolInfo = pendingToolCalls.get(id)
+        if (toolInfo) {
+          this.emitFlowItem(channel, toolInfo.name, toolInfo.input, content)
+          pendingToolCalls.delete(id)
+        }
+        channel.sendToolResult(id, content.slice(0, 50000), isError)
+      },
+      onBeforeStep: async (msgs) => {
+        await this.offloadBridge?.onBeforeStep(msgs)
+      },
+      onAfterToolCall: (toolName, toolCallId, params, result) => {
+        this.offloadBridge?.onAfterToolCall(toolName, toolCallId, params, result)
+      },
+    })
+
+    return {
+      usage: result.usage,
+      textDeltas,
+      fullThinkingParts,
+      allToolCalls,
+      allToolResults,
+    }
+  }
+
+  /**
+   * 处理结果和保存
+   */
+  private async handleResult(
+    result: { usage: { inputTokens: number; outputTokens: number }; textDeltas: string[]; fullThinkingParts: string[]; allToolCalls: Array<{ id: string; name: string; input: unknown }>; allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> },
+    sessionId: string,
+    payload: SendMessagePayload,
+    channel: OutputChannel,
+    ctx: SessionContext
+  ) {
+    const store = await this.ensureSessionStore()
+    const { usage, textDeltas, fullThinkingParts, allToolCalls, allToolResults } = result
+
+    const content: Array<Record<string, unknown>> = []
+    const fullThinking = fullThinkingParts.join('')
+    if (fullThinking) content.push({ type: 'thinking', thinking: fullThinking })
+    let fullText = textDeltas.join('')
+
+    if (!fullText && allToolCalls.length > 0) {
+      const toolNames = [...new Set(allToolCalls.map((t) => t.name))]
+      const fileOps = allToolResults
+        .filter((r) => !r.is_error)
+        .map((r) => { try { const p = JSON.parse(r.content); return p.filename || p.path || null } catch { return null } })
+        .filter(Boolean)
+      if (fileOps.length > 0) {
+        fullText = `Done. ${toolNames.join(', ')} → ${fileOps.join(', ')}`
+      } else {
+        fullText = `Done. ${toolNames.join(', ')} completed.`
+      }
+    }
+    if (fullText) content.push({ type: 'text', text: fullText })
+    for (const tc of allToolCalls) {
+      content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input })
+    }
+    for (const tr of allToolResults) {
+      content.push({ type: 'tool_result', toolCallId: tr.toolCallId, content: tr.content, is_error: tr.is_error })
+    }
+
+    await store.append({ sessionId }, [{
+      type: 'assistant',
+      message: { content },
+      timestamp: new Date().toISOString(),
+      usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+    }])
+    await store.append({ sessionId }, [{ type: 'tag', tag: 'gui' }])
+
+    // Memory capture
+    if (fullText && this.memoryCore) {
+      this.memoryCore.handleTurnCommitted({
+        userText: payload.prompt,
+        assistantText: fullText,
+        messages: [
+          { role: 'user', content: payload.prompt },
+          { role: 'assistant', content: fullText },
+        ],
+        sessionKey: sessionId,
+        sessionId,
+      }).catch((err) => console.error('[TDAI] capture failed:', err))
+    }
+
+    const pricing = COST_PER_TOKEN[this.resolveModel(this.config.model)] || { input: 0.003, output: 0.015 }
+    const cost = ((usage.inputTokens) * pricing.input + (usage.outputTokens) * pricing.output) / 1000
+    const maxContextTokens = CONTEXT_WINDOWS[this.resolveModel(this.config.model)] || 200000
+
+    channel.sendDone(sessionId, cost, maxContextTokens)
+    if (isElectronChannel(channel)) channel.sendPetState('happy')
   }
 
   /**
