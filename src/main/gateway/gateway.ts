@@ -20,7 +20,7 @@ import { DiscordAdapter } from './adapters/discord'
 import { createResponse, createEvent } from './protocol'
 import type { WSClient } from './ws-server'
 import type { GatewayRequest, IncomingMessage } from './protocol'
-import type { GatewayChannel } from '../../shared/types'
+import type { GatewayChannel, GatewayProxy } from '../../shared/types'
 
 export interface GatewayConfig {
   port: number
@@ -40,6 +40,7 @@ export class NerveGateway {
   private adapters = new Map<string, BaseAdapter>()
   private startTime: number = 0
   private running = false
+  private proxy: GatewayProxy | null = null
 
   // clientId → sessionId → WebSocketChannel
   private channels = new Map<string, Map<string, WebSocketChannel>>()
@@ -80,6 +81,24 @@ export class NerveGateway {
     })
 
     this.adapters.set(name, adapter)
+  }
+
+  /**
+   * 设置代理
+   * 设置 HTTPS_PROXY / HTTP_PROXY 环境变量，影响所有适配器的网络请求
+   */
+  setProxy(proxy: GatewayProxy | null): void {
+    this.proxy = proxy
+    if (proxy && proxy.enabled && proxy.host && proxy.port) {
+      const url = `${proxy.protocol}://${proxy.host}:${proxy.port}`
+      process.env.HTTPS_PROXY = url
+      process.env.HTTP_PROXY = url
+      console.log(`[Gateway] Proxy set: ${url}`)
+    } else {
+      delete process.env.HTTPS_PROXY
+      delete process.env.HTTP_PROXY
+      console.log('[Gateway] Proxy disabled')
+    }
   }
 
   /**

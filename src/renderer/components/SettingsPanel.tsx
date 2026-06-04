@@ -1363,24 +1363,41 @@ function ChannelsTab() {
   const [saved, setSaved] = useState(false)
   const [justSavedId, setJustSavedId] = useState<string | null>(null)
   const [editConfig, setEditConfig] = useState<Record<string, Record<string, string>>>({})
+  const [proxyEnabled, setProxyEnabled] = useState(false)
+  const [proxyHost, setProxyHost] = useState('127.0.0.1')
+  const [proxyPort, setProxyPort] = useState('7890')
+  const [proxyProtocol, setProxyProtocol] = useState<'http' | 'socks5'>('http')
 
   useEffect(() => {
     (window.claude as any).gatewayChannelsGet().then((chs: GatewayChannel[]) => {
       setChannels(chs || {})
-      // 初始化编辑态
       const cfg: Record<string, Record<string, string>> = {}
       for (const ch of chs) cfg[ch.id] = { ...ch.config }
       setEditConfig(cfg)
     }).catch(() => {})
+    ;(window.claude as any).gatewayProxyGet().then((p: any) => {
+      if (p) {
+        setProxyEnabled(p.enabled ?? false)
+        setProxyHost(p.host ?? '127.0.0.1')
+        setProxyPort(String(p.port ?? 7890))
+        setProxyProtocol(p.protocol ?? 'http')
+      }
+    }).catch(() => {})
   }, [])
 
   const handleSave = async () => {
+    // 保存代理配置
+    await (window.claude as any).gatewayProxySave({
+      enabled: proxyEnabled,
+      host: proxyHost,
+      port: parseInt(proxyPort) || 7890,
+      protocol: proxyProtocol,
+    })
     // 把 editConfig 同步回 channels
     const updated = channels.map(ch => ({ ...ch, config: editConfig[ch.id] || ch.config }))
     await (window.claude as any).gatewayChannelsSave(updated)
     setChannels(updated)
     setSaved(true)
-    // 收起展开项，记录刚保存的 channel
     const savedId = expanded
     setExpanded(null)
     setJustSavedId(savedId)
@@ -1436,6 +1453,59 @@ function ChannelsTab() {
           50% { opacity: 0.8; box-shadow: 0 0 6px 2px rgba(39, 201, 63, 0.3); }
         }
       `}</style>
+
+      <Section title="Network Proxy">
+        <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
+          配置代理以访问被墙的 IM 服务（如 Telegram）。保存后重启 Gateway 生效。
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="flex items-center" style={{ gap: 10 }}>
+            <FieldLabel>启用代理</FieldLabel>
+            <button
+              onClick={() => setProxyEnabled(!proxyEnabled)}
+              className="cursor-pointer transition-colors"
+              style={{
+                padding: '3px 10px',
+                borderRadius: 6,
+                fontSize: 10,
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                color: proxyEnabled ? '#27c93f' : '#484f58',
+                background: proxyEnabled ? 'rgba(39,201,63,0.1)' : 'transparent',
+                border: `1px solid ${proxyEnabled ? 'rgba(39,201,63,0.25)' : 'rgba(255,255,255,0.06)'}`,
+              }}
+            >
+              {proxyEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+          {proxyEnabled && (
+            <>
+              <div className="flex items-end" style={{ gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <FieldLabel>协议</FieldLabel>
+                  <PillGroup
+                    options={['http', 'socks5']}
+                    value={proxyProtocol}
+                    onChange={(p) => setProxyProtocol(p as 'http' | 'socks5')}
+                  />
+                </div>
+                <div style={{ flex: 2 }}>
+                  <FieldLabel>Host</FieldLabel>
+                  <TextInput value={proxyHost} onChange={setProxyHost} placeholder="127.0.0.1" mono />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <FieldLabel>Port</FieldLabel>
+                  <TextInput value={proxyPort} onChange={setProxyPort} placeholder="7897" mono />
+                </div>
+              </div>
+              <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
+                当前: {proxyProtocol}://{proxyHost}:{proxyPort}
+              </div>
+            </>
+          )}
+        </div>
+      </Section>
+
       <Section title="IM Channels">
         <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
           配置 IM 通道，让 Nerve Agent 通过消息平台与你交互。

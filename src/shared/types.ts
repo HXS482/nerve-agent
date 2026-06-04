@@ -108,6 +108,8 @@ export const IPC_CHANNELS = {
   GATEWAY_STOP: 'gateway:stop',
   GATEWAY_CHANNELS_GET: 'gateway:channels:get',
   GATEWAY_CHANNELS_SAVE: 'gateway:channels:save',
+  GATEWAY_PROXY_GET: 'gateway:proxy:get',
+  GATEWAY_PROXY_SAVE: 'gateway:proxy:save',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations
@@ -503,4 +505,12 @@ export const CHANNEL_PLATFORM_LABELS: Record<ChannelPlatform, string> = {
   'wechat-work': '企业微信',
   feishu: '飞书',
   dingtalk: '钉钉',
+}
+
+// Gateway Proxy config
+export interface GatewayProxy {
+  enabled: boolean
+  host: string
+  port: number
+  protocol: 'http' | 'socks5'
 }

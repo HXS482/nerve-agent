@@ -2,7 +2,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
-import { ModelInfo, GatewayChannel } from '../shared/types'
+import { ModelInfo, GatewayChannel, GatewayProxy } from '../shared/types'
 
 async function atomicWriteFile(filePath: string, data: string, encoding: BufferEncoding = 'utf-8') {
   const tmpPath = filePath + '.tmp'
@@ -309,5 +309,29 @@ export async function saveChannels(channels: GatewayChannel[]): Promise<void> {
     try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
   }
   existing.channels = channels
+  await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
+}
+
+// --- Gateway Proxy ---
+
+export async function getProxy(): Promise<GatewayProxy> {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return { enabled: false, host: '127.0.0.1', port: 7890, protocol: 'http' }
+  try {
+    const data = JSON.parse(await readFile(nerveSettingsPath, 'utf-8'))
+    return data.proxy || { enabled: false, host: '127.0.0.1', port: 7890, protocol: 'http' }
+  } catch {
+    return { enabled: false, host: '127.0.0.1', port: 7890, protocol: 'http' }
+  }
+}
+
+export async function saveProxy(proxy: GatewayProxy): Promise<void> {
+  await ensureNerveDir()
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(nerveSettingsPath)) {
+    try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
+  }
+  existing.proxy = proxy
   await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
 }

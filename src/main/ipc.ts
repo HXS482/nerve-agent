@@ -4,7 +4,7 @@ import { join, relative, extname, basename } from 'path'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels } from './settings'
+import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
@@ -504,5 +504,15 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
         console.error('[IPC] Failed to reload adapters:', err)
       })
     }
+  })
+
+  // Gateway Proxy
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_PROXY_GET, async () => {
+    return getProxy()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_PROXY_SAVE, async (_event, proxy) => {
+    if (!proxy || typeof proxy !== 'object') return
+    await saveProxy(proxy)
   })
 }
