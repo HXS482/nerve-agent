@@ -514,5 +514,13 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   ipcMain.handle(IPC_CHANNELS.GATEWAY_PROXY_SAVE, async (_event, proxy) => {
     if (!proxy || typeof proxy !== 'object') return
     await saveProxy(proxy)
+    // 实时应用代理并重载适配器
+    if (gateway) {
+      gateway.setProxy(proxy)
+      const channels = await getChannels()
+      gateway.loadAdapters(channels).catch(err => {
+        console.error('[IPC] Failed to reload adapters after proxy change:', err)
+      })
+    }
   })
 }
