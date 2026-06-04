@@ -1359,7 +1359,6 @@ function ChannelsTab() {
   const [channels, setChannels] = useState<GatewayChannel[]>([])
   const [adding, setAdding] = useState(false)
   const [newPlatform, setNewPlatform] = useState<ChannelPlatform>('telegram')
-  const [newName, setNewName] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [editConfig, setEditConfig] = useState<Record<string, Record<string, string>>>({})
@@ -1384,19 +1383,17 @@ function ChannelsTab() {
   }
 
   const handleAdd = () => {
-    if (!newName.trim()) return
     const id = `${newPlatform}-${Date.now()}`
     const ch: GatewayChannel = {
       id,
       platform: newPlatform,
-      name: newName.trim(),
+      name: CHANNEL_PLATFORM_LABELS[newPlatform],
       enabled: true,
       config: {},
     }
     const next = [...channels, ch]
     setChannels(next)
     setEditConfig(prev => ({ ...prev, [id]: {} }))
-    setNewName('')
     setNewPlatform('telegram')
     setAdding(false)
     setExpanded(id)
@@ -1506,7 +1503,7 @@ function ChannelsTab() {
                         <TextInput
                           value={cfg[field.key] || ''}
                           onChange={(v) => updateField(ch.id, field.key, v)}
-                          placeholder={field.label}
+                          placeholder={field.placeholder || field.label}
                           type={field.secret ? 'password' : 'text'}
                           mono
                         />
@@ -1544,13 +1541,9 @@ function ChannelsTab() {
                 renderLabel={(p) => CHANNEL_PLATFORM_LABELS[p as ChannelPlatform]}
               />
             </div>
-            <div>
-              <FieldLabel>Name</FieldLabel>
-              <TextInput value={newName} onChange={setNewName} placeholder="My Telegram Bot" />
-            </div>
             <div className="flex items-center" style={{ gap: 8 }}>
-              <PrimaryButton onClick={handleAdd} disabled={!newName.trim()}>Add</PrimaryButton>
-              <SecondaryButton onClick={() => { setAdding(false); setNewName('') }}>Cancel</SecondaryButton>
+              <PrimaryButton onClick={handleAdd}>Add</PrimaryButton>
+              <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
