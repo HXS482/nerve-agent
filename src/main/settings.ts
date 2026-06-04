@@ -2,7 +2,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
-import { ModelInfo } from '../shared/types'
+import { ModelInfo, GatewayChannel } from '../shared/types'
 
 async function atomicWriteFile(filePath: string, data: string, encoding: BufferEncoding = 'utf-8') {
   const tmpPath = filePath + '.tmp'
@@ -286,4 +286,28 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
   } catch {
     return []
   }
+}
+
+// --- Gateway Channels ---
+
+export async function getChannels(): Promise<GatewayChannel[]> {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return []
+  try {
+    const data = JSON.parse(await readFile(nerveSettingsPath, 'utf-8'))
+    return data.channels || []
+  } catch {
+    return []
+  }
+}
+
+export async function saveChannels(channels: GatewayChannel[]): Promise<void> {
+  await ensureNerveDir()
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(nerveSettingsPath)) {
+    try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
+  }
+  existing.channels = channels
+  await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
 }

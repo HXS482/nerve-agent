@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ClaudeConfig } from '../../shared/types'
+import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore } from '../stores/chatStore'
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'provider' | 'mcp' | 'skills' | 'voice'
+type Tab = 'general' | 'provider' | 'mcp' | 'skills' | 'voice' | 'channels'
 
 const EFFORTS: ClaudeConfig['effort'][] = ['low', 'medium', 'high', 'xhigh', 'max']
 const PERMISSION_MODES: ClaudeConfig['permissionMode'][] = ['default', 'acceptEdits', 'auto', 'bypassPermissions']
@@ -64,6 +64,15 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
         <path d="M19 10v2a7 7 0 01-14 0v-2" />
         <line x1="12" y1="19" x2="12" y2="23" />
         <line x1="8" y1="23" x2="16" y2="23" />
+      </svg>
+    ),
+  },
+  {
+    id: 'channels',
+    label: 'Channels',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
       </svg>
     ),
   },
@@ -371,6 +380,7 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
             {tab === 'mcp' && <McpTab />}
             {tab === 'skills' && <SkillsTab />}
             {tab === 'voice' && <VoiceTab />}
+            {tab === 'channels' && <ChannelsTab />}
           </div>
         </div>
       </div>
@@ -1339,6 +1349,225 @@ function VoiceTab() {
       {testResult && (
         <StatusBadge ok={testResult.ok} text={testResult.ok ? (testResult.error || 'STT working') : `Failed: ${testResult.error}`} />
       )}
+    </div>
+  )
+}
+
+// --- Channels Tab ---
+
+function ChannelsTab() {
+  const [channels, setChannels] = useState<GatewayChannel[]>([])
+  const [adding, setAdding] = useState(false)
+  const [newPlatform, setNewPlatform] = useState<ChannelPlatform>('telegram')
+  const [newName, setNewName] = useState('')
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [editConfig, setEditConfig] = useState<Record<string, Record<string, string>>>({})
+
+  useEffect(() => {
+    (window.claude as any).gatewayChannelsGet().then((chs: GatewayChannel[]) => {
+      setChannels(chs || {})
+      // 初始化编辑态
+      const cfg: Record<string, Record<string, string>> = {}
+      for (const ch of chs) cfg[ch.id] = { ...ch.config }
+      setEditConfig(cfg)
+    }).catch(() => {})
+  }, [])
+
+  const handleSave = async () => {
+    // 把 editConfig 同步回 channels
+    const updated = channels.map(ch => ({ ...ch, config: editConfig[ch.id] || ch.config }))
+    await (window.claude as any).gatewayChannelsSave(updated)
+    setChannels(updated)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleAdd = () => {
+    if (!newName.trim()) return
+    const id = `${newPlatform}-${Date.now()}`
+    const ch: GatewayChannel = {
+      id,
+      platform: newPlatform,
+      name: newName.trim(),
+      enabled: true,
+      config: {},
+    }
+    const next = [...channels, ch]
+    setChannels(next)
+    setEditConfig(prev => ({ ...prev, [id]: {} }))
+    setNewName('')
+    setNewPlatform('telegram')
+    setAdding(false)
+    setExpanded(id)
+  }
+
+  const handleDelete = (id: string) => {
+    setChannels(prev => prev.filter(ch => ch.id !== id))
+    setEditConfig(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    if (expanded === id) setExpanded(null)
+  }
+
+  const handleToggle = (id: string) => {
+    setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, enabled: !ch.enabled } : ch))
+  }
+
+  const updateField = (id: string, key: string, value: string) => {
+    setEditConfig(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [key]: value },
+    }))
+  }
+
+  const platforms = Object.keys(CHANNEL_PLATFORM_LABELS) as ChannelPlatform[]
+
+  return (
+    <div>
+      <Section title="IM Channels">
+        <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
+          配置 IM 通道，让 Nerve Agent 通过消息平台与你交互。
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {channels.map((ch) => {
+            const isExpanded = expanded === ch.id
+            const fields = CHANNEL_FIELDS[ch.platform] || []
+            const cfg = editConfig[ch.id] || {}
+
+            return (
+              <div
+                key={ch.id}
+                style={{
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: 'var(--bg-surface-container-high)',
+                  border: `1px solid ${ch.enabled ? 'var(--border-subtle)' : 'rgba(255,255,255,0.04)'}`,
+                  opacity: ch.enabled ? 1 : 0.6,
+                }}
+              >
+                {/* Row */}
+                <div
+                  className="flex items-center cursor-pointer transition-colors"
+                  style={{ gap: 10, padding: '10px 12px' }}
+                  onClick={() => setExpanded(isExpanded ? null : ch.id)}
+                >
+                  <div
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: ch.enabled ? '#27c93f' : '#484f58',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span className="text-[12px] font-medium flex-1" style={{ color: 'var(--text-on-surface)' }}>
+                    {ch.name}
+                  </span>
+                  <span className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
+                    {CHANNEL_PLATFORM_LABELS[ch.platform]}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleToggle(ch.id) }}
+                    className="cursor-pointer transition-colors"
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      fontSize: 10,
+                      color: ch.enabled ? '#27c93f' : 'var(--text-outline)',
+                      background: ch.enabled ? 'rgba(39,201,63,0.1)' : 'transparent',
+                      border: `1px solid ${ch.enabled ? 'rgba(39,201,63,0.25)' : 'transparent'}`,
+                    }}
+                  >
+                    {ch.enabled ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(ch.id) }}
+                    className="cursor-pointer transition-colors"
+                    style={{ padding: 3, borderRadius: 6, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5f56' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Expanded config */}
+                {isExpanded && (
+                  <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {fields.map((field) => (
+                      <div key={field.key}>
+                        <FieldLabel>{field.label}</FieldLabel>
+                        <TextInput
+                          value={cfg[field.key] || ''}
+                          onChange={(v) => updateField(ch.id, field.key, v)}
+                          placeholder={field.label}
+                          type={field.secret ? 'password' : 'text'}
+                          mono
+                        />
+                      </div>
+                    ))}
+                    {fields.length === 0 && (
+                      <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
+                        该平台暂无可配置项
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {channels.length === 0 && !adding && (
+            <div className="text-[11px] text-center py-4" style={{ color: 'var(--text-outline)' }}>
+              尚未配置任何 IM 通道
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Add new */}
+      {adding ? (
+        <Section title="Add Channel">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <FieldLabel>Platform</FieldLabel>
+              <PillGroup
+                options={platforms}
+                value={newPlatform}
+                onChange={(p) => setNewPlatform(p as ChannelPlatform)}
+                renderLabel={(p) => CHANNEL_PLATFORM_LABELS[p as ChannelPlatform]}
+              />
+            </div>
+            <div>
+              <FieldLabel>Name</FieldLabel>
+              <TextInput value={newName} onChange={setNewName} placeholder="My Telegram Bot" />
+            </div>
+            <div className="flex items-center" style={{ gap: 8 }}>
+              <PrimaryButton onClick={handleAdd} disabled={!newName.trim()}>Add</PrimaryButton>
+              <SecondaryButton onClick={() => { setAdding(false); setNewName('') }}>Cancel</SecondaryButton>
+            </div>
+          </div>
+        </Section>
+      ) : (
+        <div style={{ marginTop: 12 }}>
+          <SecondaryButton onClick={() => setAdding(true)}>+ Add Channel</SecondaryButton>
+        </div>
+      )}
+
+      {/* Save */}
+      <Section title="Actions">
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <PrimaryButton onClick={handleSave}>
+            {saved ? 'Saved' : 'Save'}
+          </PrimaryButton>
+        </div>
+      </Section>
     </div>
   )
 }

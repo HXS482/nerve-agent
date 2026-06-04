@@ -187,6 +187,8 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_SESSION_DELETE, sessionId),
   gatewayStart: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_START),
   gatewayStop: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STOP),
+  gatewayChannelsGet: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_CHANNELS_GET),
+  gatewayChannelsSave: (channels: any[]) => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_CHANNELS_SAVE, channels),
   onGatewayLog: (callback: (entry: { level: string; message: string; timestamp: number }) => void) => {
     const handler = (_event: any, entry: any) => callback(entry)
     ipcRenderer.on(IPC_CHANNELS.GATEWAY_LOG, handler)

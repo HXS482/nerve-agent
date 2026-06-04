@@ -4,7 +4,7 @@ import { join, relative, extname, basename } from 'path'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels } from './settings'
+import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
@@ -477,4 +477,14 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       }
     })
   }
+
+  // Gateway Channels (settings, no gateway instance needed)
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_CHANNELS_GET, async () => {
+    return getChannels()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_CHANNELS_SAVE, async (_event, channels) => {
+    if (!Array.isArray(channels)) return
+    await saveChannels(channels)
+  })
 }

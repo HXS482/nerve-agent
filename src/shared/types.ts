@@ -106,6 +106,8 @@ export const IPC_CHANNELS = {
   GATEWAY_LOG: 'gateway:log',
   GATEWAY_START: 'gateway:start',
   GATEWAY_STOP: 'gateway:stop',
+  GATEWAY_CHANNELS_GET: 'gateway:channels:get',
+  GATEWAY_CHANNELS_SAVE: 'gateway:channels:save',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations
@@ -453,4 +455,52 @@ export interface LogEntry {
   level: 'info' | 'warn' | 'error'
   message: string
   timestamp: number
+}
+
+// Gateway Channel config
+export type ChannelPlatform = 'telegram' | 'discord' | 'wechat-work' | 'feishu' | 'dingtalk'
+
+export interface GatewayChannel {
+  id: string
+  platform: ChannelPlatform
+  name: string
+  enabled: boolean
+  config: Record<string, string>
+}
+
+export const CHANNEL_FIELDS: Record<ChannelPlatform, { key: string; label: string; secret?: boolean }[]> = {
+  telegram: [
+    { key: 'botToken', label: 'Bot Token', secret: true },
+    { key: 'allowedUsers', label: 'Allowed User IDs (逗号分隔)' },
+  ],
+  discord: [
+    { key: 'botToken', label: 'Bot Token', secret: true },
+    { key: 'allowedUsers', label: 'Allowed User IDs (逗号分隔)' },
+  ],
+  'wechat-work': [
+    { key: 'corpId', label: 'Corp ID' },
+    { key: 'agentId', label: 'Agent ID' },
+    { key: 'secret', label: 'Secret', secret: true },
+    { key: 'token', label: 'Token' },
+    { key: 'encodingAESKey', label: 'Encoding AES Key', secret: true },
+  ],
+  feishu: [
+    { key: 'appId', label: 'App ID' },
+    { key: 'appSecret', label: 'App Secret', secret: true },
+    { key: 'verificationToken', label: 'Verification Token' },
+    { key: 'encryptKey', label: 'Encrypt Key', secret: true },
+  ],
+  dingtalk: [
+    { key: 'appKey', label: 'App Key' },
+    { key: 'appSecret', label: 'App Secret', secret: true },
+    { key: 'robotCode', label: 'Robot Code' },
+  ],
+}
+
+export const CHANNEL_PLATFORM_LABELS: Record<ChannelPlatform, string> = {
+  telegram: 'Telegram',
+  discord: 'Discord',
+  'wechat-work': '企业微信',
+  feishu: '飞书',
+  dingtalk: '钉钉',
 }
