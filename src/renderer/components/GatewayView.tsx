@@ -327,6 +327,27 @@ export function GatewayView() {
                     }`}>
                       {isConnected ? STATUS_LABEL.connected : STATUS_LABEL.disconnected}
                     </span>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        const api = getGatewayAPI()
+                        await api.gatewayAdapterToggle(ad.name, !ad.enabled)
+                        fetchAdapters()
+                      }}
+                      className="cursor-pointer transition-colors"
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontSize: 8,
+                        fontWeight: 700,
+                        fontFamily: 'monospace',
+                        color: ad.enabled ? '#27c93f' : '#484f58',
+                        background: ad.enabled ? 'rgba(39,201,63,0.1)' : 'transparent',
+                        border: `1px solid ${ad.enabled ? 'rgba(39,201,63,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                      }}
+                    >
+                      {ad.enabled ? 'ON' : 'OFF'}
+                    </button>
                     <span className={`w-1.5 h-1.5 rounded-full ${
                       isConnected ? 'bg-[#34A853]' : 'bg-slate-600'
                     }`} />

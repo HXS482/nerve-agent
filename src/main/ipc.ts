@@ -435,18 +435,30 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     })
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_ADAPTERS, async () => {
-      return gateway.getAdapters().map(adapter => ({
-        name: adapter.name,
-        platform: adapter.platform,
-        enabled: true,
-        connected: adapter.isConnected,
-        config: {},
-      }))
+      const channels = await getChannels()
+      const channelMap = new Map(channels.map(ch => [ch.name, ch]))
+      return gateway.getAdapters().map(adapter => {
+        const ch = channelMap.get(adapter.name)
+        return {
+          name: adapter.name,
+          platform: adapter.platform,
+          enabled: ch?.enabled ?? true,
+          connected: adapter.isConnected,
+          config: {},
+        }
+      })
     })
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_ADAPTER_TOGGLE, async (_event, name: string, enabled: boolean) => {
-      // TODO: 实现适配器启用/禁用
-      console.log(`[Gateway] Toggle adapter ${name}: ${enabled}`)
+      try {
+        const channels = await getChannels()
+        const updated = channels.map(ch => ch.name === name ? { ...ch, enabled } : ch)
+        await saveChannels(updated)
+        await gateway.loadAdapters(updated)
+        return { success: true }
+      } catch (err: any) {
+        return { success: false, error: err.message }
+      }
     })
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_SESSIONS, async () => {
