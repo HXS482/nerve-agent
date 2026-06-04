@@ -17,6 +17,7 @@ function bootstrapProxy() {
 
     const url = `${proxy.protocol}://${proxy.host}:${proxy.port}`
     process.env.GLOBAL_AGENT_HTTP_PROXY = url
+    process.env.GLOBAL_AGENT_HTTPS_PROXY = url
     process.env.GLOBAL_AGENT_NO_LOOPBACK = '1'
 
     // global-agent 是 external dep，用 require 加载
