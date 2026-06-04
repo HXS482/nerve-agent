@@ -436,14 +436,14 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_ADAPTERS, async () => {
       const channels = await getChannels()
-      const channelMap = new Map(channels.map(ch => [ch.name, ch]))
-      return gateway.getAdapters().map(adapter => {
-        const ch = channelMap.get(adapter.name)
+      const liveAdapters = new Map(gateway.getAdapters().map(a => [a.name, a]))
+      return channels.map(ch => {
+        const live = liveAdapters.get(ch.name)
         return {
-          name: adapter.name,
-          platform: adapter.platform,
-          enabled: ch?.enabled ?? true,
-          connected: adapter.isConnected,
+          name: ch.name,
+          platform: ch.platform,
+          enabled: ch.enabled,
+          connected: live?.isConnected ?? false,
           config: {},
         }
       })
