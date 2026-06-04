@@ -12,7 +12,8 @@
 import { Telegraf, Context } from 'telegraf'
 import { Message } from 'telegraf/types'
 import { existsSync } from 'fs'
-import tunnel from 'tunnel'
+import http from 'http'
+import https from 'https'
 import { BaseAdapter, IncomingMessage, MessageAttachment, AdapterConfig } from './base-adapter'
 import { StreamBufferManager } from '../stream-buffer'
 
@@ -63,11 +64,25 @@ export class TelegramAdapter extends BaseAdapter {
     const options: Record<string, any> = {}
     if (this.config.proxy) {
       try {
-        const url = new URL(this.config.proxy)
-        const agent = tunnel.httpsOverHttp({
-          proxy: {
-            host: url.hostname,
-            port: parseInt(url.port),
+        const proxyUrl = new URL(this.config.proxy)
+        // 创建 CONNECT 隧道 agent
+        const agent = new https.Agent({
+          createConnection: (_options, callback) => {
+            const req = http.request({
+              host: proxyUrl.hostname,
+              port: parseInt(proxyUrl.port),
+              method: 'CONNECT',
+              path: `${_options.host}:${_options.port}`,
+            })
+            req.on('connect', (res, socket) => {
+              if (res.statusCode === 200) {
+                callback(null, socket)
+              } else {
+                callback(new Error(`Proxy CONNECT failed: ${res.statusCode}`))
+              }
+            })
+            req.on('error', callback)
+            req.end()
           },
         })
         options.telegram = { agent }
