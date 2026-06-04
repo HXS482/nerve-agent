@@ -15,9 +15,12 @@ import { SessionRouter } from './session-router'
 import { WebSocketChannel } from './ws-channel'
 import { AgentCore } from '../core/agent-core'
 import { BaseAdapter } from './adapters/base-adapter'
+import { TelegramAdapter } from './adapters/telegram'
+import { DiscordAdapter } from './adapters/discord'
 import { createResponse, createEvent } from './protocol'
 import type { WSClient } from './ws-server'
 import type { GatewayRequest, IncomingMessage } from './protocol'
+import type { GatewayChannel } from '../../shared/types'
 
 export interface GatewayConfig {
   port: number
@@ -77,6 +80,66 @@ export class NerveGateway {
     })
 
     this.adapters.set(name, adapter)
+  }
+
+  /**
+   * 从 Channel 配置加载适配器
+   * 读取 settings.json 中的 channels，创建并注册适配器实例
+   */
+  async loadAdapters(channels: GatewayChannel[]): Promise<void> {
+    // 先断开并移除现有适配器
+    for (const [name, adapter] of this.adapters.entries()) {
+      try {
+        if (adapter.isConnected) await adapter.disconnect()
+      } catch (err) {
+        console.error(`[Gateway] Failed to disconnect adapter ${name}:`, err)
+      }
+    }
+    this.adapters.clear()
+
+    // 根据配置创建新适配器
+    for (const ch of channels) {
+      if (!ch.enabled) continue
+      if (!ch.config.token && ch.platform !== 'wechat-work') continue
+
+      try {
+        let adapter: BaseAdapter | null = null
+
+        switch (ch.platform) {
+          case 'telegram':
+            adapter = new TelegramAdapter({
+              enabled: true,
+              token: ch.config.token,
+              allowedUsers: ch.config.allowedUsers
+                ? ch.config.allowedUsers.split(',').map(s => s.trim()).filter(Boolean)
+                : undefined,
+            })
+            break
+
+          case 'discord':
+            adapter = new DiscordAdapter({
+              enabled: true,
+              token: ch.config.token,
+              allowedUsers: ch.config.allowedUsers
+                ? ch.config.allowedUsers.split(',').map(s => s.trim()).filter(Boolean)
+                : undefined,
+            })
+            break
+
+          // 企业微信/飞书/钉钉 — 暂不支持，跳过
+          default:
+            console.log(`[Gateway] Adapter for ${ch.platform} not implemented yet, skipping`)
+            continue
+        }
+
+        if (adapter) {
+          this.registerAdapter(adapter)
+          console.log(`[Gateway] Loaded adapter: ${ch.name} (${ch.platform})`)
+        }
+      } catch (err) {
+        console.error(`[Gateway] Failed to create adapter ${ch.name}:`, err)
+      }
+    }
   }
 
   /**

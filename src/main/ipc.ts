@@ -486,5 +486,11 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   ipcMain.handle(IPC_CHANNELS.GATEWAY_CHANNELS_SAVE, async (_event, channels) => {
     if (!Array.isArray(channels)) return
     await saveChannels(channels)
+    // 热重载适配器
+    if (gateway) {
+      gateway.loadAdapters(channels).catch(err => {
+        console.error('[IPC] Failed to reload adapters:', err)
+      })
+    }
   })
 }

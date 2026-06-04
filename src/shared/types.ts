@@ -468,30 +468,30 @@ export interface GatewayChannel {
   config: Record<string, string>
 }
 
-export const CHANNEL_FIELDS: Record<ChannelPlatform, { key: string; label: string; secret?: boolean }[]> = {
+export const CHANNEL_FIELDS: Record<ChannelPlatform, { key: string; label: string; secret?: boolean; placeholder?: string }[]> = {
   telegram: [
-    { key: 'botToken', label: 'Bot Token', secret: true },
-    { key: 'allowedUsers', label: 'Allowed User IDs (逗号分隔)' },
+    { key: 'token', label: 'Bot Token', secret: true, placeholder: '123456:ABC-DEF...' },
+    { key: 'allowedUsers', label: 'Allowed User IDs', placeholder: '逗号分隔，留空允许所有人' },
   ],
   discord: [
-    { key: 'botToken', label: 'Bot Token', secret: true },
-    { key: 'allowedUsers', label: 'Allowed User IDs (逗号分隔)' },
+    { key: 'token', label: 'Bot Token', secret: true, placeholder: 'MTxxxx...' },
+    { key: 'allowedUsers', label: 'Allowed User IDs', placeholder: '逗号分隔，留空允许所有人' },
   ],
   'wechat-work': [
-    { key: 'corpId', label: 'Corp ID' },
-    { key: 'agentId', label: 'Agent ID' },
+    { key: 'corpId', label: 'Corp ID', placeholder: 'ww1234567890' },
+    { key: 'agentId', label: 'Agent ID', placeholder: '1000002' },
     { key: 'secret', label: 'Secret', secret: true },
     { key: 'token', label: 'Token' },
     { key: 'encodingAESKey', label: 'Encoding AES Key', secret: true },
   ],
   feishu: [
-    { key: 'appId', label: 'App ID' },
+    { key: 'appId', label: 'App ID', placeholder: 'cli_xxxx' },
     { key: 'appSecret', label: 'App Secret', secret: true },
     { key: 'verificationToken', label: 'Verification Token' },
     { key: 'encryptKey', label: 'Encrypt Key', secret: true },
   ],
   dingtalk: [
-    { key: 'appKey', label: 'App Key' },
+    { key: 'appKey', label: 'App Key', placeholder: 'dingxxxx' },
     { key: 'appSecret', label: 'App Secret', secret: true },
     { key: 'robotCode', label: 'Robot Code' },
   ],

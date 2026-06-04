@@ -10,7 +10,7 @@ import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
 import { initImagesDir } from './images'
-import { injectSettingsEnv } from './settings'
+import { injectSettingsEnv, getChannels } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
@@ -355,6 +355,15 @@ app.whenReady().then(() => {
     dataDir: join(homedir(), '.nerve'),
     projectDir: projectDir,
     sourceDir: projectDir,
+  })
+
+  // 从 settings 加载 IM 适配器
+  getChannels().then(channels => {
+    if (channels.length > 0) {
+      return gateway.loadAdapters(channels)
+    }
+  }).catch(err => {
+    console.error('[Nerve] Failed to load gateway adapters:', err)
   })
 
   setupIPC(mainWindow, claude, skinManager, gitService, gateway)
