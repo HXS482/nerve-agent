@@ -17,7 +17,7 @@ function bootstrapProxy() {
 
     const url = `${proxy.protocol}://${proxy.host}:${proxy.port}`
     const globalTunnel = require('global-tunnel-ng')
-    globalTunnel.bootstrap({
+    globalTunnel.initialize({
       host: proxy.host,
       port: parseInt(proxy.port),
       protocol: proxy.protocol,
