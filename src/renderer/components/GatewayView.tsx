@@ -3,34 +3,32 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * GatewayView — IM Gateway Control Panel (Right Sidebar)
+ * 对接真实后端 IPC，轮询 health，订阅日志事件
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Play,
   Square,
-  Layers,
-  RefreshCw,
-  Network
 } from 'lucide-react';
+import type { GatewayHealth, AdapterInfo } from '../../shared/types';
 
-// ── Type Definitions ──────────────────────────────────────────────
+// ── gateway 方法类型（window.claude 已在 useClaude.ts 声明）──
+interface GatewayAPI {
+  gatewayStatus: () => Promise<GatewayHealth>
+  gatewayAdapters: () => Promise<AdapterInfo[]>
+  gatewayStart: () => Promise<{ success: boolean; error?: string }>
+  gatewayStop: () => Promise<{ success: boolean; error?: string }>
+  gatewayAdapterToggle: (name: string, enabled: boolean) => Promise<void>
+  onGatewayLog: (callback: (entry: { level: string; message: string; timestamp: number }) => void) => () => void
+}
+
+function getGatewayAPI(): GatewayAPI {
+  return window.claude as unknown as GatewayAPI;
+}
+
+// ── Types ──────────────────────────────────────────────────────
 export type GatewayStatus = 'running' | 'stopped' | 'degraded';
-
-export interface GatewayMetrics {
-  connections: number;
-  sessions: number;
-  memory: number; // MB
-}
-
-export interface IMAdapter {
-  id: string;
-  name: string;
-  platform: 'wechat' | 'telegram' | 'slack' | 'discord' | 'feishu' | 'dingtalk';
-  status: 'connected' | 'disconnected' | 'reconnecting' | 'failed' | 'paused';
-}
-
-export type LogLevel = 'all' | 'info' | 'warn' | 'error';
 
 export interface SidebarLog {
   id: string;
@@ -40,36 +38,12 @@ export interface SidebarLog {
   text: string;
 }
 
-// ── Mock Data ─────────────────────────────────────────────────────
-const INITIAL_ADAPTERS: IMAdapter[] = [
-  { id: 'ad-wechat', name: 'WeChat Bot Service', platform: 'wechat', status: 'connected' },
-  { id: 'ad-telegram', name: 'Telegram Event stream', platform: 'telegram', status: 'reconnecting' },
-  { id: 'ad-slack', name: 'Slack Enterprise Hook', platform: 'slack', status: 'connected' },
-  { id: 'ad-discord', name: 'Discord Command Dispatcher', platform: 'discord', status: 'connected' },
-  { id: 'ad-feishu', name: '飞书核心集成助手', platform: 'feishu', status: 'paused' }
-];
+export type LogLevel = 'all' | 'info' | 'warn' | 'error';
 
-const INITIAL_LOGS: SidebarLog[] = [
-  { id: 'l1', timestamp: '23:35:41', level: 'info', category: 'ADAPTER', text: 'WeChat 侧边消息发送 ACK 回执: msgSeq=7382103' },
-  { id: 'l2', timestamp: '23:35:45', level: 'error', category: 'FEISHU', text: '飞书 OpenAuthClient: APP_SECRET 验证不合规, 请检查全局参数配置文件' },
-  { id: 'l3', timestamp: '23:35:48', level: 'info', category: 'SOCKET', text: '客户端 WSS 双向链接握手验证成功, userId=usr_928' },
-  { id: 'l4', timestamp: '23:35:56', level: 'info', category: 'ADAPTER', text: 'WeChat 侧边消息发送 ACK 回执: msgSeq=7382103' },
-  { id: 'l5', timestamp: '23:35:58', level: 'error', category: 'DISCORD', text: 'HTTP 429: Discord API 触发速率限制，正在将当前下行消息积存入本地队列' },
-  { id: 'l6', timestamp: '23:36:01', level: 'info', category: 'ADAPTER', text: 'WeChat 侧边消息发送 ACK 回执: msgSeq=7382103' },
-  { id: 'l7', timestamp: '23:36:06', level: 'error', category: 'DISCORD', text: 'HTTP 429: Discord API 触发速率限制，正在将当前下行消息积存入本地队列' },
-  { id: 'l8', timestamp: '23:36:09', level: 'error', category: 'DISCORD', text: 'HTTP 429: Discord API 触发速率限制，正在将当前下行消息积存入本地队列' }
-];
-
-const MOCK_GEN_LOGS = [
-  { level: 'info' as const, category: 'SOCKET', text: '新客户端连接握手建立成功, IP=192.168.1.144' },
-  { level: 'info' as const, category: 'ADAPTER', text: '下行心跳同步包 ACK 接收成功, latency=21ms' },
-  { level: 'warn' as const, category: 'SOCKET', text: '客户端触发重连退避机制 (Backoff), 正在尝试下一次探测' },
-  { level: 'error' as const, category: 'SYSTEM', text: '网关写进程失败: SQLite 发生存储区暂时性锁止' }
-];
-
-// ── Helpers ───────────────────────────────────────────────────────
-function formatUptime(totalSec: number): string {
-  if (totalSec === 0) return '0s';
+// ── Helpers ────────────────────────────────────────────────────
+function formatUptime(ms: number): string {
+  if (ms <= 0) return '0s';
+  const totalSec = Math.floor(ms / 1000);
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
@@ -80,13 +54,9 @@ function formatUptime(totalSec: number): string {
   return res;
 }
 
-const STATUS_NEXT: Record<IMAdapter['status'], IMAdapter['status']> = {
-  connected: 'disconnected',
-  disconnected: 'reconnecting',
-  reconnecting: 'failed',
-  failed: 'paused',
-  paused: 'connected',
-};
+function formatMemory(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)}MB`;
+}
 
 const PLATFORM_BADGE: Record<string, { bg: string; fg: string }> = {
   wechat:    { bg: 'bg-[#09C063]/10', fg: 'text-[#09C063]' },
@@ -95,6 +65,7 @@ const PLATFORM_BADGE: Record<string, { bg: string; fg: string }> = {
   discord:   { bg: 'bg-[#5865F2]/10', fg: 'text-[#5865F2]' },
   feishu:    { bg: 'bg-[#FFC107]/10', fg: 'text-[#FFC107]' },
   dingtalk:  { bg: 'bg-[#FFC107]/10', fg: 'text-[#FFC107]' },
+  gateway:   { bg: 'bg-[#8B5CF6]/10', fg: 'text-[#8B5CF6]' },
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -105,96 +76,127 @@ const STATUS_LABEL: Record<string, string> = {
   paused: 'PAUSED',
 };
 
-// ── Component ─────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────
 export function GatewayView() {
-  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>('running');
-  const [uptime, setUptime] = useState<number>(312);
-  const [metrics, setMetrics] = useState<GatewayMetrics>({
-    connections: 582,
-    sessions: 421,
-    memory: 23
-  });
-
-  const [adapters, setAdapters] = useState<IMAdapter[]>(INITIAL_ADAPTERS);
+  const [status, setStatus] = useState<GatewayStatus>('stopped');
+  const [uptime, setUptime] = useState(0);
+  const [connections, setConnections] = useState(0);
+  const [sessions, setSessions] = useState(0);
+  const [memory, setMemory] = useState(0);
+  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+  const [logs, setLogs] = useState<SidebarLog[]>([]);
   const [activeLogLevel, setActiveLogLevel] = useState<LogLevel>('all');
-  const [logs, setLogs] = useState<SidebarLog[]>(INITIAL_LOGS);
+  const [loading, setLoading] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to latest log entries
+  // ── 拉取 health ──
+  const fetchHealth = useCallback(async () => {
+    try {
+      const health = await getGatewayAPI().gatewayStatus();
+      setStatus(health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'stopped');
+      setUptime(health.uptime);
+      setConnections(health.clientCount);
+      setSessions(health.activeSessions);
+      setMemory(health.memoryUsage?.rss ?? 0);
+    } catch {
+      // gateway 未初始化时静默
+      setStatus('stopped');
+    }
+  }, []);
+
+  // ── 拉取适配器 ──
+  const fetchAdapters = useCallback(async () => {
+    try {
+      const list = await getGatewayAPI().gatewayAdapters();
+      setAdapters(list);
+    } catch {
+      setAdapters([]);
+    }
+  }, []);
+
+  // ── 初始化：拉数据 + 订阅日志 ──
+  useEffect(() => {
+    fetchHealth();
+    fetchAdapters();
+
+    const unsub = getGatewayAPI().onGatewayLog((entry) => {
+      const now = new Date(entry.timestamp).toLocaleTimeString().substring(0, 8);
+      const category = entry.level === 'error' ? 'ERROR' : entry.level === 'warn' ? 'WARN' : 'SYSTEM';
+      setLogs(prev => [
+        ...prev.slice(-149),
+        {
+          id: `${entry.timestamp}-${Math.random()}`,
+          timestamp: now,
+          level: entry.level as 'info' | 'warn' | 'error',
+          category,
+          text: entry.message,
+        },
+      ]);
+    });
+    return unsub;
+  }, [fetchHealth, fetchAdapters]);
+
+  // ── 轮询 health（运行中时 5s 一次）──
+  useEffect(() => {
+    if (status !== 'running') return;
+    const timer = setInterval(() => {
+      fetchHealth();
+      fetchAdapters();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [status, fetchHealth, fetchAdapters]);
+
+  // ── 日志自动滚底 ──
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // Uptime / Metrics simulation ticker
-  useEffect(() => {
-    if (gatewayStatus !== 'running') return;
-    const interval = setInterval(() => {
-      setUptime(prev => prev + 1);
-
-      setMetrics(prev => {
-        const rand = Math.random();
-        const dConn = rand > 0.85 ? (rand > 0.5 ? 1 : -1) : 0;
-        const dSess = rand > 0.90 ? (rand > 0.5 ? 1 : -1) : 0;
-        const dMem  = rand > 0.70 ? (rand > 0.5 ? 1 : -1) : 0;
-        return {
-          connections: Math.max(0, prev.connections + dConn),
-          sessions:    Math.max(0, prev.sessions + dSess),
-          memory:      Math.max(5, prev.memory + dMem),
-        };
-      });
-
-      if (Math.random() > 0.82) {
-        const sample = MOCK_GEN_LOGS[Math.floor(Math.random() * MOCK_GEN_LOGS.length)];
-        const nowStr = new Date().toLocaleTimeString().substring(0, 8);
-        setLogs(prev => [
-          ...prev,
-          { id: Date.now().toString(), timestamp: nowStr, level: sample.level, category: sample.category, text: sample.text }
-        ]);
+  // ── 启动 Gateway ──
+  const handleStart = async () => {
+    setLoading(true);
+    try {
+      const result = await getGatewayAPI().gatewayStart();
+      if (result.success) {
+        setStatus('running');
+        addLocalLog('info', 'SYSTEM', 'Gateway engine started');
+        fetchHealth();
+        fetchAdapters();
+      } else {
+        addLocalLog('error', 'SYSTEM', `Start failed: ${result.error}`);
       }
-    }, 1500);
-    return () => clearInterval(interval);
-  }, [gatewayStatus]);
-
-  // ── Actions ──
-  const handleStartGateway = () => {
-    setGatewayStatus('running');
-    setUptime(1);
-    setMetrics({ connections: 12, sessions: 8, memory: 14 });
-    const nowStr = new Date().toLocaleTimeString().substring(0, 8);
-    setLogs(prev => [
-      ...prev,
-      { id: Date.now().toString(), timestamp: nowStr, level: 'info', category: 'SYSTEM', text: 'Nerve micro gateway engine started successfully.' }
-    ]);
+    } catch (err: any) {
+      addLocalLog('error', 'SYSTEM', `Start error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleStopGateway = () => {
-    setGatewayStatus('stopped');
-    setUptime(0);
-    setMetrics({ connections: 0, sessions: 0, memory: 0 });
-    const nowStr = new Date().toLocaleTimeString().substring(0, 8);
-    setLogs(prev => [
-      ...prev,
-      { id: Date.now().toString(), timestamp: nowStr, level: 'warn', category: 'SYSTEM', text: 'Gateway engine manual shutdown finalized. All connections socket term.' }
-    ]);
+  // ── 停止 Gateway ──
+  const handleStop = async () => {
+    setLoading(true);
+    try {
+      const result = await getGatewayAPI().gatewayStop();
+      if (result.success) {
+        setStatus('stopped');
+        setUptime(0);
+        setConnections(0);
+        setSessions(0);
+        setMemory(0);
+        addLocalLog('warn', 'SYSTEM', 'Gateway engine stopped');
+      } else {
+        addLocalLog('error', 'SYSTEM', `Stop failed: ${result.error}`);
+      }
+    } catch (err: any) {
+      addLocalLog('error', 'SYSTEM', `Stop error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleToggleAdapter = (id: string) => {
-    setAdapters(prev => prev.map(ad => {
-      if (ad.id !== id) return ad;
-      const nextStat = STATUS_NEXT[ad.status];
-      const nowStr = new Date().toLocaleTimeString().substring(0, 8);
-      setLogs(l => [
-        ...l,
-        {
-          id: Math.random().toString(),
-          timestamp: nowStr,
-          level: nextStat === 'connected' ? 'info' : 'warn',
-          category: ad.platform.toUpperCase(),
-          text: `Manual state mutate: [${ad.name}] -> Status changed to ${nextStat.toUpperCase()}`
-        }
-      ]);
-      return { ...ad, status: nextStat };
-    }));
+  // ── 本地日志 ──
+  const addLocalLog = (level: 'info' | 'warn' | 'error', category: string, text: string) => {
+    const now = new Date().toLocaleTimeString().substring(0, 8);
+    setLogs(prev => [...prev.slice(-149), { id: `${Date.now()}`, timestamp: now, level, category, text }]);
   };
 
   const filteredLogs = activeLogLevel === 'all'
@@ -206,67 +208,67 @@ export function GatewayView() {
     <div className="w-full h-full flex flex-col overflow-hidden text-[#E9ECF0] select-none font-sans">
 
       {/* ─ 1. Status Overview Header ─ */}
-      <div className="px-4 pt-3.5 pb-3 border-b border-[#1F2228] space-y-3 flex-shrink-0">
-        <div className="flex justify-between items-center text-[11px]">
+      <div className="px-4 pt-3.5 pb-3 space-y-4 flex-shrink-0">
+        <div className="flex items-center justify-between text-[11px]" style={{ paddingLeft: '22px', paddingRight: '22px' }}>
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${
-              gatewayStatus === 'running'  ? 'bg-[#34A853]'
-              : gatewayStatus === 'degraded' ? 'bg-[#FBBC05]'
+              status === 'running'  ? 'bg-[#34A853]'
+              : status === 'degraded' ? 'bg-[#FBBC05]'
               : 'bg-[#EA4335]'
             }`} />
             <span className="font-bold text-[#D1D5DB] font-mono tracking-tight leading-none">Gateway</span>
             <span className="text-[#8B949E] text-[10px] font-mono leading-none">
-              {gatewayStatus === 'running' ? formatUptime(uptime) : '0s'}
+              {status === 'running' ? formatUptime(uptime) : '0s'}
             </span>
           </div>
 
-          <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-mono font-bold leading-tight ${
-            gatewayStatus === 'running'
+          <span className={`ml-auto text-[8.5px] px-1.5 py-0.2 rounded font-mono font-bold leading-tight ${
+            status === 'running'
               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
               : 'bg-rose-500/10 text-rose-400 border border-rose-500/25'
           }`}>
-            {gatewayStatus.toUpperCase()}
+            {status.toUpperCase()}
           </span>
         </div>
 
         {/* Three Compact Operational Indicators */}
-        <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
-          <div className="bg-white/[0.015] border border-white/[0.04] p-2 rounded-lg text-left hover:border-[#2D3139] transition-colors group">
-            <div className="text-[#8B949E] text-[9.5px] font-sans flex items-center justify-between mb-0.5 select-none">
+        <div className="flex justify-between text-[9px] font-mono" style={{ paddingLeft: '22px', paddingRight: '22px', marginTop: '10px' }}>
+          <div className="bg-white/[0.015] border border-white/[0.08] px-3 rounded-md text-left hover:border-[#2D3139] transition-colors w-[88px] h-[40px] flex flex-col justify-center">
+            <div className="text-[#8B949E] text-[8px] font-sans flex items-center justify-between mb-0.5 select-none">
               <span>连接</span>
-              <span className="opacity-30 text-[8px]">L1</span>
+              <span className="opacity-30 text-[7px] font-mono">L1</span>
             </div>
-            <div className="text-[13px] font-bold text-[#F0F6FC]">{metrics.connections}</div>
+            <div className="text-[11px] font-bold text-[#F0F6FC]">{connections}</div>
           </div>
 
-          <div className="bg-white/[0.015] border border-white/[0.04] p-2 rounded-lg text-left hover:border-[#2D3139] transition-colors group">
-            <div className="text-[#8B949E] text-[9.5px] font-sans flex items-center justify-between mb-0.5 select-none">
+          <div className="bg-white/[0.015] border border-white/[0.08] px-3 rounded-md text-left hover:border-[#2D3139] transition-colors w-[88px] h-[40px] flex flex-col justify-center">
+            <div className="text-[#8B949E] text-[8px] font-sans flex items-center justify-between mb-0.5 select-none">
               <span>会话</span>
-              <span className="opacity-30 text-[8px]">L2</span>
+              <span className="opacity-30 text-[7px] font-mono">L2</span>
             </div>
-            <div className="text-[13px] font-bold text-[#F0F6FC]">{metrics.sessions}</div>
+            <div className="text-[11px] font-bold text-[#F0F6FC]">{sessions}</div>
           </div>
 
-          <div className="bg-white/[0.015] border border-white/[0.04] p-2 rounded-lg text-left hover:border-[#2D3139] transition-colors group">
-            <div className="text-[#8B949E] text-[9.5px] font-sans flex items-center justify-between mb-0.5 select-none">
+          <div className="bg-white/[0.015] border border-white/[0.08] px-3 rounded-md text-left hover:border-[#2D3139] transition-colors w-[88px] h-[40px] flex flex-col justify-center">
+            <div className="text-[#8B949E] text-[8px] font-sans flex items-center justify-between mb-0.5 select-none">
               <span>内存</span>
-              <span className="opacity-30 text-[8px]">RSS</span>
+              <span className="opacity-30 text-[7px] font-mono">RSS</span>
             </div>
-            <div className="text-[13px] font-bold text-[#F0F6FC]">
-              {gatewayStatus === 'running' ? `${metrics.memory}MB` : '0MB'}
+            <div className="text-[11px] font-bold text-[#F0F6FC]">
+              {status === 'running' ? formatMemory(memory) : '0MB'}
             </div>
           </div>
         </div>
       </div>
 
       {/* ─ 2. Control Buttons ─ */}
-      <div className="px-4 py-2 bg-[#0A0C0F] border-b border-[#1F2228] grid grid-cols-2 gap-2.5 flex-shrink-0">
+      <div className="py-2 bg-[#0A0C0F] grid grid-cols-2 gap-2.5 flex-shrink-0" style={{ marginTop: '10px', paddingLeft: '22px', paddingRight: '22px' }}>
         <button
           type="button"
-          onClick={handleStartGateway}
-          disabled={gatewayStatus === 'running'}
+          onClick={handleStart}
+          disabled={status === 'running' || loading}
           className={`h-6.5 text-[10.5px] font-sans font-semibold rounded flex items-center justify-center gap-1.5 transition-all ${
-            gatewayStatus === 'running'
+            status === 'running' || loading
               ? 'bg-[#181C1A] text-[#1E3B27]/40 border border-[#232926]/40 cursor-not-allowed opacity-50'
               : 'bg-[#09C063] hover:bg-[#0BCF6B] text-slate-950 font-bold shadow cursor-pointer active:scale-98'
           }`}
@@ -276,10 +278,10 @@ export function GatewayView() {
 
         <button
           type="button"
-          onClick={handleStopGateway}
-          disabled={gatewayStatus === 'stopped'}
+          onClick={handleStop}
+          disabled={status === 'stopped' || loading}
           className={`h-6.5 text-[10.5px] font-sans font-semibold rounded flex items-center justify-center gap-1.5 transition-all ${
-            gatewayStatus === 'stopped'
+            status === 'stopped' || loading
               ? 'bg-[#231215] text-[#5A2027]/40 border border-[#3C1C21]/40 cursor-not-allowed opacity-50'
               : 'bg-[#16181D] hover:bg-[#1F2228] text-[#8B949E] hover:text-slate-100 border border-[#2B303B] cursor-pointer active:scale-98'
           }`}
@@ -289,63 +291,64 @@ export function GatewayView() {
       </div>
 
       {/* ─ 3. Adapters List ─ */}
-      <div className="px-4 pt-3.5 pb-2.5 border-b border-[#1F2228] flex-shrink-0 space-y-2">
+      <div className="pt-3.5 pb-2.5 flex-shrink-0 space-y-2" style={{ marginTop: '10px', paddingLeft: '22px', paddingRight: '22px' }}>
         <div className="flex justify-between items-center text-[10px] text-[#8B949E] font-medium tracking-wide">
-          <span>适配器列表 (Adapters Context)</span>
-          <span className="text-[8px] opacity-40 font-mono tracking-widest uppercase">Instance Map</span>
+          <span>适配器列表 (Adapters)</span>
+          <span className="text-[8px] opacity-40 font-mono tracking-widest uppercase">{adapters.length} loaded</span>
         </div>
 
-        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-0.5 select-text scrollbar-thin scrollbar-thumb-gray-800">
-          {adapters.map((ad) => {
-            const badge = PLATFORM_BADGE[ad.platform] ?? PLATFORM_BADGE.feishu;
-            return (
-              <div
-                key={ad.id}
-                onClick={() => handleToggleAdapter(ad.id)}
-                className="h-8 px-2.5 bg-[#13151A]/60 hover:bg-[#1E2129] border border-white/[0.015] hover:border-white/[0.05] rounded-md flex items-center justify-between text-[11px] transition-all duration-150 cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-4 h-4 rounded text-[9.5px] font-extrabold font-mono flex items-center justify-center select-none ${badge.bg} ${badge.fg}`}>
-                    {ad.platform[0].toUpperCase()}
-                  </span>
-                  <span className="text-[#C9D1D9] text-[10.5px] truncate max-w-[150px] font-medium tracking-tight">
-                    {ad.name}
-                  </span>
-                </div>
+        <div className="max-h-44 overflow-y-auto select-text scrollbar-thin scrollbar-thumb-gray-800" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {adapters.length === 0 ? (
+            <div className="h-8 flex items-center justify-center text-[#484F58] text-[10px] font-sans">
+              {status === 'running' ? '无已注册适配器' : 'Gateway 未启动'}
+            </div>
+          ) : (
+            adapters.map((ad) => {
+              const badge = PLATFORM_BADGE[ad.platform] ?? PLATFORM_BADGE.gateway;
+              const isConnected = ad.connected;
+              return (
+                <div
+                  key={ad.name}
+                  className="h-8 bg-[#13151A]/60 hover:bg-[#1E2129] border border-white/[0.015] hover:border-white/[0.05] rounded-md flex items-center justify-between text-[11px] transition-all duration-150 group"
+                  style={{ paddingLeft: '12px', paddingRight: '10px' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-4 h-4 rounded text-[9.5px] font-extrabold font-mono flex items-center justify-center select-none ${badge.bg} ${badge.fg}`}>
+                      {ad.platform[0].toUpperCase()}
+                    </span>
+                    <span className="text-[#C9D1D9] text-[10.5px] truncate max-w-[150px] font-medium tracking-tight">
+                      {ad.name}
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <span className={`text-[8px] font-bold font-mono tracking-wider ${
-                    ad.status === 'connected'     ? 'text-[#34A853]'
-                    : ad.status === 'reconnecting' ? 'text-[#FBBC05] animate-pulse'
-                    : ad.status === 'failed'       ? 'text-[#EA4335]'
-                    : 'text-slate-500'
-                  }`}>
-                    {STATUS_LABEL[ad.status] ?? ad.status.toUpperCase()}
-                  </span>
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    ad.status === 'connected'     ? 'bg-[#34A853]'
-                    : ad.status === 'reconnecting' ? 'bg-[#FBBC05] animate-ping'
-                    : ad.status === 'failed'       ? 'bg-[#EA4335]'
-                    : 'bg-slate-600'
-                  }`} />
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[8px] font-bold font-mono tracking-wider ${
+                      isConnected ? 'text-[#34A853]' : 'text-slate-500'
+                    }`}>
+                      {isConnected ? STATUS_LABEL.connected : STATUS_LABEL.disconnected}
+                    </span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      isConnected ? 'bg-[#34A853]' : 'bg-slate-600'
+                    }`} />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
       {/* ─ 4. Live Log Terminal ─ */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-[220px]">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-[220px]" style={{ marginTop: '10px' }}>
 
-        <div className="h-9 px-4 border-b border-[#1F2228] bg-[#090A0C] flex items-center justify-between flex-shrink-0 text-[10px] text-[#8B949E] font-medium">
+        <div className="h-9 border-b border-[#1F2228] bg-[#090A0C] flex items-center justify-between flex-shrink-0 text-[10px] text-[#8B949E] font-medium" style={{ paddingLeft: '22px', paddingRight: '22px' }}>
           <span>日志诊断流 (Live Terminal)</span>
-          <div className="flex items-center bg-[#13161C] border border-white/[0.03] p-0.5 rounded text-[9px] font-mono leading-none">
+          <div className="flex items-center bg-[#13161C] border border-white/[0.03] px-2 py-1 rounded text-[10px] font-mono gap-1">
             {(['all', 'info', 'warn', 'error'] as const).map((level) => (
               <button
                 key={level}
                 onClick={() => setActiveLogLevel(level)}
-                className={`px-1.5 py-0.5 rounded font-medium capitalize transition-colors cursor-pointer ${
+                className={`px-[3px] py-[1px] rounded font-medium capitalize transition-colors cursor-pointer ${
                   activeLogLevel === level
                     ? 'bg-indigo-600 text-slate-100 font-bold shadow'
                     : 'text-slate-500 hover:text-slate-300'
@@ -357,7 +360,7 @@ export function GatewayView() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-[#070809] p-3 space-y-1.5 font-mono text-[9px] leading-relaxed select-text scrollbar-thin">
+        <div className="flex-1 overflow-y-auto bg-[#070809] font-mono text-[9px] leading-relaxed select-text scrollbar-thin" style={{ padding: '12px 22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {filteredLogs.length > 0 ? (
             filteredLogs.map((log) => (
               <div key={log.id} className="text-[#8B949E] break-all flex items-start gap-1">
@@ -376,13 +379,13 @@ export function GatewayView() {
             ))
           ) : (
             <div className="h-full flex items-center justify-center text-[#484F58] font-sans text-xs">
-              暂无日志
+              {status === 'running' ? '等待日志...' : 'Gateway 未启动'}
             </div>
           )}
           <div ref={logsEndRef} />
         </div>
 
-        <div className="h-6.5 px-4 bg-[#090A0C] border-t border-[#1F2228] flex items-center justify-between text-[8px] text-slate-500 font-mono flex-shrink-0">
+        <div className="h-6.5 bg-[#090A0C] border-t border-[#1F2228] flex items-center justify-between text-[8px] text-slate-500 font-mono flex-shrink-0" style={{ paddingLeft: '22px', paddingRight: '22px' }}>
           <span>Queued: {logs.length}/150 stream</span>
           <span>Filtering: {activeLogLevel.toUpperCase()}</span>
         </div>
@@ -390,9 +393,9 @@ export function GatewayView() {
       </div>
 
       {/* ─ 5. Bottom Telemetry ─ */}
-      <div className="h-8 bg-[#090A0C] border-t border-[#1F2228] px-4 flex items-center justify-between text-[9px] text-[#5A6372] font-mono flex-shrink-0">
+      <div className="h-8 bg-[#090A0C] border-t border-[#1F2228] flex items-center justify-between text-[9px] text-[#5A6372] font-mono flex-shrink-0" style={{ paddingLeft: '22px', paddingRight: '22px' }}>
         <span>Buffer limits: WSS core</span>
-        <span>nerve-us-east1.core</span>
+        <span>nerve-gateway</span>
       </div>
 
     </div>
