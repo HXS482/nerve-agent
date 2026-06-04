@@ -1361,6 +1361,7 @@ function ChannelsTab() {
   const [newPlatform, setNewPlatform] = useState<ChannelPlatform>('telegram')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [justSavedId, setJustSavedId] = useState<string | null>(null)
   const [editConfig, setEditConfig] = useState<Record<string, Record<string, string>>>({})
 
   useEffect(() => {
@@ -1379,7 +1380,12 @@ function ChannelsTab() {
     await (window.claude as any).gatewayChannelsSave(updated)
     setChannels(updated)
     setSaved(true)
+    // 收起展开项，记录刚保存的 channel
+    const savedId = expanded
+    setExpanded(null)
+    setJustSavedId(savedId)
     setTimeout(() => setSaved(false), 2000)
+    setTimeout(() => setJustSavedId(null), 3000)
   }
 
   const handleAdd = () => {
@@ -1424,6 +1430,12 @@ function ChannelsTab() {
 
   return (
     <div>
+      <style>{`
+        @keyframes channel-pulse {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(39, 201, 63, 0.4); }
+          50% { opacity: 0.8; box-shadow: 0 0 6px 2px rgba(39, 201, 63, 0.3); }
+        }
+      `}</style>
       <Section title="IM Channels">
         <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
           配置 IM 通道，让 Nerve Agent 通过消息平台与你交互。
@@ -1432,6 +1444,7 @@ function ChannelsTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {channels.map((ch) => {
             const isExpanded = expanded === ch.id
+            const isJustSaved = justSavedId === ch.id
             const fields = CHANNEL_FIELDS[ch.platform] || []
             const cfg = editConfig[ch.id] || {}
 
@@ -1442,8 +1455,9 @@ function ChannelsTab() {
                   borderRadius: 12,
                   overflow: 'hidden',
                   background: 'var(--bg-surface-container-high)',
-                  border: `1px solid ${ch.enabled ? 'var(--border-subtle)' : 'rgba(255,255,255,0.04)'}`,
+                  border: `1px solid ${isJustSaved ? 'rgba(39,201,63,0.4)' : ch.enabled ? 'var(--border-subtle)' : 'rgba(255,255,255,0.04)'}`,
                   opacity: ch.enabled ? 1 : 0.6,
+                  transition: 'border-color 0.3s',
                 }}
               >
                 {/* Row */}
@@ -1459,6 +1473,7 @@ function ChannelsTab() {
                       borderRadius: '50%',
                       background: ch.enabled ? '#27c93f' : '#484f58',
                       flexShrink: 0,
+                      animation: isJustSaved ? 'channel-pulse 1.2s ease-in-out 2' : 'none',
                     }}
                   />
                   <span className="text-[12px] font-medium flex-1" style={{ color: 'var(--text-on-surface)' }}>
