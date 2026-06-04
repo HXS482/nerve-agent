@@ -83,6 +83,8 @@ export class TelegramAdapter extends BaseAdapter {
       console.log('[TelegramAdapter] Connected')
     } catch (err) {
       console.error('[TelegramAdapter] Connection failed:', err)
+      this.bot = null
+      this.connected = false
       this.markError(err instanceof Error ? err : new Error(String(err)))
       throw err
     }
