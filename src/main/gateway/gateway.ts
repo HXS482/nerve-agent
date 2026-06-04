@@ -85,18 +85,24 @@ export class NerveGateway {
 
   /**
    * 设置代理
-   * 设置 HTTPS_PROXY / HTTP_PROXY 环境变量，影响所有适配器的网络请求
+   * 使用 global-agent 全局代理所有 HTTP/HTTPS 请求
    */
   setProxy(proxy: GatewayProxy | null): void {
     this.proxy = proxy
     if (proxy && proxy.enabled && proxy.host && proxy.port) {
       const url = `${proxy.protocol}://${proxy.host}:${proxy.port}`
-      process.env.HTTPS_PROXY = url
-      process.env.HTTP_PROXY = url
+      // 设置环境变量供 global-agent 使用
+      process.env.GLOBAL_AGENT_HTTP_PROXY = url
+      process.env.GLOBAL_AGENT_NO_PROXY = ''
+      // 启动 global-agent（如果还没启动）
+      try {
+        require('global-agent/bootstrap')
+      } catch {
+        // global-agent 已 bootstrap 过，忽略
+      }
       console.log(`[Gateway] Proxy set: ${url}`)
     } else {
-      delete process.env.HTTPS_PROXY
-      delete process.env.HTTP_PROXY
+      delete process.env.GLOBAL_AGENT_HTTP_PROXY
       console.log('[Gateway] Proxy disabled')
     }
   }
