@@ -348,9 +348,6 @@ export function GatewayView() {
                     >
                       {ad.enabled ? 'ON' : 'OFF'}
                     </button>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      isConnected ? 'bg-[#34A853]' : 'bg-slate-600'
-                    }`} />
                   </div>
                 </div>
               );
