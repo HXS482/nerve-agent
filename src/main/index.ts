@@ -413,10 +413,10 @@ app.on('window-all-closed', () => {
   // 记忆引擎和 Claude 服务保持运行
   // 用户可以通过托盘图标重新打开窗口
   // 真正退出通过托盘右键菜单的"退出 Nerve"
-})
 
-// 应用退出前清理
-app.on('before-quit', async () => {
-  await memoryCore.destroy().catch(() => {})
-  await claude.close()
+  // 应用退出前清理
+  app.on('before-quit', async () => {
+    await memoryCore.destroy().catch(() => {})
+    await claude.close()
+  })
 })
