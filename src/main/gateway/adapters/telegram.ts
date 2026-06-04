@@ -12,6 +12,7 @@
 import { Telegraf, Context } from 'telegraf'
 import { Message } from 'telegraf/types'
 import { existsSync } from 'fs'
+import tunnel from 'tunnel'
 import { BaseAdapter, IncomingMessage, MessageAttachment, AdapterConfig } from './base-adapter'
 import { StreamBufferManager } from '../stream-buffer'
 
@@ -58,7 +59,25 @@ export class TelegramAdapter extends BaseAdapter {
 
     console.log('[TelegramAdapter] Connecting...')
 
-    this.bot = new Telegraf(this.config.token)
+    // 构建 telegraf 选项
+    const options: Record<string, any> = {}
+    if (this.config.proxy) {
+      try {
+        const url = new URL(this.config.proxy)
+        const agent = tunnel.httpsOverHttp({
+          proxy: {
+            host: url.hostname,
+            port: parseInt(url.port),
+          },
+        })
+        options.telegram = { agent }
+        console.log(`[TelegramAdapter] Using proxy: ${this.config.proxy}`)
+      } catch (err) {
+        console.warn('[TelegramAdapter] Failed to create proxy agent:', err)
+      }
+    }
+
+    this.bot = new Telegraf(this.config.token, options)
 
     // 注册消息处理器
     this.bot.on('text', (ctx) => this.handleText(ctx))
