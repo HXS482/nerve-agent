@@ -27,7 +27,7 @@ export class DiscordAdapter extends BaseAdapter {
   readonly platform = 'discord'
 
   private client: Client | null = null
-  private config: DiscordAdapterConfig
+  protected config: DiscordAdapterConfig
   private streamBufferManager: StreamBufferManager
 
   constructor(config: DiscordAdapterConfig) {

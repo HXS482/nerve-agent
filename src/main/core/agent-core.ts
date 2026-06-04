@@ -203,6 +203,16 @@ export class AgentCore {
       } else if (e.type === 'assistant') {
         const content = e.message?.content
         if (Array.isArray(content)) {
+          // 先提取 tool_result（需要放到单独的 user 消息中）
+          const toolResults = content
+            .filter((c: any) => c.type === 'tool_result')
+            .map((c: any) => ({
+              type: 'tool_result' as const,
+              tool_use_id: c.tool_use_id || c.toolCallId,
+              content: c.content,
+              is_error: c.is_error,
+            }))
+
           const parts = content
             .filter((c: any) => c.type === 'text' || c.type === 'tool_use' || c.type === 'thinking')
             .map((c: any) => {
@@ -213,6 +223,10 @@ export class AgentCore {
             })
           if (parts.length > 0) {
             messages.push({ role: 'assistant', content: parts })
+          }
+          // tool_result 必须放在紧跟 assistant 的 user 消息中
+          if (toolResults.length > 0) {
+            messages.push({ role: 'user', content: toolResults })
           }
         }
       }
@@ -595,7 +609,7 @@ export class AgentCore {
       content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input })
     }
     for (const tr of allToolResults) {
-      content.push({ type: 'tool_result', toolCallId: tr.toolCallId, content: tr.content, is_error: tr.is_error })
+      content.push({ type: 'tool_result', tool_use_id: tr.toolCallId, content: tr.content, is_error: tr.is_error })
     }
 
     await store.append({ sessionId }, [{

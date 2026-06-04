@@ -1,19 +1,19 @@
 /**
  * Telegram 适配器
  *
- * 使用 telegraf 库连接 Telegram Bot API
+ * 使用自研 TelegramClient（原生 HTTP CONNECT 隧道）
+ * 替代 telegraf + proxy-agent，直接走代理更稳定
+ *
  * 支持：
  * - 文本消息收发
  * - 伪流式（editMessageText）
  * - 文件/图片收发
- * - Markdown 格式化
+ * - Markdown 格式化（自动降级纯文本）
  */
 
-import { Telegraf, Context } from 'telegraf'
-import { Message } from 'telegraf/types'
 import { existsSync } from 'fs'
-import ProxyAgent from 'proxy-agent'
 import { BaseAdapter, IncomingMessage, MessageAttachment, AdapterConfig } from './base-adapter'
+import { TelegramClient, TelegramMessage } from './telegram-client'
 import { StreamBufferManager } from '../stream-buffer'
 
 export interface TelegramAdapterConfig extends AdapterConfig {
@@ -31,19 +31,18 @@ export class TelegramAdapter extends BaseAdapter {
   readonly name = 'telegram'
   readonly platform = 'telegram'
 
-  private bot: Telegraf | null = null
-  private config: TelegramAdapterConfig
+  private client: TelegramClient | null = null
+  protected config: TelegramAdapterConfig
   private streamBufferManager: StreamBufferManager
 
   constructor(config: TelegramAdapterConfig) {
     super(config)
     this.config = {
-      streamUpdateInterval: 1500, // 1.5 秒更新一次
+      streamUpdateInterval: 1500,
       maxMessageLength: 4000,
       ...config,
     }
 
-    // 初始化流式缓冲区管理器
     this.streamBufferManager = new StreamBufferManager(
       { updateInterval: this.config.streamUpdateInterval },
       (chatId, text) => this.sendText(chatId, text),
@@ -52,42 +51,47 @@ export class TelegramAdapter extends BaseAdapter {
   }
 
   async connect(): Promise<void> {
-    if (this.bot) {
+    if (this.client) {
       console.warn('[TelegramAdapter] Already connected')
       return
     }
 
     console.log('[TelegramAdapter] Connecting...')
 
-    // 构建 telegraf 选项
-    const options: Record<string, any> = {}
-    if (this.config.proxy) {
-      try {
-        const agent = new ProxyAgent(this.config.proxy)
-        options.telegram = { agent }
-        console.log(`[TelegramAdapter] Using proxy: ${this.config.proxy}`)
-      } catch (err) {
-        console.warn('[TelegramAdapter] Failed to create proxy agent:', err)
-      }
-    }
-
-    this.bot = new Telegraf(this.config.token, options)
-
-    // 注册消息处理器
-    this.bot.on('text', (ctx) => this.handleText(ctx))
-    this.bot.on('photo', (ctx) => this.handlePhoto(ctx))
-    this.bot.on('document', (ctx) => this.handleDocument(ctx))
-    this.bot.on('voice', (ctx) => this.handleVoice(ctx))
-
-    // 启动 bot
     try {
-      await this.bot.launch()
+      this.client = new TelegramClient({
+        token: this.config.token,
+        proxy: this.config.proxy,
+        pollingTimeout: 30,
+      })
+
+      // 事件桥接：TelegramClient → IncomingMessage
+      this.client.on('text', (msg: TelegramMessage) => this.handleText(msg))
+      this.client.on('photo', (msg: TelegramMessage) => this.handlePhoto(msg))
+      this.client.on('document', (msg: TelegramMessage) => this.handleDocument(msg))
+      this.client.on('voice', (msg: TelegramMessage) => this.handleVoice(msg))
+
+      this.client.on('error', (err: Error) => {
+        console.error('[TelegramAdapter] Client error:', err.message)
+        // 409 Conflict 等致命错误：标记断开，触发 BaseAdapter 重连
+        if (!this.connected) return
+        this.connected = false
+        this.markError(err)
+        this.markDisconnected()
+      })
+
+      await this.client.startPolling()
+
+      // 验证连接：调用 getMe
+      await this.client.getMe()
+
       this.connected = true
       this.resetReconnect()
       console.log('[TelegramAdapter] Connected')
     } catch (err) {
       console.error('[TelegramAdapter] Connection failed:', err)
-      this.bot = null
+      this.client?.stopPolling()
+      this.client = null
       this.connected = false
       this.markError(err instanceof Error ? err : new Error(String(err)))
       throw err
@@ -97,53 +101,38 @@ export class TelegramAdapter extends BaseAdapter {
   async disconnect(): Promise<void> {
     this.stopReconnect()
 
-    if (this.bot) {
-      this.bot.stop('disconnect')
-      this.bot = null
+    if (this.client) {
+      this.client.stopPolling()
+      this.client = null
       this.connected = false
       console.log('[TelegramAdapter] Disconnected')
     }
 
-    // 清理流式缓冲区
     this.streamBufferManager.destroy()
   }
 
   async sendText(chatId: string, text: string): Promise<string | undefined> {
-    if (!this.bot) throw new Error('Not connected')
+    if (!this.client) throw new Error('Not connected')
 
     try {
-      const message = await this.bot.telegram.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-      })
-      return message.message_id.toString()
+      const result = await this.client.sendMessage(chatId, text, { parse_mode: 'Markdown' })
+      return result.message_id.toString()
     } catch (err) {
-      // Markdown 解析失败，尝试纯文本
+      // Markdown 解析失败，降级纯文本
       console.warn('[TelegramAdapter] Markdown parse failed, trying plain text')
-      const message = await this.bot.telegram.sendMessage(chatId, text)
-      return message.message_id.toString()
+      const result = await this.client.sendMessage(chatId, text)
+      return result.message_id.toString()
     }
   }
 
   async editMessage(chatId: string, messageId: string, text: string): Promise<void> {
-    if (!this.bot) throw new Error('Not connected')
+    if (!this.client) throw new Error('Not connected')
 
     try {
-      await this.bot.telegram.editMessageText(
-        chatId,
-        parseInt(messageId),
-        undefined,
-        text,
-        { parse_mode: 'Markdown' }
-      )
+      await this.client.editMessageText(chatId, parseInt(messageId), text, { parse_mode: 'Markdown' })
     } catch (err) {
-      // Markdown 解析失败，尝试纯文本
       try {
-        await this.bot.telegram.editMessageText(
-          chatId,
-          parseInt(messageId),
-          undefined,
-          text
-        )
+        await this.client.editMessageText(chatId, parseInt(messageId), text)
       } catch (editErr) {
         console.warn('[TelegramAdapter] Edit message failed:', editErr)
       }
@@ -151,64 +140,44 @@ export class TelegramAdapter extends BaseAdapter {
   }
 
   async sendFile(chatId: string, filePath: string, caption?: string): Promise<void> {
-    if (!this.bot) throw new Error('Not connected')
+    if (!this.client) throw new Error('Not connected')
 
     if (!existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`)
     }
 
-    await this.bot.telegram.sendDocument(chatId, {
-      source: filePath,
-    }, {
-      caption,
-    })
+    await this.client.sendDocument(chatId, { source: filePath }, { caption })
   }
 
   async sendImage(chatId: string, imageBuffer: Buffer, caption?: string): Promise<void> {
-    if (!this.bot) throw new Error('Not connected')
+    if (!this.client) throw new Error('Not connected')
 
-    await this.bot.telegram.sendPhoto(chatId, {
-      source: imageBuffer,
-    }, {
-      caption,
-    })
+    await this.client.sendPhoto(chatId, imageBuffer, { caption })
   }
 
   async sendTyping(chatId: string): Promise<void> {
-    if (!this.bot) throw new Error('Not connected')
-    await this.bot.telegram.sendChatAction(chatId, 'typing')
+    if (!this.client) throw new Error('Not connected')
+    await this.client.sendChatAction(chatId, 'typing')
   }
 
-  /**
-   * 开始流式更新
-   * 返回一个 bufferKey，用于后续追加内容和完成
-   */
   startStream(chatId: string, initialText: string = ''): string {
     return this.streamBufferManager.create(chatId, initialText)
   }
 
-  /**
-   * 追加流式内容
-   */
   appendStream(bufferKey: string, delta: string) {
     this.streamBufferManager.append(bufferKey, delta)
   }
 
-  /**
-   * 完成流式更新
-   */
   async finishStream(bufferKey: string): Promise<void> {
     await this.streamBufferManager.finish(bufferKey)
   }
 
-  private handleText(ctx: Context) {
-    const message = ctx.message as Message.TextMessage
-    if (!message) return
+  // ─── 事件处理：raw TelegramMessage → IncomingMessage ───────────
 
-    const userId = message.from.id.toString()
-    const chatId = message.chat.id.toString()
+  private handleText(msg: TelegramMessage) {
+    const userId = msg.from.id.toString()
+    const chatId = msg.chat.id.toString()
 
-    // 检查用户权限
     if (!this.isUserAllowed(userId)) {
       console.warn(`[TelegramAdapter] User ${userId} not allowed`)
       return
@@ -218,35 +187,31 @@ export class TelegramAdapter extends BaseAdapter {
       platform: 'telegram',
       chatId,
       userId,
-      username: message.from.username,
-      content: message.text,
-      messageId: message.message_id.toString(),
-      timestamp: message.date * 1000,
+      username: msg.from.username,
+      content: msg.text!,
+      messageId: msg.message_id.toString(),
+      timestamp: msg.date * 1000,
     })
 
     this.emit('message', incoming)
   }
 
-  private handlePhoto(ctx: Context) {
-    const message = ctx.message as Message.PhotoMessage
-    if (!message) return
-
-    const userId = message.from.id.toString()
-    const chatId = message.chat.id.toString()
+  private handlePhoto(msg: TelegramMessage) {
+    const userId = msg.from.id.toString()
+    const chatId = msg.chat.id.toString()
 
     if (!this.isUserAllowed(userId)) return
 
-    // 获取最大分辨率的图片
-    const photo = message.photo[message.photo.length - 1]
+    const photo = msg.photo![msg.photo!.length - 1]
 
     const incoming: IncomingMessage = this.normalizeMessage({
       platform: 'telegram',
       chatId,
       userId,
-      username: message.from.username,
-      content: message.caption || '[图片]',
-      messageId: message.message_id.toString(),
-      timestamp: message.date * 1000,
+      username: msg.from.username,
+      content: msg.caption || '[图片]',
+      messageId: msg.message_id.toString(),
+      timestamp: msg.date * 1000,
       attachments: [{
         type: 'image',
         url: `telegram:photo:${photo.file_id}`,
@@ -259,25 +224,22 @@ export class TelegramAdapter extends BaseAdapter {
     this.emit('message', incoming)
   }
 
-  private handleDocument(ctx: Context) {
-    const message = ctx.message as Message.DocumentMessage
-    if (!message) return
-
-    const userId = message.from.id.toString()
-    const chatId = message.chat.id.toString()
+  private handleDocument(msg: TelegramMessage) {
+    const userId = msg.from.id.toString()
+    const chatId = msg.chat.id.toString()
 
     if (!this.isUserAllowed(userId)) return
 
-    const doc = message.document
+    const doc = msg.document!
 
     const incoming: IncomingMessage = this.normalizeMessage({
       platform: 'telegram',
       chatId,
       userId,
-      username: message.from.username,
-      content: message.caption || `[文件: ${doc.file_name}]`,
-      messageId: message.message_id.toString(),
-      timestamp: message.date * 1000,
+      username: msg.from.username,
+      content: msg.caption || `[文件: ${doc.file_name}]`,
+      messageId: msg.message_id.toString(),
+      timestamp: msg.date * 1000,
       attachments: [{
         type: 'file',
         url: `telegram:document:${doc.file_id}`,
@@ -290,25 +252,22 @@ export class TelegramAdapter extends BaseAdapter {
     this.emit('message', incoming)
   }
 
-  private handleVoice(ctx: Context) {
-    const message = ctx.message as Message.VoiceMessage
-    if (!message) return
-
-    const userId = message.from.id.toString()
-    const chatId = message.chat.id.toString()
+  private handleVoice(msg: TelegramMessage) {
+    const userId = msg.from.id.toString()
+    const chatId = msg.chat.id.toString()
 
     if (!this.isUserAllowed(userId)) return
 
-    const voice = message.voice
+    const voice = msg.voice!
 
     const incoming: IncomingMessage = this.normalizeMessage({
       platform: 'telegram',
       chatId,
       userId,
-      username: message.from.username,
+      username: msg.from.username,
       content: '[语音消息]',
-      messageId: message.message_id.toString(),
-      timestamp: message.date * 1000,
+      messageId: msg.message_id.toString(),
+      timestamp: msg.date * 1000,
       attachments: [{
         type: 'voice',
         url: `telegram:voice:${voice.file_id}`,
