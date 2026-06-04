@@ -1,3 +1,4 @@
+import './proxy-bootstrap' // 必须在最前面，全局代理 HTTP/HTTPS
 import { app, BrowserWindow, shell, ipcMain, screen, protocol, net, Menu } from 'electron'
 import { join, resolve } from 'path'
 import { homedir } from 'os'

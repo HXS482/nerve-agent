@@ -60,39 +60,7 @@ export class TelegramAdapter extends BaseAdapter {
 
     console.log('[TelegramAdapter] Connecting...')
 
-    // 构建 telegraf 选项
-    const options: Record<string, any> = {}
-    if (this.config.proxy) {
-      try {
-        const proxyUrl = new URL(this.config.proxy)
-        // 创建 CONNECT 隧道 agent
-        const agent = new https.Agent({
-          createConnection: (_options, callback) => {
-            const req = http.request({
-              host: proxyUrl.hostname,
-              port: parseInt(proxyUrl.port),
-              method: 'CONNECT',
-              path: `${_options.host}:${_options.port}`,
-            })
-            req.on('connect', (res, socket) => {
-              if (res.statusCode === 200) {
-                callback(null, socket)
-              } else {
-                callback(new Error(`Proxy CONNECT failed: ${res.statusCode}`))
-              }
-            })
-            req.on('error', callback)
-            req.end()
-          },
-        })
-        options.telegram = { agent }
-        console.log(`[TelegramAdapter] Using proxy: ${this.config.proxy}`)
-      } catch (err) {
-        console.warn('[TelegramAdapter] Failed to create proxy agent:', err)
-      }
-    }
-
-    this.bot = new Telegraf(this.config.token, options)
+    this.bot = new Telegraf(this.config.token)
 
     // 注册消息处理器
     this.bot.on('text', (ctx) => this.handleText(ctx))
