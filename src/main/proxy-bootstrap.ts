@@ -1,6 +1,6 @@
 /**
  * 代理引导模块
- * 在进程启动时读取代理配置，如有则设置环境变量并 bootstrap global-agent
+ * 在进程启动时读取代理配置，用 global-tunnel-ng 全局隧道代理 HTTP/HTTPS
  */
 
 import { join } from 'path'
@@ -16,14 +16,13 @@ function bootstrapProxy() {
     if (!proxy || !proxy.enabled || !proxy.host || !proxy.port) return
 
     const url = `${proxy.protocol}://${proxy.host}:${proxy.port}`
-    process.env.GLOBAL_AGENT_HTTP_PROXY = url
-    process.env.GLOBAL_AGENT_HTTPS_PROXY = url
-    process.env.GLOBAL_AGENT_NO_LOOPBACK = '1'
-
-    // global-agent 是 external dep，用 require 加载
-    const ga = require('global-agent')
-    ga.bootstrap()
-    console.log(`[ProxyBootstrap] Global proxy enabled: ${url}`)
+    const globalTunnel = require('global-tunnel-ng')
+    globalTunnel.bootstrap({
+      host: proxy.host,
+      port: parseInt(proxy.port),
+      protocol: proxy.protocol,
+    })
+    console.log(`[ProxyBootstrap] Global tunnel enabled: ${url}`)
   } catch (err) {
     console.warn('[ProxyBootstrap] Failed to bootstrap proxy:', err)
   }
