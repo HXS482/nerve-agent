@@ -12,6 +12,7 @@
 import { Telegraf, Context } from 'telegraf'
 import { Message } from 'telegraf/types'
 import { existsSync } from 'fs'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 import { BaseAdapter, IncomingMessage, MessageAttachment, AdapterConfig } from './base-adapter'
 import { StreamBufferManager } from '../stream-buffer'
 
@@ -22,6 +23,8 @@ export interface TelegramAdapterConfig extends AdapterConfig {
   streamUpdateInterval?: number
   /** 消息分段长度 */
   maxMessageLength?: number
+  /** 代理地址，如 http://127.0.0.1:7897 */
+  proxy?: string
 }
 
 export class TelegramAdapter extends BaseAdapter {
@@ -56,7 +59,15 @@ export class TelegramAdapter extends BaseAdapter {
 
     console.log('[TelegramAdapter] Connecting...')
 
-    this.bot = new Telegraf(this.config.token)
+    // 构建 telegraf 选项，有代理时传入 agent
+    const options: Record<string, any> = {}
+    if (this.config.proxy) {
+      const agent = new HttpsProxyAgent(this.config.proxy)
+      options.telegram = { agent }
+      console.log(`[TelegramAdapter] Using proxy: ${this.config.proxy}`)
+    }
+
+    this.bot = new Telegraf(this.config.token, options)
 
     // 注册消息处理器
     this.bot.on('text', (ctx) => this.handleText(ctx))

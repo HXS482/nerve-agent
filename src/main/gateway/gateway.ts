@@ -116,6 +116,11 @@ export class NerveGateway {
     }
     this.adapters.clear()
 
+    // 构建代理 URL
+    const proxyUrl = this.proxy?.enabled && this.proxy.host && this.proxy.port
+      ? `${this.proxy.protocol}://${this.proxy.host}:${this.proxy.port}`
+      : undefined
+
     // 根据配置创建新适配器
     for (const ch of channels) {
       if (!ch.enabled) continue
@@ -129,6 +134,7 @@ export class NerveGateway {
             adapter = new TelegramAdapter({
               enabled: true,
               token: ch.config.token,
+              proxy: proxyUrl,
               allowedUsers: ch.config.allowedUsers
                 ? ch.config.allowedUsers.split(',').map(s => s.trim()).filter(Boolean)
                 : undefined,
