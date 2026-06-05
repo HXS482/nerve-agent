@@ -85,7 +85,7 @@ export function AdapterList({ adapters, running, onToggle }: AdapterListProps) {
                       fontFamily: 'var(--font-mono)',
                     }}
                   >
-                    {isConnected ? '● 42ms' : '○ OFF'}
+                    {isConnected ? '● ON' : '○ OFF'}
                   </span>
 
                   {/* Capsule toggle */}

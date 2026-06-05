@@ -19,8 +19,7 @@ const statusBadge: Record<GatewayStatus, { label: string; bg: string; color: str
 export function StatusHeader({ status, uptime, connections, sessions, sparklineData }: StatusHeaderProps) {
   const badge = statusBadge[status];
   const gaugeValue = status === 'running' ? connections : 0;
-  // 113 = full circumference of r=18 circle (2 * π * 18 ≈ 113.1)
-  const circumference = 113;
+  const circumference = 150.8; // 2 * π * 24
   const maxConnections = 50;
   const dashLen = Math.min((gaugeValue / maxConnections) * circumference, circumference);
   const dashGap = circumference - dashLen;

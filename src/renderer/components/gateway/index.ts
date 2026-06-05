@@ -26,20 +26,6 @@ export const PLATFORM_COLOR: Record<string, string> = {
   gateway:  '#8B5CF6',
 };
 
-export const STATUS_LABEL: Record<string, string> = {
-  connected:    'Connected',
-  reconnecting: 'Reconnecting',
-  failed:       'Failed',
-  disconnected: 'OFF',
-  paused:       'Paused',
-};
-
-export const LOG_LEVEL_TAG: Record<string, { label: string; color: string }> = {
-  info:  { label: 'SYS', color: '#4d8eff' },
-  warn:  { label: 'WARN', color: '#FBBC05' },
-  error: { label: 'ERR', color: '#EA4335' },
-};
-
 // ── 共享工具函数 ──────────────────────────────────────────────
 export function formatUptime(ms: number): string {
   if (ms <= 0) return '0s';
