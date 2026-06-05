@@ -83,6 +83,7 @@ function createWindow(): BrowserWindow {
     show: false,
     frame: false,
     transparent: true,
+    icon: join(__dirname, '../../resources/icons/icon_256x256.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
     thickFrame: false,
