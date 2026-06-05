@@ -1,6 +1,6 @@
 import React from 'react';
 import type { AdapterInfo } from '../../../shared/types';
-import { PLATFORM_COLOR, STATUS_LABEL } from './index';
+import { PLATFORM_COLOR } from './index';
 
 interface AdapterListProps {
   adapters: AdapterInfo[];
@@ -10,109 +10,117 @@ interface AdapterListProps {
 
 export function AdapterList({ adapters, running, onToggle }: AdapterListProps) {
   return (
-    <div
-      className="flex-shrink-0"
-      style={{ padding: '0 22px', marginTop: '12px' }}
-    >
+    <div className="flex-shrink-0" style={{ padding: '0 14px', marginBottom: '12px' }}>
+      {/* Section label */}
       <div
-        className="flex justify-between items-center mb-2 text-[10px]"
-        style={{ color: 'var(--text-on-surface-variant)' }}
+        style={{
+          color: '#8B949E',
+          fontSize: '8px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.8px',
+          marginBottom: '6px',
+        }}
       >
-        <span style={{ fontFamily: 'var(--font-sans)' }}>适配器</span>
-        <span
-          className="text-[9px] opacity-50"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          {adapters.length} loaded
-        </span>
+        适配器
       </div>
 
+      {/* Card container */}
       <div
-        className="rounded-md p-2 max-h-44 overflow-y-auto"
-        style={{ backgroundColor: 'var(--bg-surface-container-low)' }}
+        style={{
+          backgroundColor: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.04)',
+          borderRadius: '8px',
+          overflow: 'hidden',
+        }}
       >
         {adapters.length === 0 ? (
           <div
-            className="h-8 flex items-center justify-center text-xs"
-            style={{ color: 'var(--text-outline)' }}
+            className="flex items-center justify-center"
+            style={{ height: '36px', color: '#484F58', fontSize: '11px' }}
           >
-            {running ? 'No adapters configured' : 'Gateway not running'}
+            {running ? 'No adapters' : 'Gateway not running'}
           </div>
         ) : (
-          <div className="flex flex-col gap-1">
-            {adapters.map((ad) => {
-              const platformColor = PLATFORM_COLOR[ad.platform] ?? PLATFORM_COLOR.gateway;
-              const isConnected = ad.connected;
+          adapters.map((ad, idx) => {
+            const platformColor = PLATFORM_COLOR[ad.platform] ?? PLATFORM_COLOR.gateway;
+            const isConnected = ad.connected;
+            const isLast = idx === adapters.length - 1;
 
-              return (
-                <div
-                  key={ad.name}
-                  className="h-9 rounded-md flex items-center justify-between px-3 transition-colors cursor-pointer"
-                  style={{
-                    backgroundColor: 'transparent',
-                    border: '1px solid transparent',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bg-surface-container)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div className="flex items-center gap-2">
+            return (
+              <div
+                key={ad.name}
+                className="flex items-center justify-between"
+                style={{
+                  padding: '8px 10px',
+                  borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.03)',
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex-shrink-0"
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      backgroundColor: isConnected ? platformColor : '#484F58',
+                      boxShadow: isConnected ? `0 0 6px ${platformColor}60` : 'none',
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      color: isConnected ? '#E9ECF0' : '#8B949E',
+                    }}
+                  >
+                    {ad.name}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span
+                    style={{
+                      color: isConnected ? '#34A853' : '#484F58',
+                      fontSize: '9px',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {isConnected ? '● 42ms' : '○ OFF'}
+                  </span>
+
+                  {/* Capsule toggle */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggle(ad.name, !ad.enabled);
+                    }}
+                    className="relative cursor-pointer flex-shrink-0"
+                    style={{
+                      width: '28px',
+                      height: '14px',
+                      borderRadius: '7px',
+                      backgroundColor: ad.enabled ? '#4d8eff' : 'rgba(255,255,255,0.06)',
+                      transition: 'background-color 0.2s',
+                    }}
+                  >
                     <span
-                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                       style={{
-                        backgroundColor: isConnected ? platformColor : 'var(--text-outline-variant)',
-                        boxShadow: isConnected ? `0 0 6px ${platformColor}60` : 'none',
+                        position: 'absolute',
+                        top: '2px',
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        backgroundColor: ad.enabled ? '#fff' : '#484F58',
+                        left: ad.enabled ? '16px' : '2px',
+                        transition: 'left 0.2s',
                       }}
                     />
-                    <span
-                      className="text-xs font-medium truncate max-w-[140px]"
-                      style={{ color: 'var(--text-on-surface)' }}
-                    >
-                      {ad.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                      style={{
-                        backgroundColor: isConnected ? 'rgba(173, 198, 255, 0.1)' : 'transparent',
-                        color: isConnected ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    >
-                      {isConnected ? STATUS_LABEL.connected : STATUS_LABEL.disconnected}
-                    </span>
-
-                    {/* Toggle */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggle(ad.name, !ad.enabled);
-                      }}
-                      className="relative w-8 h-[18px] rounded-full transition-colors cursor-pointer flex-shrink-0"
-                      style={{
-                        backgroundColor: ad.enabled ? 'var(--accent-primary)' : 'var(--bg-surface-variant)',
-                      }}
-                    >
-                      <span
-                        className="absolute top-0.5 w-3.5 h-3.5 rounded-full transition-transform duration-200"
-                        style={{
-                          backgroundColor: ad.enabled ? 'var(--accent-on-primary)' : 'var(--text-outline)',
-                          left: '2px',
-                          transform: ad.enabled ? 'translateX(14px)' : 'translateX(0)',
-                        }}
-                      />
-                    </button>
-                  </div>
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
