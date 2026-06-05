@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * GatewayView — IM Gateway Control Panel (Right Sidebar)
- * 容器组件：IPC 数据拉取 + 状态管理 + 子组件组装
+ * 仪表盘风格容器：渐变光晕 + HeroGauge + 紧凑指标 + 胶囊按钮
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { GatewayHealth, AdapterInfo } from '../../shared/types';
-import type { GatewayStatus, SidebarLog, LogLevel } from './gateway';
+import type { GatewayStatus, SidebarLog } from './gateway';
 import { StatusHeader } from './gateway/StatusHeader';
 import { MetricCards } from './gateway/MetricCards';
 import { ControlButtons } from './gateway/ControlButtons';
@@ -36,21 +36,25 @@ export function GatewayView() {
   const [connections, setConnections] = useState(0);
   const [sessions, setSessions] = useState(0);
   const [memory, setMemory] = useState(0);
+  const [errorCount, setErrorCount] = useState(0);
   const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
   const [logs, setLogs] = useState<SidebarLog[]>([]);
-  const [activeLogLevel, setActiveLogLevel] = useState<LogLevel>('all');
   const [loading, setLoading] = useState(false);
+  const [sparklineData, setSparklineData] = useState<number[]>([]);
   const logIdCounter = useRef(0);
 
   // ── Fetch health ──
   const fetchHealth = useCallback(async () => {
     try {
       const health = await getGatewayAPI().gatewayStatus();
-      setStatus(health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'stopped');
+      const newStatus = health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'stopped';
+      setStatus(newStatus);
       setUptime(health.uptime);
       setConnections(health.clientCount);
       setSessions(health.activeSessions);
       setMemory(health.memoryUsage?.rss ?? 0);
+      // Update sparkline
+      setSparklineData(prev => [...prev.slice(-19), health.clientCount]);
     } catch {
       setStatus('stopped');
     }
@@ -66,6 +70,11 @@ export function GatewayView() {
     }
   }, []);
 
+  // ── Count errors from logs ──
+  useEffect(() => {
+    setErrorCount(logs.filter(l => l.level === 'error').length);
+  }, [logs]);
+
   // ── Init: fetch + subscribe logs ──
   useEffect(() => {
     fetchHealth();
@@ -73,7 +82,7 @@ export function GatewayView() {
 
     const unsub = getGatewayAPI().onGatewayLog((entry) => {
       const now = new Date(entry.timestamp).toLocaleTimeString().substring(0, 8);
-      const category = entry.level === 'error' ? 'ERROR' : entry.level === 'warn' ? 'WARN' : 'SYSTEM';
+      const category = entry.level === 'error' ? 'ERR' : entry.level === 'warn' ? 'WARN' : 'SYS';
       setLogs((prev) => [
         ...prev.slice(-149),
         {
@@ -114,14 +123,14 @@ export function GatewayView() {
       const result = await getGatewayAPI().gatewayStart();
       if (result.success) {
         setStatus('running');
-        addLocalLog('info', 'SYSTEM', 'Gateway engine started');
+        addLocalLog('info', 'SYS', 'Gateway engine started');
         fetchHealth();
         fetchAdapters();
       } else {
-        addLocalLog('error', 'SYSTEM', `Start failed: ${result.error}`);
+        addLocalLog('error', 'ERR', `Start failed: ${result.error}`);
       }
     } catch (err: any) {
-      addLocalLog('error', 'SYSTEM', `Start error: ${err.message}`);
+      addLocalLog('error', 'ERR', `Start error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -141,12 +150,13 @@ export function GatewayView() {
         setConnections(0);
         setSessions(0);
         setMemory(0);
-        addLocalLog('warn', 'SYSTEM', 'Gateway engine stopped');
+        setSparklineData([]);
+        addLocalLog('warn', 'WARN', 'Gateway engine stopped');
       } else {
-        addLocalLog('error', 'SYSTEM', `Stop failed: ${result.error}`);
+        addLocalLog('error', 'ERR', `Stop failed: ${result.error}`);
       }
     } catch (err: any) {
-      addLocalLog('error', 'SYSTEM', `Stop error: ${err.message}`);
+      addLocalLog('error', 'ERR', `Stop error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -157,31 +167,51 @@ export function GatewayView() {
     try {
       await getGatewayAPI().gatewayAdapterToggle(name, enabled);
     } catch (err: any) {
-      addLocalLog('error', 'SYSTEM', `Toggle ${name} failed: ${err.message}`);
+      addLocalLog('error', 'ERR', `Toggle ${name} failed: ${err.message}`);
     }
     fetchAdapters();
   }, [fetchAdapters, addLocalLog]);
 
-  // ── Clear logs ──
-  const handleClearLogs = useCallback(() => {
-    setLogs([]);
-  }, []);
-
   // ── Render ──
   return (
     <div
-      className="w-full h-full flex flex-col overflow-hidden select-none"
+      className="w-full h-full flex flex-col overflow-hidden select-none relative"
       style={{
-        color: 'var(--text-on-surface)',
+        color: '#E9ECF0',
         fontFamily: 'var(--font-sans)',
-        backgroundColor: 'var(--bg-background)',
+        backgroundColor: '#0D0D0D',
       }}
     >
-      <StatusHeader status={status} uptime={uptime} />
-      <MetricCards connections={connections} sessions={sessions} memoryBytes={memory} running={status === 'running'} />
+      {/* Background glow */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '-40px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '200px',
+          height: '120px',
+          background: 'radial-gradient(ellipse, rgba(77,142,255,0.08) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      <StatusHeader
+        status={status}
+        uptime={uptime}
+        connections={connections}
+        sessions={sessions}
+        sparklineData={sparklineData}
+      />
+      <MetricCards
+        sessions={sessions}
+        memoryBytes={memory}
+        errorCount={errorCount}
+        running={status === 'running'}
+      />
       <ControlButtons status={status} loading={loading} onStart={handleStart} onStop={handleStop} />
       <AdapterList adapters={adapters} running={status === 'running'} onToggle={handleAdapterToggle} />
-      <LogTerminal logs={logs} activeLevel={activeLogLevel} onLevelChange={setActiveLogLevel} onClear={handleClearLogs} />
+      <LogTerminal logs={logs} />
     </div>
   );
 }
