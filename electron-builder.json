@@ -5,13 +5,16 @@
     "output": "release"
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "resources/**/*"
   ],
   "win": {
-    "target": "nsis"
+    "target": "nsis",
+    "icon": "resources/icons/icon.ico"
   },
   "nsis": {
     "oneClick": false,
-    "allowToChangeInstallationDirectory": true
+    "allowToChangeInstallationDirectory": true,
+    "icon": "resources/icons/icon.ico"
   }
 }

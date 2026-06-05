@@ -1,4 +1,5 @@
 import { app, Tray, Menu, BrowserWindow, nativeImage } from 'electron'
+import { join } from 'path'
 
 let tray: Tray | null = null
 
@@ -9,10 +10,9 @@ let tray: Tray | null = null
  * - 右键托盘显示菜单（显示/退出）
  */
 export function createTray(getMainWindow: () => BrowserWindow | null): Tray {
-  // 使用 Electron 内置的默认图标（8x8 灰色方块）
-  // Windows 托盘图标需要 16x16
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABYSURBVDiNY/z//z8DMwMDAwMTE5DBQAMGg2bG////Z2JgYGBkYGBgZGJgYGRiYGBkYmBgZGJgYGRiYGBkYmBgZGJgYGRiYGBkYmBgZGJgYGRiYGBkYmBgZGJgYGRiYGBkAgBhNQ0M9hJqGAAAAABJRU5ErkJggg=='
+  // 使用自定义图标
+  const icon = nativeImage.createFromPath(
+    join(__dirname, '../../resources/icons/icon_32x32.png')
   )
 
   tray = new Tray(icon)
