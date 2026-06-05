@@ -47,7 +47,3 @@ export function formatUptime(ms: number): string {
   res += `${s}s`;
   return res.trim();
 }
-
-export function formatMemory(bytes: number): string {
-  return `${Math.round(bytes / 1024 / 1024)}MB`;
-}

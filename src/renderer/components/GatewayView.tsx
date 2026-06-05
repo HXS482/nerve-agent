@@ -40,6 +40,7 @@ export function GatewayView() {
   const [logs, setLogs] = useState<SidebarLog[]>([]);
   const [activeLogLevel, setActiveLogLevel] = useState<LogLevel>('all');
   const [loading, setLoading] = useState(false);
+  const logIdCounter = useRef(0);
 
   // ── Fetch health ──
   const fetchHealth = useCallback(async () => {
@@ -76,7 +77,7 @@ export function GatewayView() {
       setLogs((prev) => [
         ...prev.slice(-149),
         {
-          id: `${entry.timestamp}-${Math.random()}`,
+          id: `log-${logIdCounter.current++}`,
           timestamp: now,
           level: entry.level as 'info' | 'warn' | 'error',
           category,
@@ -100,12 +101,15 @@ export function GatewayView() {
   // ── Local log helper ──
   const addLocalLog = useCallback((level: 'info' | 'warn' | 'error', category: string, text: string) => {
     const now = new Date().toLocaleTimeString().substring(0, 8);
-    setLogs((prev) => [...prev.slice(-149), { id: `${Date.now()}`, timestamp: now, level, category, text }]);
+    setLogs((prev) => [...prev.slice(-149), { id: `log-${logIdCounter.current++}`, timestamp: now, level, category, text }]);
   }, []);
 
   // ── Start ──
   const handleStart = useCallback(async () => {
-    setLoading(true);
+    setLoading(prev => {
+      if (prev) return prev;
+      return true;
+    });
     try {
       const result = await getGatewayAPI().gatewayStart();
       if (result.success) {
@@ -125,7 +129,10 @@ export function GatewayView() {
 
   // ── Stop ──
   const handleStop = useCallback(async () => {
-    setLoading(true);
+    setLoading(prev => {
+      if (prev) return prev;
+      return true;
+    });
     try {
       const result = await getGatewayAPI().gatewayStop();
       if (result.success) {
@@ -147,9 +154,13 @@ export function GatewayView() {
 
   // ── Adapter toggle ──
   const handleAdapterToggle = useCallback(async (name: string, enabled: boolean) => {
-    await getGatewayAPI().gatewayAdapterToggle(name, enabled);
+    try {
+      await getGatewayAPI().gatewayAdapterToggle(name, enabled);
+    } catch (err: any) {
+      addLocalLog('error', 'SYSTEM', `Toggle ${name} failed: ${err.message}`);
+    }
     fetchAdapters();
-  }, [fetchAdapters]);
+  }, [fetchAdapters, addLocalLog]);
 
   // ── Clear logs ──
   const handleClearLogs = useCallback(() => {

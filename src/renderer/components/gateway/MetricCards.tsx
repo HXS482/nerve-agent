@@ -48,13 +48,12 @@ function Sparkline({ data, color = 'var(--accent-primary)' }: { data: number[]; 
 
 // ── Single Metric Card ───────────────────────────────────────
 function MetricCard({ label, value, unit, dataRef, color }: MetricCardProps) {
-  const [prev, setPrev] = useState(value);
+  const prevRef = useRef(value);
   const [delta, setDelta] = useState(0);
 
   useEffect(() => {
-    const diff = value - prev;
-    setDelta(diff);
-    setPrev(value);
+    setDelta(value - prevRef.current);
+    prevRef.current = value;
   }, [value]);
 
   return (
