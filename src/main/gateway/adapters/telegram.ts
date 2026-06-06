@@ -161,7 +161,20 @@ export class TelegramAdapter extends BaseAdapter {
   async sendImage(chatId: string, imageBuffer: Buffer, caption?: string): Promise<void> {
     if (!this.client) throw new Error('Not connected')
 
-    await this.client.sendPhoto(chatId, imageBuffer, { caption })
+    // 重试：并发请求可能通过代理时触发 ECONNRESET
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await this.client.sendPhoto(chatId, imageBuffer, { caption })
+        return
+      } catch (err: any) {
+        const msg = err?.message || ''
+        if (attempt < 2 && (msg.includes('ECONNRESET') || msg.includes('EPIPE'))) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+          continue
+        }
+        throw err
+      }
+    }
   }
 
   async sendTyping(chatId: string): Promise<void> {
