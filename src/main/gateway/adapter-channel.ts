@@ -6,6 +6,7 @@
  */
 
 import { readFile } from 'fs/promises'
+import sharp from 'sharp'
 import type { OutputChannel } from '../core/output-channel'
 import type { BaseAdapter } from './adapters/base-adapter'
 
@@ -145,7 +146,16 @@ export class AdapterChannel implements OutputChannel {
   }
 
   sendImage(pathOrBuffer: string | Buffer, caption?: string): void {
-    const send = (buffer: Buffer) => {
+    const send = async (buffer: Buffer) => {
+      // PNG 转 JPEG：2MB → ~300KB，加速代理上传
+      try {
+        const meta = await sharp(buffer).metadata()
+        if (meta.format === 'png') {
+          buffer = await sharp(buffer).jpeg({ quality: 85 }).toBuffer()
+          console.log(`[AdapterChannel] PNG→JPEG: ${meta.size} → ${buffer.length} bytes`)
+        }
+      } catch { /* sharp 失败不影响发送原图 */ }
+
       this.adapter.sendImage(this.chatId, buffer, caption).catch((err) => {
         console.error('[AdapterChannel] sendImage failed:', err)
       })
