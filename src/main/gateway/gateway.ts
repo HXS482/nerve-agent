@@ -264,6 +264,10 @@ export class NerveGateway {
     return Array.from(this.adapters.values())
   }
 
+  getSessionMappings() {
+    return this.sessionRouter.getAllMappings()
+  }
+
   private async handleAdapterMessage(adapter: BaseAdapter, msg: IncomingMessage) {
     // 不记录消息内容（隐私保护）
     console.log(`[Gateway] Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)

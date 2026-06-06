@@ -462,8 +462,8 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     })
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_SESSIONS, async () => {
-      // TODO: 实现会话列表
-      return []
+      if (!gateway) return []
+      return gateway.getSessionMappings()
     })
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_SESSION_DELETE, async (_event, sessionId: string) => {
