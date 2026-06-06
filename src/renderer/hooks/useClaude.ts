@@ -124,8 +124,18 @@ export function useClaude() {
       console.log('[Nerve] syncSessions remote:', Array.isArray(remoteSessions) ? remoteSessions.length + ' sessions' : remoteSessions)
       if (!Array.isArray(remoteSessions)) return
 
+      // 查询 gateway 会话映射，获取 platform 信息
+      let platformMap: Record<string, string> = {}
+      try {
+        const mappings = await (window.claude as any).gatewaySessionsGet()
+        if (Array.isArray(mappings)) {
+          for (const m of mappings) {
+            platformMap[m.sessionId] = m.platform
+          }
+        }
+      } catch {}
+
       const store = useChatStore.getState()
-      // Keep temp sessions (not yet persisted to backend)
       const tempSessions = store.sessions.filter((s) => s.id.startsWith('session-'))
 
       const remoteMapped: Session[] = remoteSessions.map((rs) => ({
@@ -134,9 +144,9 @@ export function useClaude() {
         preview: rs.summary?.slice(0, 80) || '',
         createdAt: rs.createdAt || rs.lastModified,
         updatedAt: rs.lastModified,
+        platform: platformMap[rs.sessionId],
       }))
 
-      // Merge: remote sessions + temp sessions not yet in remote
       const remoteIds = new Set(remoteMapped.map((s) => s.id))
       const merged = [...remoteMapped, ...tempSessions.filter((s) => !remoteIds.has(s.id))]
 

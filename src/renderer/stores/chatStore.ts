@@ -10,6 +10,7 @@ export interface Session {
   preview: string
   createdAt: number
   updatedAt: number
+  platform?: string
 }
 
 export interface FlowItem {
