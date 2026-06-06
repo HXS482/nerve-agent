@@ -150,10 +150,20 @@ export class AdapterChannel implements OutputChannel {
     } else if (!this.sending) {
       // 还没有消息，触发首次发送
       this.sending = true
-      this.adapter.sendText(this.chatId, this.composeDisplay()).then((msgId) => {
+      const snapshot = this.composeDisplay()
+      this._pendingSend = this.adapter.sendText(this.chatId, snapshot).then((msgId) => {
         this.sending = false
-        if (msgId) this.streamMessageId = msgId
-      }).catch(() => { this.sending = false })
+        this._pendingSend = null
+        if (msgId) {
+          this.streamMessageId = msgId
+          this._lastSentContent = snapshot
+        }
+        return msgId
+      }).catch(() => {
+        this.sending = false
+        this._pendingSend = null
+        return undefined
+      })
     }
   }
 
@@ -206,5 +216,6 @@ export class AdapterChannel implements OutputChannel {
     this.streamBuffer = ''
     this._lastSentContent = ''
     this._pendingSend = null
+    this._charsSinceFlush = 0
   }
 }
