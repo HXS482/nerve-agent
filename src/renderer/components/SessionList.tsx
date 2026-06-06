@@ -180,7 +180,7 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                   letterSpacing: '0.02em',
                 }}
               >
-                {meta ? meta.label : 'Recent'}
+                {meta ? meta.label : (groupKey === 'recent' ? 'Recent' : groupKey.charAt(0).toUpperCase() + groupKey.slice(1))}
               </span>
 
               <span

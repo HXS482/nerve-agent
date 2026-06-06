@@ -127,13 +127,15 @@ export function useClaude() {
       // 查询 gateway 会话映射，获取 platform 信息
       let platformMap: Record<string, string> = {}
       try {
-        const mappings = await (window.claude as any).gatewaySessionsGet()
+        const mappings = await (window.claude as any).gatewaySessions()
         if (Array.isArray(mappings)) {
           for (const m of mappings) {
             platformMap[m.sessionId] = m.platform
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[Nerve] gatewaySessions failed, sessions will have no platform info:', err)
+      }
 
       const store = useChatStore.getState()
       const tempSessions = store.sessions.filter((s) => s.id.startsWith('session-'))
