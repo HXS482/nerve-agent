@@ -5,6 +5,7 @@
  * 支持伪流式更新（editMessageText）
  */
 
+import { readFileSync } from 'fs'
 import type { OutputChannel } from '../core/output-channel'
 import type { BaseAdapter } from './adapters/base-adapter'
 
@@ -141,6 +142,20 @@ export class AdapterChannel implements OutputChannel {
     // 重置所有状态
     this._resetState()
     this.toolBuffer = ''
+  }
+
+  sendImage(pathOrBuffer: string | Buffer, caption?: string): void {
+    try {
+      const buffer = typeof pathOrBuffer === 'string'
+        ? readFileSync(pathOrBuffer)
+        : pathOrBuffer
+
+      this.adapter.sendImage(this.chatId, buffer, caption).catch((err) => {
+        console.error('[AdapterChannel] sendImage failed:', err)
+      })
+    } catch (err) {
+      console.error('[AdapterChannel] sendImage read failed:', err)
+    }
   }
 
   private scheduleFlush() {
