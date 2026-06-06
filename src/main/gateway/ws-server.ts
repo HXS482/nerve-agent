@@ -57,7 +57,8 @@ export class GatewayWSServer {
    * 启动 WebSocket 服务
    */
   async start(): Promise<void> {
-    const host = this.config.host || '127.0.0.1'
+    const ALLOWED_HOSTS = ['127.0.0.1', '0.0.0.0', 'localhost']
+    const host = ALLOWED_HOSTS.includes(this.config.host || '') ? this.config.host! : '127.0.0.1'
 
     return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({
@@ -72,7 +73,7 @@ export class GatewayWSServer {
       })
 
       this.wss.on('error', (err) => {
-        console.error('[GatewayWS] Server error:', err)
+        console.error(`[GatewayWS] Server error (${host}:${this.config.port}):`, err)
         reject(err)
       })
 

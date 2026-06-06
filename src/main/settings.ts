@@ -336,6 +336,17 @@ export async function getGatewayPublicAccess(): Promise<boolean> {
   }
 }
 
+export async function getGatewayToken(): Promise<string | null> {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return null
+  try {
+    const data = JSON.parse(await readFile(nerveSettingsPath, 'utf-8'))
+    return data.gateway?.token || null
+  } catch {
+    return null
+  }
+}
+
 export async function saveProxy(proxy: GatewayProxy): Promise<void> {
   await ensureNerveDir()
   const nerveSettingsPath = join(NERVE_DIR, 'settings.json')

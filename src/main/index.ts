@@ -11,7 +11,7 @@ import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
 import { initImagesDir } from './images'
-import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess } from './settings'
+import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess, getGatewayToken } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
@@ -352,16 +352,26 @@ app.whenReady().then(async () => {
 
   // 从 settings 加载公网访问配置
   const publicAccess = await getGatewayPublicAccess()
-  const gatewayHost = publicAccess ? '0.0.0.0' : '127.0.0.1'
+  const configuredToken = publicAccess ? await getGatewayToken() : null
+  let gatewayToken = 'nerve-default-token'
+  let gatewayHost = '127.0.0.1'
+
   if (publicAccess) {
-    console.log('[Nerve] Gateway public access enabled — listening on 0.0.0.0')
+    if (!configuredToken) {
+      console.error('[Nerve] Gateway publicAccess enabled but no token configured! Add {"gateway":{"token":"your-strong-token"}} to ~/.nerve/settings.json')
+      console.error('[Nerve] Falling back to localhost.')
+    } else {
+      gatewayToken = configuredToken
+      gatewayHost = '0.0.0.0'
+      console.log('[Nerve] Gateway public access enabled — listening on 0.0.0.0')
+    }
   }
 
   // 创建 Gateway 实例
   const gateway = new NerveGateway({
     port: 18789,
     host: gatewayHost,
-    auth: { mode: 'token', secret: 'nerve-default-token' },
+    auth: { mode: 'token', secret: gatewayToken },
     dataDir: join(homedir(), '.nerve'),
     projectDir: projectDir,
     sourceDir: projectDir,
