@@ -298,6 +298,9 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: 'var(--text-outline)' }}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
             <span
               className="text-[10px] flex-1 uppercase tracking-wider"
               style={{
