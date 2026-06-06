@@ -143,17 +143,6 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <svg
-          width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-          style={{
-            transform: isRecentCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
-            transition: 'transform 0.15s',
-            color: 'var(--text-outline-variant)',
-            flexShrink: 0,
-          }}
-        >
-          <path d="M6 4l4 4-4 4" />
-        </svg>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: 'var(--text-on-surface-variant)' }}>
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
@@ -309,17 +298,6 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            <svg
-              width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              style={{
-                transform: isChannelsCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
-                transition: 'transform 0.15s',
-                color: 'var(--text-outline)',
-                flexShrink: 0,
-              }}
-            >
-              <path d="M6 4l4 4-4 4" />
-            </svg>
             <span
               className="text-[10px] flex-1 uppercase tracking-wider"
               style={{
