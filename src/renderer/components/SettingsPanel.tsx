@@ -1367,6 +1367,8 @@ function ChannelsTab() {
   const [proxyHost, setProxyHost] = useState('127.0.0.1')
   const [proxyPort, setProxyPort] = useState('7890')
   const [proxyProtocol, setProxyProtocol] = useState<'http' | 'socks5'>('http')
+  const [publicAccessEnabled, setPublicAccessEnabled] = useState(false)
+  const [publicAccessToken, setPublicAccessToken] = useState('')
 
   useEffect(() => {
     (window.claude as any).gatewayChannelsGet().then((chs: GatewayChannel[]) => {
@@ -1383,6 +1385,12 @@ function ChannelsTab() {
         setProxyProtocol(p.protocol ?? 'http')
       }
     }).catch(() => {})
+    ;(window.claude as any).gatewayPublicAccessGet().then((pa: any) => {
+      if (pa) {
+        setPublicAccessEnabled(pa.publicAccess ?? false)
+        setPublicAccessToken(pa.token ?? '')
+      }
+    }).catch(() => {})
   }, [])
 
   const handleSave = async () => {
@@ -1392,6 +1400,11 @@ function ChannelsTab() {
       host: proxyHost,
       port: parseInt(proxyPort) || 7890,
       protocol: proxyProtocol,
+    })
+    // 保存公网访问配置
+    await (window.claude as any).gatewayPublicAccessSave({
+      publicAccess: publicAccessEnabled,
+      token: publicAccessToken || undefined,
     })
     // 把 editConfig 同步回 channels
     const updated = channels.map(ch => ({ ...ch, config: editConfig[ch.id] || ch.config }))
@@ -1500,6 +1513,55 @@ function ChannelsTab() {
               </div>
               <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
                 当前: {proxyProtocol}://{proxyHost}:{proxyPort}
+              </div>
+            </>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Public Access">
+        <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
+          允许外部程序通过 WebSocket 连接到你的 Nerve Agent。启用后需配合 cloudflared 或公网 IP 使用。
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="flex items-center" style={{ gap: 10 }}>
+            <FieldLabel>公网访问</FieldLabel>
+            <button
+              onClick={() => setPublicAccessEnabled(!publicAccessEnabled)}
+              className="cursor-pointer transition-colors"
+              style={{
+                padding: '3px 10px',
+                borderRadius: 6,
+                fontSize: 10,
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                color: publicAccessEnabled ? '#f0883e' : '#484f58',
+                background: publicAccessEnabled ? 'rgba(240,136,62,0.1)' : 'transparent',
+                border: `1px solid ${publicAccessEnabled ? 'rgba(240,136,62,0.25)' : 'rgba(255,255,255,0.06)'}`,
+              }}
+            >
+              {publicAccessEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+          {publicAccessEnabled && (
+            <>
+              <div>
+                <FieldLabel>Access Token</FieldLabel>
+                <TextInput
+                  value={publicAccessToken}
+                  onChange={setPublicAccessToken}
+                  placeholder="输入一个强随机 token"
+                  mono
+                  type="password"
+                />
+              </div>
+              {!publicAccessToken && (
+                <div className="text-[10px]" style={{ color: '#f0883e' }}>
+                  公网模式必须配置 token，否则不会生效。
+                </div>
+              )}
+              <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
+                公网地址: ws://你的IP:18789 &nbsp;|&nbsp; 配合 cloudflared 可获得 HTTPS
               </div>
             </>
           )}

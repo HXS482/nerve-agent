@@ -110,6 +110,8 @@ export const IPC_CHANNELS = {
   GATEWAY_CHANNELS_SAVE: 'gateway:channels:save',
   GATEWAY_PROXY_GET: 'gateway:proxy:get',
   GATEWAY_PROXY_SAVE: 'gateway:proxy:save',
+  GATEWAY_PUBLIC_ACCESS_GET: 'gateway:publicAccess:get',
+  GATEWAY_PUBLIC_ACCESS_SAVE: 'gateway:publicAccess:save',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations

@@ -4,7 +4,7 @@ import { join, relative, extname, basename } from 'path'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy } from './settings'
+import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
@@ -522,5 +522,17 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
         console.error('[IPC] Failed to reload adapters after proxy change:', err)
       })
     }
+  })
+
+  // Gateway Public Access
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_GET, async () => {
+    const publicAccess = await getGatewayPublicAccess()
+    const token = await getGatewayToken()
+    return { publicAccess, token: token || '' }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_SAVE, async (_event, config) => {
+    if (!config || typeof config !== 'object') return
+    await saveGatewayPublicAccess(config)
   })
 }

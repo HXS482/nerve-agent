@@ -357,3 +357,19 @@ export async function saveProxy(proxy: GatewayProxy): Promise<void> {
   existing.proxy = proxy
   await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
 }
+
+export async function saveGatewayPublicAccess(config: { publicAccess: boolean; token?: string }): Promise<void> {
+  await ensureNerveDir()
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(nerveSettingsPath)) {
+    try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
+  }
+  const gateway = (existing.gateway as Record<string, unknown>) || {}
+  gateway.publicAccess = config.publicAccess
+  if (config.token !== undefined) {
+    gateway.token = config.token
+  }
+  existing.gateway = gateway
+  await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
+}
