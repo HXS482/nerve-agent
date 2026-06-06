@@ -138,9 +138,9 @@ export class AdapterChannel implements OutputChannel {
       console.error('[AdapterChannel] Error send failed:', err)
     })
 
-    // 重置状态
-    this.streamMessageId = null
-    this.streamBuffer = ''
+    // 重置所有状态
+    this._resetState()
+    this.toolBuffer = ''
   }
 
   private scheduleFlush() {
@@ -158,6 +158,7 @@ export class AdapterChannel implements OutputChannel {
           this.streamMessageId = msgId
           this._lastSentContent = snapshot
         }
+        this._charsSinceFlush = 0
         return msgId
       }).catch(() => {
         this.sending = false
