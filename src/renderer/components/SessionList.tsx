@@ -87,19 +87,17 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
     setExpandedSession(expandedSession === sessionId ? null : sessionId)
   }
 
-  // Group sessions by platform
-  const groups = new Map<string, typeof sortedSessions>()
-  for (const s of sortedSessions) {
-    const key = s.platform || 'recent'
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(s)
-  }
+  // Separate local (recent) sessions from channel sessions
+  const recentSessions = sortedSessions.filter((s) => !s.platform)
+  const channelSessions = sortedSessions.filter((s) => !!s.platform)
 
-  const sortedGroups = [...groups.entries()].sort(([a], [b]) => {
-    if (a === 'recent') return -1
-    if (b === 'recent') return 1
-    return a.localeCompare(b)
-  })
+  // Group channel sessions by platform
+  const channelGroups = new Map<string, typeof channelSessions>()
+  for (const s of channelSessions) {
+    const key = s.platform!
+    if (!channelGroups.has(key)) channelGroups.set(key, [])
+    channelGroups.get(key)!.push(s)
+  }
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const toggleGroup = (key: string) => {
@@ -129,191 +127,315 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
 
   return (
     <div>
-      {sortedGroups.map(([groupKey, groupSessions]) => {
-        const meta = PLATFORM_META[groupKey]
-        const isCollapsed = collapsedGroups.has(groupKey)
+      {/* Local sessions — flat list, no group header */}
+      {recentSessions.map((session) => {
+        const isActive = session.id === currentSessionId
+        const branches = sessionBranches[session.id]
+        const isExpanded = expandedSession === session.id && branches && branches.length > 1
 
         return (
-          <div key={groupKey} style={{ marginBottom: 2 }}>
-            {/* Group header */}
-            <button
-              onClick={() => toggleGroup(groupKey)}
-              className="flex items-center gap-1.5 w-full text-left transition-colors cursor-pointer"
+          <div key={session.id}>
+            <div
+              onClick={() => onSelectSession(session)}
+              className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
               style={{
-                padding: '6px 6px 4px 6px',
-                background: 'transparent',
-                border: 'none',
-                borderRadius: '4px',
+                padding: '5px 6px 5px 8px',
+                borderRadius: '6px',
+                background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              onMouseEnter={(e) => {
+                if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)'
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) e.currentTarget.style.background = 'transparent'
+              }}
             >
-              <svg
-                width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                style={{
-                  transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
-                  transition: 'transform 0.15s',
-                  color: 'var(--text-outline-variant)',
-                  flexShrink: 0,
-                }}
-              >
-                <path d="M6 4l4 4-4 4" />
-              </svg>
-
-              {meta ? (
-                <span style={{ color: meta.color, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  {meta.icon}
-                </span>
+              {branches && branches.length > 1 ? (
+                <button
+                  onClick={(e) => toggleExpand(session.id, e)}
+                  className="shrink-0 flex items-center justify-center transition-colors cursor-pointer"
+                  style={{
+                    width: 12, height: 12,
+                    color: 'var(--text-outline-variant)',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                  }}
+                >
+                  <svg
+                    width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+                  >
+                    <path d="M6 4l4 4-4 4" />
+                  </svg>
+                </button>
               ) : (
-                <span style={{
-                  width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                  background: 'var(--text-outline-variant)',
-                  display: 'block',
-                }} />
+                <span style={{ width: 12, flexShrink: 0 }} />
               )}
 
               <span
-                className="text-[11px] flex-1 truncate"
+                className={isActive ? 'animate-pulse-soft' : ''}
                 style={{
-                  color: meta ? meta.color : 'var(--text-on-surface-variant)',
-                  fontWeight: 500,
-                  letterSpacing: '0.02em',
+                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                  background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
+                  display: 'block',
                 }}
-              >
-                {meta ? meta.label : (groupKey === 'recent' ? 'Recent' : groupKey.charAt(0).toUpperCase() + groupKey.slice(1))}
-              </span>
-
+              />
               <span
-                className="text-[10px]"
+                className="text-[12px] flex-1 truncate"
                 style={{
-                  color: meta ? meta.color : 'var(--text-outline-variant)',
-                  background: meta ? `${meta.color}18` : 'var(--bg-surface-container)',
-                  padding: '1px 5px',
-                  borderRadius: '8px',
-                  fontWeight: 500,
-                  flexShrink: 0,
+                  color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
+                  fontWeight: isActive ? 500 : 400,
                 }}
               >
-                {groupSessions.length}
+                {session.title}
               </span>
-            </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deleteSession(session.id)
+                  window.claude.deleteSessionRemote(session.id).catch(() => {})
+                }}
+                className="shrink-0 flex items-center justify-center rounded transition-all"
+                style={{
+                  width: 16, height: 16,
+                  color: 'var(--text-outline-variant)',
+                  opacity: 0,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
+                title="Delete"
+              >
+                <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
 
-            {/* Sessions in group */}
-            {!isCollapsed && groupSessions.map((session) => {
-              const isActive = session.id === currentSessionId
-              const branches = sessionBranches[session.id]
-              const isExpanded = expandedSession === session.id && branches && branches.length > 1
-
-              return (
-                <div key={session.id}>
+            {isExpanded && branches && (
+              <div style={{ paddingLeft: 28 }}>
+                {branches.map((b) => (
                   <div
-                    onClick={() => onSelectSession(session)}
-                    className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
+                    key={b.name}
+                    className="flex items-center gap-1.5"
                     style={{
-                      padding: '5px 6px 5px 22px',
-                      borderRadius: '6px',
-                      background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)'
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.background = 'transparent'
+                      padding: '3px 6px',
+                      fontSize: 11,
+                      color: b.active ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
+                      fontWeight: b.active ? 500 : 400,
                     }}
                   >
-                    {/* Branch expand toggle */}
-                    {branches && branches.length > 1 ? (
-                      <button
-                        onClick={(e) => toggleExpand(session.id, e)}
-                        className="shrink-0 flex items-center justify-center transition-colors cursor-pointer"
-                        style={{
-                          width: 12, height: 12,
-                          color: 'var(--text-outline-variant)',
-                          background: 'transparent',
-                          border: 'none',
-                          padding: 0,
-                        }}
-                      >
-                        <svg
-                          width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                          style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
-                        >
-                          <path d="M6 4l4 4-4 4" />
-                        </svg>
-                      </button>
-                    ) : (
-                      <span style={{ width: 12, flexShrink: 0 }} />
-                    )}
-
-                    <span
-                      className={isActive ? 'animate-pulse-soft' : ''}
-                      style={{
-                        width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                        background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
-                        display: 'block',
-                      }}
-                    />
-                    <span
-                      className="text-[12px] flex-1 truncate"
-                      style={{
-                        color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
-                        fontWeight: isActive ? 500 : 400,
-                      }}
-                    >
-                      {session.title}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteSession(session.id)
-                        window.claude.deleteSessionRemote(session.id).catch(() => {})
-                      }}
-                      className="shrink-0 flex items-center justify-center rounded transition-all"
-                      style={{
-                        width: 16, height: 16,
-                        color: 'var(--text-outline-variant)',
-                        opacity: 0,
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
-                      title="Delete"
-                    >
-                      <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <path d="M4 4l8 8M12 4l-8 8" />
-                      </svg>
-                    </button>
+                    <span style={{
+                      width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
+                      background: b.active ? '#27C93F' : 'var(--text-outline-variant)',
+                      display: 'block',
+                    }} />
+                    <span className="truncate">{b.name}</span>
                   </div>
-
-                  {/* Branch list */}
-                  {isExpanded && branches && (
-                    <div style={{ paddingLeft: 42 }}>
-                      {branches.map((b) => (
-                        <div
-                          key={b.name}
-                          className="flex items-center gap-1.5"
-                          style={{
-                            padding: '3px 6px',
-                            fontSize: 11,
-                            color: b.active ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
-                            fontWeight: b.active ? 500 : 400,
-                          }}
-                        >
-                          <span style={{
-                            width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
-                            background: b.active ? '#27C93F' : 'var(--text-outline-variant)',
-                            display: 'block',
-                          }} />
-                          <span className="truncate">{b.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                ))}
+              </div>
+            )}
           </div>
         )
       })}
+
+      {/* Channel sessions — under "Channels" section header */}
+      {channelGroups.size > 0 && (
+        <div style={{ marginTop: recentSessions.length > 0 ? 8 : 0 }}>
+          <div
+            className="text-[10px] font-semibold uppercase tracking-wider"
+            style={{
+              padding: '8px 8px 4px',
+              color: 'var(--text-outline)',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Channels
+          </div>
+
+          {[...channelGroups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([groupKey, groupSessions]) => {
+            const meta = PLATFORM_META[groupKey]
+            const isCollapsed = collapsedGroups.has(groupKey)
+
+            return (
+              <div key={groupKey} style={{ marginBottom: 2 }}>
+                <button
+                  onClick={() => toggleGroup(groupKey)}
+                  className="flex items-center gap-1.5 w-full text-left transition-colors cursor-pointer"
+                  style={{
+                    padding: '6px 6px 4px 6px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '4px',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <svg
+                    width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    style={{
+                      transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
+                      transition: 'transform 0.15s',
+                      color: 'var(--text-outline-variant)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <path d="M6 4l4 4-4 4" />
+                  </svg>
+
+                  {meta ? (
+                    <span style={{ color: meta.color, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      {meta.icon}
+                    </span>
+                  ) : (
+                    <span style={{
+                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                      background: 'var(--text-outline-variant)',
+                      display: 'block',
+                    }} />
+                  )}
+
+                  <span
+                    className="text-[11px] flex-1 truncate"
+                    style={{
+                      color: meta ? meta.color : 'var(--text-on-surface-variant)',
+                      fontWeight: 500,
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {meta ? meta.label : (groupKey.charAt(0).toUpperCase() + groupKey.slice(1))}
+                  </span>
+
+                  <span
+                    className="text-[10px]"
+                    style={{
+                      color: meta ? meta.color : 'var(--text-outline-variant)',
+                      background: meta ? `${meta.color}18` : 'var(--bg-surface-container)',
+                      padding: '1px 5px',
+                      borderRadius: '8px',
+                      fontWeight: 500,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {groupSessions.length}
+                  </span>
+                </button>
+
+                {!isCollapsed && groupSessions.map((session) => {
+                  const isActive = session.id === currentSessionId
+                  const branches = sessionBranches[session.id]
+                  const isExpanded = expandedSession === session.id && branches && branches.length > 1
+
+                  return (
+                    <div key={session.id}>
+                      <div
+                        onClick={() => onSelectSession(session)}
+                        className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
+                        style={{
+                          padding: '5px 6px 5px 22px',
+                          borderRadius: '6px',
+                          background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) e.currentTarget.style.background = 'transparent'
+                        }}
+                      >
+                        {branches && branches.length > 1 ? (
+                          <button
+                            onClick={(e) => toggleExpand(session.id, e)}
+                            className="shrink-0 flex items-center justify-center transition-colors cursor-pointer"
+                            style={{
+                              width: 12, height: 12,
+                              color: 'var(--text-outline-variant)',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: 0,
+                            }}
+                          >
+                            <svg
+                              width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                              style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+                            >
+                              <path d="M6 4l4 4-4 4" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <span style={{ width: 12, flexShrink: 0 }} />
+                        )}
+
+                        <span
+                          className={isActive ? 'animate-pulse-soft' : ''}
+                          style={{
+                            width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                            background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
+                            display: 'block',
+                          }}
+                        />
+                        <span
+                          className="text-[12px] flex-1 truncate"
+                          style={{
+                            color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
+                            fontWeight: isActive ? 500 : 400,
+                          }}
+                        >
+                          {session.title}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteSession(session.id)
+                            window.claude.deleteSessionRemote(session.id).catch(() => {})
+                          }}
+                          className="shrink-0 flex items-center justify-center rounded transition-all"
+                          style={{
+                            width: 16, height: 16,
+                            color: 'var(--text-outline-variant)',
+                            opacity: 0,
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
+                          title="Delete"
+                        >
+                          <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <path d="M4 4l8 8M12 4l-8 8" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {isExpanded && branches && (
+                        <div style={{ paddingLeft: 42 }}>
+                          {branches.map((b) => (
+                            <div
+                              key={b.name}
+                              className="flex items-center gap-1.5"
+                              style={{
+                                padding: '3px 6px',
+                                fontSize: 11,
+                                color: b.active ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
+                                fontWeight: b.active ? 500 : 400,
+                              }}
+                            >
+                              <span style={{
+                                width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
+                                background: b.active ? '#27C93F' : 'var(--text-outline-variant)',
+                                display: 'block',
+                              }} />
+                              <span className="truncate">{b.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
