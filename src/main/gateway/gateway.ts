@@ -313,7 +313,7 @@ export class NerveGateway {
     const telegramPhotoMatch = url.match(/^telegram:photo:(.+)$/)
     if (telegramPhotoMatch) {
       const fileId = telegramPhotoMatch[1]
-      if (typeof (adapter as any).downloadPhoto !== 'function') {
+      if (!('downloadPhoto' in adapter) || typeof (adapter as any).downloadPhoto !== 'function') {
         throw new Error(`Adapter ${adapter.name} does not support downloadPhoto`)
       }
       const buffer = await (adapter as any).downloadPhoto(fileId)

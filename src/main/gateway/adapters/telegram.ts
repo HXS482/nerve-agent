@@ -177,6 +177,10 @@ export class TelegramAdapter extends BaseAdapter {
     if (!this.client) throw new Error('Not connected')
 
     const fileInfo = await this.client.getFile(fileId)
+    const MAX_SIZE = 20 * 1024 * 1024 // 20MB
+    if (fileInfo.file_size && fileInfo.file_size > MAX_SIZE) {
+      throw new Error(`Image too large: ${fileInfo.file_size} bytes (max ${MAX_SIZE})`)
+    }
     return this.client.downloadFile(fileInfo.file_path)
   }
 

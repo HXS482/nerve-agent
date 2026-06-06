@@ -117,12 +117,6 @@ export abstract class BaseAdapter extends EventEmitter {
   abstract sendImage(chatId: string, imageBuffer: Buffer, caption?: string): Promise<void>
 
   /**
-   * 下载平台图片（可选，入站附件用）
-   * 默认实现返回 null，需要的子类覆盖
-   */
-  async downloadPhoto?(identifier: string): Promise<Buffer>
-
-  /**
    * 设置"正在输入"状态
    */
   abstract sendTyping(chatId: string): Promise<void>
