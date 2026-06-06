@@ -27,7 +27,6 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
   const setSidebarWidth = useChatStore((s) => s.setSidebarWidth)
   const setPetSkinId = useChatStore((s) => s.setPetSkinId)
   const [skins, setSkins] = useState<PetSkin[]>([])
-  const [recentOpen, setRecentOpen] = useState(true)
   const [petState, setPetState] = useState<string>('idle')
   const [petDocked, setPetDocked] = useState(false)
   const [isHoveringDock, setIsHoveringDock] = useState(false)
@@ -188,24 +187,10 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       {/* Session list */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '12px 10px' }}>
         <UsageStatsPanel />
-
-        <h3
-          className="flex items-center gap-1.5 px-1.5 mb-1.5 text-[11px] font-medium cursor-pointer select-none"
-          style={{ color: 'var(--text-on-surface-variant)', letterSpacing: '0.4px', paddingLeft: '7px' }}
-          onClick={() => setRecentOpen(!recentOpen)}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          Recent
-        </h3>
-        {recentOpen && (
-          <SessionList
-            currentSessionId={currentSessionId}
-            onSelectSession={handleSelectSession}
-          />
-        )}
+        <SessionList
+          currentSessionId={currentSessionId}
+          onSelectSession={handleSelectSession}
+        />
       </div>
 
       {/* Bottom area: pedestal + buttons */}
