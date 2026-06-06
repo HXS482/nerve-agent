@@ -169,6 +169,17 @@ export class TelegramAdapter extends BaseAdapter {
     await this.client.sendChatAction(chatId, 'typing')
   }
 
+  /**
+   * 通过 file_id 下载 Telegram 图片
+   * 返回图片 Buffer，供 base64 编码后传给 Agent
+   */
+  async downloadPhoto(fileId: string): Promise<Buffer> {
+    if (!this.client) throw new Error('Not connected')
+
+    const fileInfo = await this.client.getFile(fileId)
+    return this.client.downloadFile(fileInfo.file_path)
+  }
+
   startStream(chatId: string, initialText: string = ''): string {
     return this.streamBufferManager.create(chatId, initialText)
   }
