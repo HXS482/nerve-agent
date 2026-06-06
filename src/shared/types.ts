@@ -462,7 +462,7 @@ export interface LogEntry {
 }
 
 // Gateway Channel config
-export type ChannelPlatform = 'telegram' | 'discord' | 'wechat-work' | 'feishu' | 'dingtalk'
+export type ChannelPlatform = 'telegram' | 'discord'
 
 export interface GatewayChannel {
   id: string
@@ -481,32 +481,11 @@ export const CHANNEL_FIELDS: Record<ChannelPlatform, { key: string; label: strin
     { key: 'token', label: 'Bot Token', secret: true, placeholder: 'MTxxxx...' },
     { key: 'allowedUsers', label: 'Allowed User IDs', placeholder: '逗号分隔，留空允许所有人' },
   ],
-  'wechat-work': [
-    { key: 'corpId', label: 'Corp ID', placeholder: 'ww1234567890' },
-    { key: 'agentId', label: 'Agent ID', placeholder: '1000002' },
-    { key: 'secret', label: 'Secret', secret: true },
-    { key: 'token', label: 'Token' },
-    { key: 'encodingAESKey', label: 'Encoding AES Key', secret: true },
-  ],
-  feishu: [
-    { key: 'appId', label: 'App ID', placeholder: 'cli_xxxx' },
-    { key: 'appSecret', label: 'App Secret', secret: true },
-    { key: 'verificationToken', label: 'Verification Token' },
-    { key: 'encryptKey', label: 'Encrypt Key', secret: true },
-  ],
-  dingtalk: [
-    { key: 'appKey', label: 'App Key', placeholder: 'dingxxxx' },
-    { key: 'appSecret', label: 'App Secret', secret: true },
-    { key: 'robotCode', label: 'Robot Code' },
-  ],
 }
 
 export const CHANNEL_PLATFORM_LABELS: Record<ChannelPlatform, string> = {
   telegram: 'Telegram',
   discord: 'Discord',
-  'wechat-work': '企业微信',
-  feishu: '飞书',
-  dingtalk: '钉钉',
 }
 
 // Gateway Proxy config

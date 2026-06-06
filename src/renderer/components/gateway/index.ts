@@ -17,12 +17,8 @@ export type LogLevel = 'all' | 'info' | 'warn' | 'error';
 
 // ── 共享常量 ──────────────────────────────────────────────────
 export const PLATFORM_COLOR: Record<string, string> = {
-  wechat:   '#09C063',
-  slack:    '#E01E5A',
   telegram: '#229ED9',
   discord:  '#5865F2',
-  feishu:   '#FFC107',
-  dingtalk: '#FFC107',
   gateway:  '#8B5CF6',
 };
 
