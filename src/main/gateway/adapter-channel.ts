@@ -17,7 +17,7 @@ export class AdapterChannel implements OutputChannel {
   private _pendingSend: Promise<string | undefined> | null = null
   private _lastSentContent = ''
   private _charsSinceFlush = 0
-  private readonly BUFFER_THRESHOLD = 30
+  private readonly BUFFER_THRESHOLD = 10
   private readonly streamUpdateInterval = 300 // 300ms 更新一次
 
   constructor(
