@@ -269,21 +269,80 @@ export class NerveGateway {
   }
 
   private async handleAdapterMessage(adapter: BaseAdapter, msg: IncomingMessage) {
-    // 不记录消息内容（隐私保护）
     console.log(`[Gateway] Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)
 
-    // 解析或创建会话
     const sessionId = this.sessionRouter.resolve(adapter.platform, msg.userId, msg.chatId)
-
-    // 创建适配器输出通道
     const channel = new AdapterChannel(adapter, msg.chatId, msg.messageId)
 
-    // 提交到会话队列
-    this.sessionRouter.submit(sessionId, msg.content, channel).catch((err) => {
+    // 处理附件：下载图片并转为 FileAttachment[]
+    let files: Array<{ name: string; mimeType: string; data: string; size: number; isImage: boolean }> | undefined
+    if (msg.attachments && msg.attachments.length > 0) {
+      const imageAttachments = msg.attachments.filter(a => a.type === 'image')
+      if (imageAttachments.length > 0) {
+        const downloaded = await Promise.allSettled(
+          imageAttachments.map(att => this.downloadAttachment(adapter, att))
+        )
+        const results = downloaded
+          .filter((r): r is PromiseFulfilledResult<{ name: string; mimeType: string; data: string; size: number; isImage: boolean }> => r.status === 'fulfilled')
+          .map(r => r.value)
+        if (results.length > 0) files = results
+
+        // 下载失败的记录日志，不阻塞
+        downloaded.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            console.warn(`[Gateway] Attachment download failed:`, r.reason)
+          }
+        })
+      }
+    }
+
+    this.sessionRouter.submit(sessionId, msg.content, channel, files).catch((err) => {
       const errorMsg = err instanceof Error ? err.message : String(err)
       console.error(`[Gateway] Adapter message error:`, errorMsg)
       adapter.send(msg.chatId, `❌ Error: ${errorMsg}`)
     })
+  }
+
+  private async downloadAttachment(
+    adapter: BaseAdapter,
+    attachment: { type: string; url?: string; mimeType?: string }
+  ): Promise<{ name: string; mimeType: string; data: string; size: number; isImage: boolean }> {
+    const url = attachment.url || ''
+
+    // Telegram: telegram:photo:<file_id>
+    const telegramPhotoMatch = url.match(/^telegram:photo:(.+)$/)
+    if (telegramPhotoMatch) {
+      const fileId = telegramPhotoMatch[1]
+      if (typeof (adapter as any).downloadPhoto !== 'function') {
+        throw new Error(`Adapter ${adapter.name} does not support downloadPhoto`)
+      }
+      const buffer = await (adapter as any).downloadPhoto(fileId)
+      return {
+        name: `photo_${fileId}.jpg`,
+        mimeType: attachment.mimeType || 'image/jpeg',
+        data: buffer.toString('base64'),
+        size: buffer.length,
+        isImage: true,
+      }
+    }
+
+    // HTTP(S) URL (Discord, etc.)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`)
+      const arrayBuffer = await res.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      const filename = url.split('/').pop()?.split('?')[0] || 'image.jpg'
+      return {
+        name: filename,
+        mimeType: attachment.mimeType || 'image/jpeg',
+        data: buffer.toString('base64'),
+        size: buffer.length,
+        isImage: true,
+      }
+    }
+
+    throw new Error(`Unsupported attachment URL scheme: ${url}`)
   }
 
   private handleDisconnect(clientId: string) {
