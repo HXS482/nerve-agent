@@ -16,7 +16,9 @@ export class AdapterChannel implements OutputChannel {
   private sending = false
   private _pendingSend: Promise<string | undefined> | null = null
   private _lastSentContent = ''
-  private readonly streamUpdateInterval = 1500 // 1.5 秒更新一次
+  private _charsSinceFlush = 0
+  private readonly BUFFER_THRESHOLD = 30
+  private readonly streamUpdateInterval = 300 // 300ms 更新一次
 
   constructor(
     private adapter: BaseAdapter,
@@ -30,6 +32,7 @@ export class AdapterChannel implements OutputChannel {
 
   sendStreamDelta(text: string): void {
     this.streamBuffer += text
+    this._charsSinceFlush += text.length
 
     if (!this.streamMessageId && !this.sending) {
       this.sending = true
@@ -41,6 +44,7 @@ export class AdapterChannel implements OutputChannel {
           this.streamMessageId = msgId
           this._lastSentContent = snapshot
         }
+        this._charsSinceFlush = 0
         return msgId
       }).catch(() => {
         this.sending = false
@@ -52,7 +56,7 @@ export class AdapterChannel implements OutputChannel {
 
     if (!this.streamMessageId) return
 
-    if (!this.streamTimer) {
+    if (!this.streamTimer && this._charsSinceFlush >= this.BUFFER_THRESHOLD) {
       this.streamTimer = setTimeout(() => this.flushStream(), this.streamUpdateInterval)
     }
   }
@@ -174,6 +178,7 @@ export class AdapterChannel implements OutputChannel {
     })
 
     this._lastSentContent = display
+    this._charsSinceFlush = 0
     this.streamTimer = null
   }
 
