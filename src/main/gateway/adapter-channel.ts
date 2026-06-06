@@ -14,6 +14,8 @@ export class AdapterChannel implements OutputChannel {
   private toolBuffer = ''
   private streamTimer: NodeJS.Timeout | null = null
   private sending = false
+  private _pendingSend: Promise<string | undefined> | null = null
+  private _lastSentContent = ''
   private readonly streamUpdateInterval = 1500 // 1.5 秒更新一次
 
   constructor(
@@ -29,30 +31,29 @@ export class AdapterChannel implements OutputChannel {
   sendStreamDelta(text: string): void {
     this.streamBuffer += text
 
-    // 防护：sendText 异步未返回时，不重复发送
     if (!this.streamMessageId && !this.sending) {
       this.sending = true
-      this.adapter.sendText(this.chatId, this.composeDisplay()).then((msgId) => {
+      const snapshot = this.streamBuffer
+      this._pendingSend = this.adapter.sendText(this.chatId, snapshot).then((msgId) => {
         this.sending = false
+        this._pendingSend = null
         if (msgId) {
           this.streamMessageId = msgId
+          this._lastSentContent = snapshot
         }
+        return msgId
       }).catch(() => {
         this.sending = false
+        this._pendingSend = null
+        return undefined
       })
       return
     }
 
-    // sendText 还在进行中，只累加 buffer
-    if (!this.streamMessageId) {
-      return
-    }
+    if (!this.streamMessageId) return
 
-    // 设置定时更新
     if (!this.streamTimer) {
-      this.streamTimer = setTimeout(() => {
-        this.flushStream()
-      }, this.streamUpdateInterval)
+      this.streamTimer = setTimeout(() => this.flushStream(), this.streamUpdateInterval)
     }
   }
 
@@ -108,22 +109,16 @@ export class AdapterChannel implements OutputChannel {
       this.streamTimer = null
     }
 
-    // 清除工具状态，最终消息只保留内容
     this.toolBuffer = ''
 
-    if (this.streamMessageId && this.streamBuffer) {
-      this.adapter.editMessage(this.chatId, this.streamMessageId, this.streamBuffer).catch((err) => {
-        console.warn('[AdapterChannel] Final update failed:', err)
+    if (this._pendingSend) {
+      this._pendingSend.then(() => {
+        this._finalizeMessage()
       })
-    } else if (this.streamBuffer) {
-      this.adapter.send(this.chatId, this.streamBuffer).catch((err) => {
-        console.warn('[AdapterChannel] Final send failed:', err)
-      })
+      return
     }
 
-    // 重置状态
-    this.streamMessageId = null
-    this.streamBuffer = ''
+    this._finalizeMessage()
   }
 
   sendError(message: string): void {
@@ -172,12 +167,39 @@ export class AdapterChannel implements OutputChannel {
     if (!this.streamMessageId) return
 
     const display = this.composeDisplay()
-    if (!display) return
+    if (!display || display === this._lastSentContent) return
 
     this.adapter.editMessage(this.chatId, this.streamMessageId, display).catch((err) => {
       console.warn('[AdapterChannel] Stream flush failed:', err)
     })
 
+    this._lastSentContent = display
     this.streamTimer = null
+  }
+
+  private _finalizeMessage(): void {
+    if (this.streamBuffer === this._lastSentContent && this.streamMessageId) {
+      this._resetState()
+      return
+    }
+
+    if (this.streamMessageId && this.streamBuffer) {
+      this.adapter.editMessage(this.chatId, this.streamMessageId, this.streamBuffer).catch((err) => {
+        console.warn('[AdapterChannel] Final update failed:', err)
+      })
+    } else if (this.streamBuffer) {
+      this.adapter.send(this.chatId, this.streamBuffer).catch((err) => {
+        console.warn('[AdapterChannel] Final send failed:', err)
+      })
+    }
+
+    this._resetState()
+  }
+
+  private _resetState(): void {
+    this.streamMessageId = null
+    this.streamBuffer = ''
+    this._lastSentContent = ''
+    this._pendingSend = null
   }
 }
