@@ -125,10 +125,72 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
     )
   }
 
+  const isRecentCollapsed = collapsedGroups.has('recent')
+  const isChannelsCollapsed = collapsedGroups.has('channels')
+
   return (
     <div>
-      {/* Local sessions — flat list, no group header */}
-      {recentSessions.map((session) => {
+      {/* Recent — collapsible */}
+      <div style={{ marginBottom: recentSessions.length > 0 && channelSessions.length > 0 ? 8 : 0 }}>
+        <button
+          onClick={() => toggleGroup('recent')}
+          className="flex items-center gap-1.5 w-full text-left transition-colors cursor-pointer"
+          style={{
+            padding: '6px 6px 4px 6px',
+            background: 'transparent',
+            border: 'none',
+            borderRadius: '4px',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          <svg
+            width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            style={{
+              transform: isRecentCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
+              transition: 'transform 0.15s',
+              color: 'var(--text-outline-variant)',
+              flexShrink: 0,
+            }}
+          >
+            <path d="M6 4l4 4-4 4" />
+          </svg>
+          <span style={{
+            width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+            background: 'var(--text-outline-variant)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="8" cy="8" r="6" />
+              <path d="M8 4v4l2.5 1.5" />
+            </svg>
+          </span>
+          <span
+            className="text-[11px] flex-1 truncate"
+            style={{
+              color: 'var(--text-on-surface-variant)',
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+            }}
+          >
+            Recent
+          </span>
+          <span
+            className="text-[10px]"
+            style={{
+              color: 'var(--text-outline-variant)',
+              background: 'var(--bg-surface-container)',
+              padding: '1px 5px',
+              borderRadius: '8px',
+              fontWeight: 500,
+              flexShrink: 0,
+            }}
+          >
+            {recentSessions.length}
+          </span>
+        </button>
+
+        {!isRecentCollapsed && recentSessions.map((session) => {
         const isActive = session.id === currentSessionId
         const branches = sessionBranches[session.id]
         const isExpanded = expandedSession === session.id && branches && branches.length > 1
@@ -239,21 +301,60 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
         )
       })}
 
-      {/* Channel sessions — under "Channels" section header */}
-      {channelGroups.size > 0 && (
-        <div style={{ marginTop: recentSessions.length > 0 ? 8 : 0 }}>
-          <div
-            className="text-[10px] font-semibold uppercase tracking-wider"
-            style={{
-              padding: '8px 8px 4px',
-              color: 'var(--text-outline)',
-              letterSpacing: '0.05em',
-            }}
-          >
-            Channels
-          </div>
+      </div>{/* end Recent */}
 
-          {[...channelGroups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([groupKey, groupSessions]) => {
+      {/* Channels — collapsible */}
+      {channelGroups.size > 0 && (
+        <div>
+          <button
+            onClick={() => toggleGroup('channels')}
+            className="flex items-center gap-1.5 w-full text-left transition-colors cursor-pointer"
+            style={{
+              padding: '6px 6px 4px 6px',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '4px',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg
+              width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+              style={{
+                transform: isChannelsCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
+                transition: 'transform 0.15s',
+                color: 'var(--text-outline)',
+                flexShrink: 0,
+              }}
+            >
+              <path d="M6 4l4 4-4 4" />
+            </svg>
+            <span
+              className="text-[10px] flex-1 uppercase tracking-wider"
+              style={{
+                color: 'var(--text-outline)',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+              }}
+            >
+              Channels
+            </span>
+            <span
+              className="text-[10px]"
+              style={{
+                color: 'var(--text-outline)',
+                background: 'var(--bg-surface-container)',
+                padding: '1px 5px',
+                borderRadius: '8px',
+                fontWeight: 500,
+                flexShrink: 0,
+              }}
+            >
+              {channelSessions.length}
+            </span>
+          </button>
+
+          {!isChannelsCollapsed && [...channelGroups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([groupKey, groupSessions]) => {
             const meta = PLATFORM_META[groupKey]
             const isCollapsed = collapsedGroups.has(groupKey)
 
