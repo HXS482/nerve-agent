@@ -114,6 +114,20 @@ export class WebSocketChannel implements OutputChannel {
     this.server.sendEvent(this.clientId, event)
   }
 
+  sendImage(pathOrBuffer: string | Buffer, caption?: string): void {
+    if (typeof pathOrBuffer === 'string') {
+      const event: StreamEvent = {
+        type: 'event',
+        event: 'stream',
+        sessionId: this.sessionId,
+        runId: this.runId,
+        payload: { delta: caption ? `[image: ${caption}]` : '[image]' },
+        seq: this.nextSeq(),
+      }
+      this.server.sendEvent(this.clientId, event)
+    }
+  }
+
   /** 设置 runId（Agent 开始执行时） */
   setRunId(runId: string) {
     this.runId = runId

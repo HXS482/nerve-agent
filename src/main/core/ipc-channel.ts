@@ -62,6 +62,12 @@ export class IPCChannel implements OutputChannel {
     this.send(IPC_CHANNELS.ERROR, { message })
   }
 
+  sendImage(pathOrBuffer: string | Buffer, caption?: string): void {
+    if (typeof pathOrBuffer === 'string') {
+      this.send(IPC_CHANNELS.FLOW_ITEM, { type: 'image', content: pathOrBuffer, meta: { caption } })
+    }
+  }
+
   sendPetState(state: string): void {
     if (this.petWindow && !this.petWindow.isDestroyed()) {
       this.petWindow.webContents.send(IPC_CHANNELS.PET_STATE_CHANGE, state)

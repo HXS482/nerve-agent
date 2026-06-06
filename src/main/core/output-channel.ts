@@ -23,6 +23,9 @@ export interface OutputChannel {
   /** 发送错误 */
   sendError(message: string): void
 
+  /** 发送图片 */
+  sendImage(pathOrBuffer: string | Buffer, caption?: string): void
+
   /** 检查通道是否可用 */
   isReady(): boolean
 }
@@ -63,6 +66,7 @@ export class NullOutputChannel implements OutputChannel {
   sendToolResult(): void {}
   sendDone(): void {}
   sendError(): void {}
+  sendImage(): void {}
   isReady(): boolean { return true }
 }
 
@@ -76,6 +80,7 @@ export class CollectingOutputChannel implements OutputChannel {
   public toolResults: Array<{ id: string; content: string; isError?: boolean }> = []
   public done: { sessionId: string; cost: number; maxContextTokens: number } | null = null
   public error: string | null = null
+  public images: Array<{ pathOrBuffer: string | Buffer; caption?: string }> = []
 
   sendStreamDelta(text: string): void { this.deltas.push(text) }
   sendThinkingDelta(thinking: string): void { this.thinkingDeltas.push(thinking) }
@@ -83,6 +88,7 @@ export class CollectingOutputChannel implements OutputChannel {
   sendToolResult(id: string, content: string, isError?: boolean): void { this.toolResults.push({ id, content, isError }) }
   sendDone(sessionId: string, cost: number, maxContextTokens: number): void { this.done = { sessionId, cost, maxContextTokens } }
   sendError(message: string): void { this.error = message }
+  sendImage(pathOrBuffer: string | Buffer, caption?: string): void { this.images.push({ pathOrBuffer, caption }) }
   isReady(): boolean { return true }
 
   get fullText(): string { return this.deltas.join('') }

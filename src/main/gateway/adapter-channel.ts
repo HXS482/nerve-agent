@@ -5,6 +5,7 @@
  * 支持伪流式更新（editMessageText）
  */
 
+import { readFile } from 'fs/promises'
 import type { OutputChannel } from '../core/output-channel'
 import type { BaseAdapter } from './adapters/base-adapter'
 
@@ -141,6 +142,22 @@ export class AdapterChannel implements OutputChannel {
     // 重置所有状态
     this._resetState()
     this.toolBuffer = ''
+  }
+
+  sendImage(pathOrBuffer: string | Buffer, caption?: string): void {
+    const send = (buffer: Buffer) => {
+      this.adapter.sendImage(this.chatId, buffer, caption).catch((err) => {
+        console.error('[AdapterChannel] sendImage failed:', err)
+      })
+    }
+
+    if (typeof pathOrBuffer === 'string') {
+      readFile(pathOrBuffer).then(send).catch((err) => {
+        console.error('[AdapterChannel] sendImage read failed:', err)
+      })
+    } else {
+      send(pathOrBuffer)
+    }
   }
 
   private scheduleFlush() {
