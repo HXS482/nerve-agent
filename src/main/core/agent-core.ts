@@ -270,14 +270,44 @@ export class AgentCore {
       const { client, modelId: resolvedModelId, providerType } = await this.registry.getClientAndModel(providerId, modelId)
 
       // 构建工具
+      const routeImagesRef: { fn: ((toolName: string | undefined, resultContent: string) => void) | null } = { fn: null }
       const { allToolDefs, allToolExecutors, orchestratorTools } = await this.buildTools(
-        client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls
+        client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls,
+        (toolName, content) => { routeImagesRef.fn?.(toolName, content) }
       )
+
+      // 图片工具结果路由
+      const sentImages = new Set<string>()
+      const routeImages = (toolName: string | undefined, resultContent: string) => {
+        try {
+          const result = JSON.parse(resultContent)
+          const images: string[] = []
+
+          if (toolName === 'GenerateImage' && result.path && !result.error) {
+            images.push(result.path)
+          } else if (toolName === 'Bash' && Array.isArray(result.savedImages)) {
+            images.push(...result.savedImages)
+          } else if (toolName === 'moveImageToGallery' && result.galleryPath && !result.error) {
+            images.push(result.galleryPath)
+          } else if (toolName === 'Write' && result.savedTo === 'gallery' && result.file_path) {
+            images.push(result.file_path)
+          }
+
+          for (const p of images) {
+            if (sentImages.has(p)) continue
+            sentImages.add(p)
+            channel.sendImage(p)
+          }
+        } catch {
+          // resultContent 不是 JSON，忽略
+        }
+      }
+      routeImagesRef.fn = routeImages
 
       // 运行 Agent 循环
       const result = await this.runAgentLoop(
         client, resolvedModelId, providerType, messages, systemPrompt,
-        allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals
+        allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals, routeImages
       )
 
       // 处理结果
@@ -419,7 +449,8 @@ export class AgentCore {
     providerType: string,
     mcpTools: Record<string, any>,
     channel: OutputChannel,
-    pendingToolCalls: Map<string, { name: string; input: any }>
+    pendingToolCalls: Map<string, { name: string; input: any }>,
+    routeImages?: (toolName: string | undefined, resultContent: string) => void
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
@@ -448,6 +479,10 @@ export class AgentCore {
           pendingToolCalls.delete(id)
         }
         channel.sendToolResult(id, content.slice(0, 50000), isError)
+        // 图片工具结果路由
+        if (!isError && toolInfo && routeImages) {
+          routeImages(toolInfo.name, content)
+        }
       },
     })
 
@@ -504,7 +539,8 @@ export class AgentCore {
     ctx: SessionContext,
     channel: OutputChannel,
     pendingToolCalls: Map<string, { name: string; input: any }>,
-    pendingApprovals: Map<string, { resolve: (approved: boolean) => void }>
+    pendingApprovals: Map<string, { resolve: (approved: boolean) => void }>,
+    routeImages: (toolName: string | undefined, resultContent: string) => void
   ) {
     const textDeltas: string[] = []
     const fullThinkingParts: string[] = []
@@ -556,6 +592,10 @@ export class AgentCore {
           pendingToolCalls.delete(id)
         }
         channel.sendToolResult(id, content.slice(0, 50000), isError)
+        // 图片工具结果路由
+        if (!isError && toolInfo) {
+          routeImages(toolInfo.name, content)
+        }
       },
       onBeforeStep: async (msgs) => {
         await this.offloadBridge?.onBeforeStep(msgs)
