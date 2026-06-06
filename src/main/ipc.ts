@@ -534,5 +534,10 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   ipcMain.handle(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_SAVE, async (_event, config) => {
     if (!config || typeof config !== 'object') return
     await saveGatewayPublicAccess(config)
+    // 热更新 gateway 监听地址
+    if (gateway) {
+      const host = config.publicAccess && config.token ? '0.0.0.0' : '127.0.0.1'
+      gateway.setHost(host)
+    }
   })
 }

@@ -100,6 +100,14 @@ export class NerveGateway {
   }
 
   /**
+   * 设置监听地址（需重启 Gateway 生效）
+   */
+  setHost(host: string): void {
+    this.config.host = host
+    console.log(`[Gateway] Host set to ${host} (restart required)`)
+  }
+
+  /**
    * 从 Channel 配置加载适配器
    * 读取 settings.json 中的 channels，创建并注册适配器实例
    */
