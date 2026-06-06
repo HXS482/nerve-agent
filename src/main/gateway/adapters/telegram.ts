@@ -131,10 +131,19 @@ export class TelegramAdapter extends BaseAdapter {
     try {
       await this.client.editMessageText(chatId, parseInt(messageId), text, { parse_mode: 'Markdown' })
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+
+      // "message is not modified" — harmless, ignore
+      if (errMsg.includes('message is not modified')) return
+
+      // 回退到纯文本
       try {
         await this.client.editMessageText(chatId, parseInt(messageId), text)
       } catch (editErr) {
-        console.warn('[TelegramAdapter] Edit message failed:', editErr)
+        const innerMsg = editErr instanceof Error ? editErr.message : String(editErr)
+        if (!innerMsg.includes('message is not modified')) {
+          console.warn('[TelegramAdapter] Edit message failed:', editErr)
+        }
       }
     }
   }
