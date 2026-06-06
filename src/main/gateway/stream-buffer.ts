@@ -42,7 +42,7 @@ export class StreamBufferManager {
     private editMessage: EditMessageFn,
   ) {
     this.config = {
-      updateInterval: 1500,
+      updateInterval: 300,
       maxBufferSize: 100_000,
       maxAge: 5 * 60 * 1000, // 5 分钟
       ...config,

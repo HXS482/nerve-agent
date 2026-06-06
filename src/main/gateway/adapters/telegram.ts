@@ -38,7 +38,7 @@ export class TelegramAdapter extends BaseAdapter {
   constructor(config: TelegramAdapterConfig) {
     super(config)
     this.config = {
-      streamUpdateInterval: 1500,
+      streamUpdateInterval: 300,
       maxMessageLength: 4000,
       ...config,
     }
