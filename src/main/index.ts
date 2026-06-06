@@ -11,7 +11,7 @@ import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
 import { initImagesDir } from './images'
-import { injectSettingsEnv, getChannels, getProxy } from './settings'
+import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
@@ -306,7 +306,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   const mainWindow = createWindow()
   const { petWin, setMainWindow } = createPetWindow()
@@ -350,9 +350,17 @@ app.whenReady().then(() => {
     }
   }
 
+  // 从 settings 加载公网访问配置
+  const publicAccess = await getGatewayPublicAccess()
+  const gatewayHost = publicAccess ? '0.0.0.0' : '127.0.0.1'
+  if (publicAccess) {
+    console.log('[Nerve] Gateway public access enabled — listening on 0.0.0.0')
+  }
+
   // 创建 Gateway 实例
   const gateway = new NerveGateway({
     port: 18789,
+    host: gatewayHost,
     auth: { mode: 'token', secret: 'nerve-default-token' },
     dataDir: join(homedir(), '.nerve'),
     projectDir: projectDir,

@@ -27,6 +27,8 @@ export interface WSClient {
 
 export interface WSServerConfig {
   port: number
+  /** 监听地址，'127.0.0.1' 仅本地，'0.0.0.0' 公网 */
+  host?: string
   auth?: {
     mode: 'token' | 'none'
     secret?: string
@@ -55,15 +57,17 @@ export class GatewayWSServer {
    * 启动 WebSocket 服务
    */
   async start(): Promise<void> {
+    const host = this.config.host || '127.0.0.1'
+
     return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({
         port: this.config.port,
-        host: '127.0.0.1', // 只监听本地
+        host,
         maxPayload: this.config.maxPayload || 1024 * 1024, // 默认 1MB
       })
 
       this.wss.on('listening', () => {
-        console.log(`[GatewayWS] Listening on 127.0.0.1:${this.config.port}`)
+        console.log(`[GatewayWS] Listening on ${host}:${this.config.port}`)
         resolve()
       })
 

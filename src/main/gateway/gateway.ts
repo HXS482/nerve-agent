@@ -25,6 +25,8 @@ import type { GatewayChannel, GatewayProxy } from '../../shared/types'
 
 export interface GatewayConfig {
   port: number
+  /** 监听地址，默认 '127.0.0.1'，公网模式用 '0.0.0.0' */
+  host?: string
   auth?: {
     mode: 'token' | 'none'
     secret?: string
@@ -59,6 +61,7 @@ export class NerveGateway {
     // 创建 WebSocket 服务
     this.server = new GatewayWSServer({
       port: config.port,
+      host: config.host,
       auth: config.auth,
     })
 
