@@ -96,6 +96,7 @@ export class SessionContextManager {
 
     for (const [sessionId, ctx] of this.contexts.entries()) {
       if (now - ctx.lastActiveAt > maxAgeMs) {
+        this.cancel(sessionId)
         this.contexts.delete(sessionId)
         cleaned++
       }
@@ -116,5 +117,12 @@ export class SessionContextManager {
    */
   getSessionIds(): string[] {
     return Array.from(this.contexts.keys())
+  }
+
+  /**
+   * 获取所有会话上下文
+   */
+  getAll(): SessionContext[] {
+    return Array.from(this.contexts.values())
   }
 }

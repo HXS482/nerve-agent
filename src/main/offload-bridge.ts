@@ -10,6 +10,7 @@
  */
 
 import type OpenAI from 'openai'
+import { estimateTokens } from './core/token-estimator'
 
 const TAG = '[Offload]'
 
@@ -30,17 +31,6 @@ interface OffloadBridgeOptions {
   contextWindow?: number
   /** Token ratio to trigger compression (default: 0.6) */
   compressRatio?: number
-}
-
-// Heuristic token count:中文/1.7 + 其余/4
-function estimateTokens(text: string): number {
-  let cn = 0
-  let other = 0
-  for (const ch of text) {
-    if (ch.charCodeAt(0) > 0x2e80) cn++
-    else other++
-  }
-  return Math.ceil(cn / 1.7 + other / 4)
 }
 
 function estimateMessageTokens(messages: Array<{ role: string; content: unknown }>): number {
@@ -181,7 +171,10 @@ export class OffloadBridge {
   private extractToolName(msg: { role: string; content: unknown }): string {
     if (!Array.isArray(msg.content)) return 'tool'
     for (const block of msg.content) {
-      if (block.type === 'tool_result') return 'tool'
+      if (block.type === 'tool_result' && block.tool_use_id) {
+        const pair = this.pendingPairs.find(p => p.toolCallId === block.tool_use_id)
+        if (pair) return pair.toolName
+      }
     }
     return 'tool'
   }

@@ -23,32 +23,10 @@ import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
+import { CONTEXT_WINDOWS, COST_PER_TOKEN } from './model-constants'
 
 // 前向声明，避免循环依赖
 export type { OutputChannel }
-
-const CONTEXT_WINDOWS: Record<string, number> = {
-  'claude-sonnet-4-20250514': 200000,
-  'claude-opus-4-20250514': 200000,
-  'claude-haiku-4-5-20251001': 200000,
-  'gpt-4o': 128000,
-  'gpt-4o-mini': 128000,
-  'o1': 200000,
-  'o3': 200000,
-  'gemini-2.5-pro': 1000000,
-  'gemini-2.5-flash': 1000000,
-}
-
-// 成本计算表（去重，只保留一份）
-const COST_PER_TOKEN: Record<string, { input: number; output: number }> = {
-  'claude-opus-4-20250514': { input: 0.015, output: 0.075 },
-  'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },
-  'claude-haiku-4-5-20251001': { input: 0.001, output: 0.005 },
-  'gpt-4o': { input: 0.005, output: 0.015 },
-  'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-  'gemini-2.5-pro': { input: 0.00125, output: 0.01 },
-  'gemini-2.5-flash': { input: 0.000075, output: 0.0003 },
-}
 
 function buildUserContentBlocks(files: FileAttachment[], prompt: string): ContentBlock[] {
   const blocks: ContentBlock[] = []
@@ -89,15 +67,12 @@ export class AgentCore {
     permissionMode: 'bypassPermissions',
   }
 
-  private currentAbort: AbortController | null = null
   private sessionStore: FileSessionStore | null = null
   private projectDir: string
   private sourceDir: string
   private settings: ClaudeSettings
   private registry: ProviderRegistry
   private mcpPool: McpPool
-  private pendingToolCalls = new Map<string, { name: string; input: any }>()
-  private pendingApprovals = new Map<string, { resolve: (approved: boolean) => void }>()
   private flowContentHashes = new Set<string>()
   private memoryCore: MemoryTdaiCore | null = null
   private offloadBridge: OffloadBridge | null = null
@@ -683,20 +658,11 @@ export class AgentCore {
   }
 
   /**
-   * 取消所有会话（向后兼容）
+   * 取消所有会话
    */
   cancel() {
-    // 取消全局 abort
-    if (this.currentAbort) {
-      this.currentAbort.abort()
-      this.pendingToolCalls.clear()
-      for (const [, p] of this.pendingApprovals) p.resolve(false)
-      this.pendingApprovals.clear()
-    }
-
-    // 取消所有会话上下文
     for (const sessionId of this.sessionContextManager.getSessionIds()) {
-      this.sessionContextManager.cancel(sessionId)
+      this.cancelSession(sessionId)
     }
   }
 
@@ -733,7 +699,7 @@ export class AgentCore {
    * 处理工具审批响应
    */
   handleToolApprovalResponse(approvalId: string, approved: boolean, sessionId?: string) {
-    // 如果指定了 sessionId，只在该会话中查找
+    // 指定 sessionId 时精确查找
     if (sessionId) {
       const ctx = this.sessionContextManager.get(sessionId)
       if (ctx) {
@@ -746,11 +712,14 @@ export class AgentCore {
       }
     }
 
-    // 向后兼容：在全局 pendingApprovals 中查找
-    const pending = this.pendingApprovals.get(approvalId)
-    if (pending) {
-      pending.resolve(approved)
-      this.pendingApprovals.delete(approvalId)
+    // 遍历所有会话查找（兼容未传 sessionId 的场景）
+    for (const ctx of this.sessionContextManager.getAll()) {
+      const pending = ctx.pendingApprovals.get(approvalId)
+      if (pending) {
+        pending.resolve(approved)
+        ctx.pendingApprovals.delete(approvalId)
+        return
+      }
     }
   }
 

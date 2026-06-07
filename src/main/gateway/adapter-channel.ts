@@ -385,13 +385,6 @@ export class AdapterChannel implements OutputChannel {
           this._thinkState = 0
           i-- // re-process current char
         }
-      } else if (this._thinkState === 9) {
-        // Inside think block — look for closing `<`
-        if (c === '<') {
-          this._thinkState = 10
-          this._thinkBuf = '<'
-        }
-        // else: skip char (inside think block)
       } else if (this._thinkState >= 10 && this._thinkState <= 19) {
         // Matching `</think>` — check next expected char
         const tag = '</think>'
