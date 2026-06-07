@@ -29,7 +29,7 @@ describe('AdapterChannel', () => {
     expect(sendCalls + sendDirectCalls).toBeLessThanOrEqual(1)
   })
 
-  it('should not flush until buffer threshold is reached', async () => {
+  it('should not flush before edit interval elapses', async () => {
     vi.useFakeTimers()
     const adapter = createMockAdapter()
     adapter.sendText = vi.fn().mockResolvedValue('msg_1')
@@ -42,20 +42,19 @@ describe('AdapterChannel', () => {
     await vi.advanceTimersByTimeAsync(10)
     await vi.advanceTimersByTimeAsync(10) // sendText resolves
 
-    // Small delta — below threshold, should not edit
+    // Delta schedules flush, but timer hasn't fired yet
     channel.sendStreamDelta(' there')
     await vi.advanceTimersByTimeAsync(400)
     expect(adapter.editMessage).not.toHaveBeenCalled()
 
-    // Large delta — above threshold, should edit
-    channel.sendStreamDelta('! This is a longer message that exceeds the threshold')
+    // 800ms reached — timer fires
     await vi.advanceTimersByTimeAsync(400)
     expect(adapter.editMessage).toHaveBeenCalled()
 
     vi.useRealTimers()
   })
 
-  it('should use 300ms stream update interval', async () => {
+  it('should use 800ms stream update interval', async () => {
     vi.useFakeTimers()
     const adapter = createMockAdapter()
     adapter.sendText = vi.fn().mockResolvedValue('msg_1')
@@ -67,11 +66,11 @@ describe('AdapterChannel', () => {
     await vi.advanceTimersByTimeAsync(10)
     await vi.advanceTimersByTimeAsync(10)
 
-    channel.sendStreamDelta(' more text here to exceed threshold')
-    await vi.advanceTimersByTimeAsync(200) // 200ms — not yet 300
+    channel.sendStreamDelta(' more text here')
+    await vi.advanceTimersByTimeAsync(500) // 500ms — not yet 800
     expect(adapter.editMessage).not.toHaveBeenCalled()
 
-    await vi.advanceTimersByTimeAsync(100) // 300ms reached
+    await vi.advanceTimersByTimeAsync(300) // 800ms reached
     expect(adapter.editMessage).toHaveBeenCalled()
 
     vi.useRealTimers()

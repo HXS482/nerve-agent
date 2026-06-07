@@ -2,7 +2,7 @@
  * AdapterChannel — 适配器输出通道实现
  *
  * 将 AgentCore 的输出通过 IM 适配器发送给用户
- * 支持伪流式更新（editMessageText）
+ * 支持伪流式更新（editMessageText）+ 流式光标 + 自适应限流退避
  */
 
 import { readFile } from 'fs/promises'
@@ -11,6 +11,8 @@ import type { OutputChannel } from '../core/output-channel'
 import type { BaseAdapter } from './adapters/base-adapter'
 
 export class AdapterChannel implements OutputChannel {
+  private readonly CURSOR = ' ▉'
+
   private streamMessageId: string | null = null
   private streamBuffer = ''
   private toolBuffer = ''
@@ -19,8 +21,10 @@ export class AdapterChannel implements OutputChannel {
   private _pendingSend: Promise<string | undefined> | null = null
   private _lastSentContent = ''
   private _charsSinceFlush = 0
-  private readonly BUFFER_THRESHOLD = 10
-  private readonly streamUpdateInterval = 300 // 300ms 更新一次
+  private _lastFlushTime = 0
+  private _editInterval = 800
+  private readonly _BASE_EDIT_INTERVAL = 800
+  private readonly _MAX_EDIT_INTERVAL = 10000
 
   constructor(
     private adapter: BaseAdapter,
@@ -36,6 +40,7 @@ export class AdapterChannel implements OutputChannel {
     this.streamBuffer += text
     this._charsSinceFlush += text.length
 
+    // 首次发送：创建消息
     if (!this.streamMessageId && !this.sending) {
       this.sending = true
       const snapshot = this.streamBuffer
@@ -45,6 +50,7 @@ export class AdapterChannel implements OutputChannel {
         if (msgId) {
           this.streamMessageId = msgId
           this._lastSentContent = snapshot
+          this._lastFlushTime = Date.now()
         }
         this._charsSinceFlush = 0
         return msgId
@@ -58,14 +64,21 @@ export class AdapterChannel implements OutputChannel {
 
     if (!this.streamMessageId) return
 
-    if (!this.streamTimer && this._charsSinceFlush >= this.BUFFER_THRESHOLD) {
-      this.streamTimer = setTimeout(() => this.flushStream(), this.streamUpdateInterval)
+    // 自适应 flush：按时间间隔排队触发
+    const now = Date.now()
+    const elapsed = now - this._lastFlushTime
+    if (elapsed >= this._editInterval && this._charsSinceFlush > 0) {
+      this.flushStream()
+    } else if (!this.streamTimer) {
+      this.streamTimer = setTimeout(() => {
+        this.streamTimer = null
+        this.flushStream()
+      }, this._editInterval - elapsed)
     }
   }
 
   sendThinkingDelta(thinking: string): void {
     // 思考过程不发送给用户（太冗长）
-    // 可以在这里添加一个"正在思考..."的提示
   }
 
   sendToolCall(id: string, name: string, input: unknown): void {
@@ -184,6 +197,7 @@ export class AdapterChannel implements OutputChannel {
         if (msgId) {
           this.streamMessageId = msgId
           this._lastSentContent = snapshot
+          this._lastFlushTime = Date.now()
         }
         this._charsSinceFlush = 0
         return msgId
@@ -196,32 +210,45 @@ export class AdapterChannel implements OutputChannel {
   }
 
   /**
-   * 组合显示文本：流式内容 + 工具状态
+   * 组合显示文本：流式内容 + 工具状态 + 流式光标
    */
   private composeDisplay(): string {
+    let text = this.streamBuffer
     if (this.toolBuffer) {
-      return this.streamBuffer ? `${this.streamBuffer}\n\n${this.toolBuffer}` : this.toolBuffer
+      text = text ? `${text}\n\n${this.toolBuffer}` : this.toolBuffer
     }
-    return this.streamBuffer
+    return text + this.CURSOR
   }
 
-  private flushStream() {
+  private async flushStream(): Promise<void> {
     if (!this.streamMessageId) return
 
     const display = this.composeDisplay()
     if (!display || display === this._lastSentContent) return
 
-    this.adapter.editMessage(this.chatId, this.streamMessageId, display).catch((err) => {
-      console.warn('[AdapterChannel] Stream flush failed:', err)
-    })
+    try {
+      await this.adapter.editMessage(this.chatId, this.streamMessageId, display)
+      this._lastSentContent = display
+      this._lastFlushTime = Date.now()
+      this._editInterval = this._BASE_EDIT_INTERVAL
+    } catch (err: any) {
+      const msg = err?.message || ''
+      if (msg.includes('429') || msg.includes('Too Many') || msg.includes('flood')) {
+        this._editInterval = Math.min(this._editInterval * 2, this._MAX_EDIT_INTERVAL)
+        console.warn(`[AdapterChannel] Flood control, interval → ${this._editInterval}ms`)
+      }
+    }
 
-    this._lastSentContent = display
     this._charsSinceFlush = 0
     this.streamTimer = null
   }
 
   private _finalizeMessage(): void {
-    if (this.streamBuffer === this._lastSentContent && this.streamMessageId) {
+    // Compare against last sent content minus cursor — cursor is stripped on done
+    const lastContentNoCursor = this._lastSentContent.endsWith(this.CURSOR)
+      ? this._lastSentContent.slice(0, -this.CURSOR.length)
+      : this._lastSentContent
+    if (this.streamBuffer === lastContentNoCursor && this.streamMessageId) {
       this._resetState()
       return
     }
@@ -245,5 +272,7 @@ export class AdapterChannel implements OutputChannel {
     this._lastSentContent = ''
     this._pendingSend = null
     this._charsSinceFlush = 0
+    this._lastFlushTime = 0
+    this._editInterval = this._BASE_EDIT_INTERVAL
   }
 }
