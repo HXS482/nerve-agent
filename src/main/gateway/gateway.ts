@@ -547,7 +547,13 @@ export class NerveGateway {
   }
 
   private async handleCancel(client: WSClient, request: { params?: { sessionId?: string } }, requestId: string) {
-    this.agentCore.cancel()
+    const sessionId = request.params?.sessionId
+    if (sessionId) {
+      this.sessionRouter.cancel(sessionId)
+    } else {
+      // 无 sessionId 时取消所有会话（向后兼容）
+      this.agentCore.cancel()
+    }
     this.server.sendResponse(client.id, createResponse(requestId, true))
   }
 

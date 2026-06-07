@@ -32,6 +32,10 @@ export interface AgenticLoopResult {
   usage: { inputTokens: number; outputTokens: number }
 }
 
+/**
+ * Run the agentic tool-use loop.
+ * @param params.messages — mutable; the array is modified in-place (assistant/tool messages appended).
+ */
 export async function runAgenticLoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
   if (params.providerType === 'openai') {
     return runOpenAILoop(params)

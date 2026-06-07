@@ -1,9 +1,11 @@
+import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import { z } from 'zod'
 import { zodToInputSchema } from './tool-schema'
 import { runSubagent, runParallelSubagents, runChainSubagents, SubagentConfig } from './subagent'
 
 export interface OrchestratorConfig {
-  client: any
+  client: Anthropic | OpenAI
   modelId: string
   providerType: 'anthropic' | 'openai'
   projectDir: string

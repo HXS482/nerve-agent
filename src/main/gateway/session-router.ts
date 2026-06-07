@@ -135,11 +135,9 @@ export class SessionRouter {
       queue.length = 0
     }
 
-    // 如果该 session 正在处理，取消 AgentCore
-    // 注意：这会取消所有正在进行的任务，因为 AgentCore 是单例
-    // TODO: P0-1 修复后，这里应该只取消特定 session 的任务
+    // 如果该 session 正在处理，取消该 session 的 AgentCore 任务
     if (this.processing.has(sessionId)) {
-      this.agentCore.cancel()
+      this.agentCore.cancelSession(sessionId)
     }
   }
 
