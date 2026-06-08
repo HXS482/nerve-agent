@@ -6,11 +6,15 @@ import { pluginManifestSchema, VALID_PERMISSIONS } from './plugin-types'
 import type { PluginManifest, LoadedPlugin, PluginToolDef } from './plugin-types'
 import { createPluginContext } from './plugin-context'
 import { zodToInputSchema } from './tool-schema'
+import { PluginToolSnapshot } from './tool-snapshot'
 
 export class PluginBus extends EventEmitter {
   private plugins = new Map<string, LoadedPlugin>()
   private projectDir: string
   private sourceDir: string
+  private snapshotVersion = 0
+  private activeSnapshot: PluginToolSnapshot | null = null
+  private pendingSnapshot: PluginToolSnapshot | null = null
 
   constructor(sourceDir: string, projectDir: string) {
     super()
@@ -141,6 +145,7 @@ export class PluginBus extends EventEmitter {
     }
 
     this.plugins.set(manifest.name, plugin)
+    this.invalidateSnapshot()
     this.emit('plugin:loaded', { pluginId: manifest.name })
     return { plugin }
   }
@@ -186,6 +191,38 @@ export class PluginBus extends EventEmitter {
       trust: p.trust,
       toolCount: p.tools.size,
     }))
+  }
+
+  // --- Snapshot management ---
+
+  getSnapshot(): PluginToolSnapshot {
+    if (!this.activeSnapshot) {
+      this.activeSnapshot = new PluginToolSnapshot(
+        this.snapshotVersion,
+        this.getAllPluginTools(),
+      )
+    }
+    return this.activeSnapshot
+  }
+
+  promotePending(): void {
+    if (this.pendingSnapshot) {
+      this.activeSnapshot = this.pendingSnapshot
+      this.pendingSnapshot = null
+    }
+  }
+
+  private invalidateSnapshot(): void {
+    this.snapshotVersion++
+    const newTools = this.getAllPluginTools()
+    const newSnapshot = new PluginToolSnapshot(this.snapshotVersion, newTools)
+
+    // If active snapshot has refs (in-flight conversations), store as pending
+    if (this.activeSnapshot && this.activeSnapshot.refs > 0) {
+      this.pendingSnapshot = newSnapshot
+    } else {
+      this.activeSnapshot = newSnapshot
+    }
   }
 
   // --- Trust resolution ---

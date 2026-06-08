@@ -248,6 +248,9 @@ export class AgentCore {
       // 准备消息和系统提示
       const { messages, systemPrompt, mcpTools } = await this.prepareMessages(payload, sessionId)
 
+      // Promote pending tool snapshot (if hot-reload happened between messages)
+      this.pluginBus.promotePending()
+
       // 解析 provider 和 model
       const providerId = this.resolveProvider()
       const modelId = this.resolveModel(this.config.model, providerId)
@@ -258,7 +261,7 @@ export class AgentCore {
 
       // 构建工具
       const routeImagesRef: { fn: ((toolName: string | undefined, resultContent: string) => void) | null } = { fn: null }
-      const { allToolDefs, allToolExecutors, orchestratorTools } = await this.buildTools(
+      const { allToolDefs, allToolExecutors, orchestratorTools, pluginSnapshot } = await this.buildTools(
         client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls,
         (toolName, content) => { routeImagesRef.fn?.(toolName, content) }
       )
@@ -291,14 +294,18 @@ export class AgentCore {
       }
       routeImagesRef.fn = routeImages
 
-      // 运行 Agent 循环
-      const result = await this.runAgentLoop(
-        client, resolvedModelId, providerType, messages, systemPrompt,
-        allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals, routeImages
-      )
+      try {
+        // 运行 Agent 循环
+        const result = await this.runAgentLoop(
+          client, resolvedModelId, providerType, messages, systemPrompt,
+          allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals, routeImages
+        )
 
-      // 处理结果
-      await this.handleResult(result, sessionId, payload, channel, ctx)
+        // 处理结果
+        await this.handleResult(result, sessionId, payload, channel, ctx)
+      } finally {
+        pluginSnapshot.unref()
+      }
     } catch (err: unknown) {
       if (ctx.abort.signal.aborted) {
         channel.sendDone(sessionId, 0, 0)
@@ -495,7 +502,9 @@ export class AgentCore {
       },
     }, this.sourceDir, this.skillRegistry)
 
-    const pluginTools = this.pluginBus.getAllPluginTools()
+    // Plugin tools via snapshot (pinned for this conversation)
+    const pluginSnapshot = this.pluginBus.getSnapshot()
+    pluginSnapshot.ref()
 
     const allToolDefs = [
       ...Object.entries(builtinTools).map(([name, tool]) => ({
@@ -513,11 +522,7 @@ export class AgentCore {
         description: (tool as any).description || '',
         input_schema: (tool as any).input_schema || {},
       })),
-      ...pluginTools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.input_schema,
-      })),
+      ...pluginSnapshot.toolDefs,
     ]
 
     const allToolExecutors = new Map<string, (args: any) => Promise<any>>()
@@ -527,14 +532,14 @@ export class AgentCore {
     for (const [name, tool] of Object.entries(orchestratorTools)) {
       allToolExecutors.set(name, (tool as any).execute)
     }
-    for (const tool of pluginTools) {
-      allToolExecutors.set(tool.name, tool.execute)
-    }
     for (const [name, executor] of this.mcpPool.getAllToolExecutors()) {
       allToolExecutors.set(name, executor)
     }
+    for (const [name, executor] of pluginSnapshot.toolExecutors) {
+      allToolExecutors.set(name, executor)
+    }
 
-    return { allToolDefs, allToolExecutors, orchestratorTools, allToolCalls, allToolResults }
+    return { allToolDefs, allToolExecutors, orchestratorTools, allToolCalls, allToolResults, pluginSnapshot }
   }
 
   /**
