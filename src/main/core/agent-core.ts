@@ -127,6 +127,7 @@ export class AgentCore {
       console.warn('[PluginBus] Load errors:', result.errors)
     }
     console.log(`[PluginBus] Loaded ${result.loaded.length} plugins:`, result.loaded)
+    this.pluginBus.startWatching()
   }
 
   private resolveModel(modelAlias: string, providerId?: string): string {

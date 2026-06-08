@@ -2,6 +2,8 @@ import { join } from 'path'
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { EventEmitter } from 'events'
+import chokidar from 'chokidar'
+import { Mutex } from 'async-mutex'
 import { pluginManifestSchema, VALID_PERMISSIONS } from './plugin-types'
 import type { PluginManifest, LoadedPlugin, PluginToolDef } from './plugin-types'
 import { createPluginContext } from './plugin-context'
@@ -15,6 +17,9 @@ export class PluginBus extends EventEmitter {
   private snapshotVersion = 0
   private activeSnapshot: PluginToolSnapshot | null = null
   private pendingSnapshot: PluginToolSnapshot | null = null
+  private watcher: chokidar.FSWatcher | null = null
+  private debounceTimers = new Map<string, NodeJS.Timeout>()
+  private reloadMutex = new Mutex()
 
   constructor(sourceDir: string, projectDir: string) {
     super()
@@ -223,6 +228,71 @@ export class PluginBus extends EventEmitter {
     } else {
       this.activeSnapshot = newSnapshot
     }
+  }
+
+  // --- FileWatcher ---
+
+  startWatching(): void {
+    const pluginDirs = [
+      join(this.projectDir, '.nerve', 'plugins'),
+      join(this.sourceDir, '.nerve', 'plugins'),
+      join(homedir(), '.nerve', 'plugins'),
+    ].filter(d => existsSync(d))
+
+    if (pluginDirs.length === 0) return
+
+    this.watcher = chokidar.watch(pluginDirs, {
+      ignoreInitial: true,
+      ignored: ['**/node_modules/**', '**/.git/**'],
+      depth: 3,
+    })
+
+    this.watcher.on('all', (event: string, filePath: string) => {
+      const pluginId = this.resolvePluginId(filePath)
+      if (!pluginId) return
+
+      clearTimeout(this.debounceTimers.get(pluginId))
+      this.debounceTimers.set(pluginId, setTimeout(async () => {
+        this.debounceTimers.delete(pluginId)
+        await this.reloadMutex.runExclusive(async () => {
+          await this.reloadPlugin(pluginId)
+        })
+      }, 300))
+    })
+
+    console.log('[PluginBus] FileWatcher started for', pluginDirs)
+  }
+
+  private resolvePluginId(filePath: string): string | null {
+    for (const [id, plugin] of this.plugins) {
+      if (filePath.startsWith(plugin.dir)) return id
+    }
+    return null
+  }
+
+  async reloadPlugin(pluginId: string): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) return
+
+    console.log(`[PluginBus] Reloading plugin: ${pluginId}`)
+    const result = await this.loadPlugin(plugin.dir)
+    if (result.error) {
+      console.error(`[PluginBus] Reload failed for ${pluginId}:`, result.error)
+      return
+    }
+    this.invalidateSnapshot()
+    console.log(`[PluginBus] Reloaded plugin: ${pluginId}`)
+  }
+
+  stopWatching(): void {
+    if (this.watcher) {
+      this.watcher.close()
+      this.watcher = null
+    }
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.debounceTimers.clear()
   }
 
   // --- Trust resolution ---
