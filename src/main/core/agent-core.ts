@@ -918,4 +918,21 @@ export class AgentCore {
     }
     await this.mcpPool.close()
   }
+
+  // Plugins
+  getPlugins() { return this.pluginBus.listPlugins() }
+
+  async togglePlugin(pluginId: string, enabled: boolean) {
+    return { success: true, message: 'toggle not yet implemented' }
+  }
+
+  async reloadPlugin(pluginId: string) {
+    await this.pluginBus.reloadPlugin(pluginId)
+    return { success: true }
+  }
+
+  async rollbackMcp(serverId: string) {
+    const result = await this.mcpPool.rollbackServer(serverId)
+    return { success: result }
+  }
 }

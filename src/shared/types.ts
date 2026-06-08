@@ -43,6 +43,11 @@ export const IPC_CHANNELS = {
   // Skills
   GET_SKILLS: 'nerve:get-skills',
   TOGGLE_SKILL: 'nerve:toggle-skill',
+  // Plugins
+  GET_PLUGINS: 'nerve:get-plugins',
+  TOGGLE_PLUGIN: 'nerve:toggle-plugin',
+  RELOAD_PLUGIN: 'nerve:reload-plugin',
+  ROLLBACK_MCP: 'nerve:rollback-mcp',
   // Voice
   TRANSCRIBE_AUDIO: 'nerve:transcribe-audio',
   // Branches

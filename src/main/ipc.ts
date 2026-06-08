@@ -226,6 +226,12 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     await toggleSkill(id, enabled)
   })
 
+  // Plugins
+  ipcMain.handle(IPC_CHANNELS.GET_PLUGINS, () => claude.getPlugins())
+  ipcMain.handle(IPC_CHANNELS.TOGGLE_PLUGIN, (_event, pluginId: string, enabled: boolean) => claude.togglePlugin(pluginId, enabled))
+  ipcMain.handle(IPC_CHANNELS.RELOAD_PLUGIN, (_event, pluginId: string) => claude.reloadPlugin(pluginId))
+  ipcMain.handle(IPC_CHANNELS.ROLLBACK_MCP, (_event, serverId: string) => claude.rollbackMcp(serverId))
+
   // Voice — audio transcription
   ipcMain.handle(IPC_CHANNELS.TRANSCRIBE_AUDIO, async (_event, audioData: Uint8Array, mimeType: string) => {
     return transcribeAudio(audioData, mimeType)

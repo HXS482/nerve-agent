@@ -191,4 +191,10 @@ export class ClaudeService {
   async close() {
     return this.core.close()
   }
+
+  // Plugins
+  getPlugins() { return this.core.getPlugins() }
+  togglePlugin(pluginId: string, enabled: boolean) { return this.core.togglePlugin(pluginId, enabled) }
+  reloadPlugin(pluginId: string) { return this.core.reloadPlugin(pluginId) }
+  rollbackMcp(serverId: string) { return this.core.rollbackMcp(serverId) }
 }

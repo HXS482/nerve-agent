@@ -99,6 +99,14 @@ const api = {
   // Skills
   getSkills: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SKILLS),
   toggleSkill: (id: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_SKILL, id, enabled),
+  // Plugins
+  getPlugins: () => ipcRenderer.invoke(IPC_CHANNELS.GET_PLUGINS),
+  togglePlugin: (pluginId: string, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_PLUGIN, pluginId, enabled),
+  reloadPlugin: (pluginId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RELOAD_PLUGIN, pluginId),
+  rollbackMcp: (serverId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ROLLBACK_MCP, serverId),
   // Voice
   transcribeAudio: (audioData: Uint8Array, mimeType: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_AUDIO, audioData, mimeType),
