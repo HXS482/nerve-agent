@@ -14,6 +14,16 @@ const HEALTH_CHECK_INTERVAL = 60_000
 const MAX_RECONNECT_DELAY = 30_000
 const CONNECT_TIMEOUT = 5_000
 
+const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'USER', 'SHELL', 'TERM', 'TEMP', 'TMP', 'SystemRoot', 'windir']
+
+function buildSafeEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const key of SAFE_ENV_KEYS) {
+    if (process.env[key]) env[key] = process.env[key]!
+  }
+  return env
+}
+
 export class McpPool {
   private pool = new Map<string, PooledClient>()
   private healthTimer: ReturnType<typeof setInterval> | null = null
@@ -81,7 +91,7 @@ export class McpPool {
       command: isWin ? 'cmd' : config.command,
       args: isWin ? ['/c', config.command, ...(config.args || [])] : (config.args || []),
       env: {
-        ...Object.fromEntries(Object.entries(process.env).filter(([_, v]) => v !== undefined)),
+        ...buildSafeEnv(),
         ...config.env,
       } as Record<string, string>,
     })
