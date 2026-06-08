@@ -5,6 +5,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { z } from 'zod'
 import { zodToInputSchema } from './tool-schema'
+import { estimateTokens } from './core/token-estimator'
 import { saveImage, getImagesDir } from './images'
 import simpleGit from 'simple-git'
 
@@ -81,7 +82,7 @@ function matchGlob(pattern: string, filePath: string): boolean {
   return regex.test(filePath)
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
@@ -532,5 +533,32 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         }
       },
     },
+
+    // load_skill — on-demand skill loading (two-layer model)
+    ...(skillRegistry ? (() => {
+      const loadSkillSchema = z.object({
+        skill_name: z.string().describe('Name of the skill to load'),
+      })
+      return {
+        load_skill: {
+          description: `Load a skill by name to access its full instructions. Available skills: ${skillRegistry.listNames().join(', ')}. Only load when the skill is relevant to the current task.`,
+          input_schema: zodToInputSchema(loadSkillSchema),
+          execute: async (args: { skill_name: string }) => {
+            const skill = skillRegistry.get(args.skill_name)
+            if (!skill) {
+              return { error: `Skill "${args.skill_name}" not found. Available: ${skillRegistry.listNames().join(', ')}` }
+            }
+            const prompt = skillRegistry.resolvePrompt(skill, '')
+            const promptTokens = estimateTokens(prompt)
+            return {
+              skill_name: skill.name,
+              description: skill.description,
+              content: prompt,
+              tokens: promptTokens,
+            }
+          },
+        },
+      }
+    })() : {}),
   }
 }
