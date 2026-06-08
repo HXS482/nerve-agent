@@ -3,19 +3,7 @@ import { homedir } from 'os'
 import { readFileSync, existsSync, readdirSync } from 'fs'
 import { Skill } from '../shared/types'
 import { getNerveSettings, saveNerveSettings } from './settings'
-
-function parseSkillFrontmatter(content: string): { meta: Record<string, string>; body: string } | null {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/)
-  if (!match) return null
-  const meta: Record<string, string> = {}
-  for (const line of match[1].split(/\r?\n/)) {
-    const idx = line.indexOf(':')
-    if (idx > 0) {
-      meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-    }
-  }
-  return { meta, body: match[2] }
-}
+import { parseSkillFrontmatter } from './skill-parser'
 
 export async function getSkills(projectDir?: string): Promise<Skill[]> {
   const candidates = [

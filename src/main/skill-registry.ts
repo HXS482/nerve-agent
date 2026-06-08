@@ -1,19 +1,7 @@
 import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 import type { Skill, SkillIndexEntry } from '../shared/types'
-
-function parseSkillFrontmatter(content: string): { meta: Record<string, string>; body: string } | null {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/)
-  if (!match) return null
-  const meta: Record<string, string> = {}
-  for (const line of match[1].split(/\r?\n/)) {
-    const idx = line.indexOf(':')
-    if (idx > 0) {
-      meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-    }
-  }
-  return { meta, body: match[2] }
-}
+import { parseSkillFrontmatter } from './skill-parser'
 
 export class SkillRegistry {
   private skills = new Map<string, Skill>()
@@ -59,31 +47,35 @@ export class SkillRegistry {
   /**
    * Scan legacy .agents/skills/ directories (backward compat)
    */
-  async discoverFromDirs(candidates: string[], disabledSkills: string[]) {
+  discoverFromDirs(candidates: string[], disabledSkills: string[]) {
     this.setDisabled(disabledSkills)
 
     for (const base of candidates) {
       const skillsDir = join(base, '.agents', 'skills')
       if (!existsSync(skillsDir)) continue
 
-      const dirs = readdirSync(skillsDir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => d.name)
+      try {
+        const dirs = readdirSync(skillsDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .map(d => d.name)
 
-      for (const dir of dirs) {
-        const skillPath = join(skillsDir, dir, 'SKILL.md')
-        if (!existsSync(skillPath)) continue
-        const raw = readFileSync(skillPath, 'utf-8')
-        const parsed = parseSkillFrontmatter(raw)
-        if (!parsed) continue
-        this.register({
-          id: dir,
-          name: parsed.meta.name || dir,
-          description: parsed.meta.description || '',
-          prompt: parsed.body,
-          skillDir: join(skillsDir, dir),
-          enabled: !this.disabled.has(dir),
-        })
+        for (const dir of dirs) {
+          const skillPath = join(skillsDir, dir, 'SKILL.md')
+          if (!existsSync(skillPath)) continue
+          const raw = readFileSync(skillPath, 'utf-8')
+          const parsed = parseSkillFrontmatter(raw)
+          if (!parsed) continue
+          this.register({
+            id: dir,
+            name: parsed.meta.name || dir,
+            description: parsed.meta.description || '',
+            prompt: parsed.body,
+            skillDir: join(skillsDir, dir),
+            enabled: !this.disabled.has(dir),
+          })
+        }
+      } catch (err) {
+        console.error('[SkillRegistry] discover error:', err)
       }
     }
   }
