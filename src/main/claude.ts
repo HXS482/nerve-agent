@@ -62,6 +62,10 @@ export class ClaudeService {
     this.core.setOffloadBridge(bridge)
   }
 
+  async initPlugins(): Promise<void> {
+    return this.core.initPlugins()
+  }
+
   private send(channel: string, data: unknown) {
     if (!this.window.isDestroyed()) {
       this.window.webContents.send(channel, data)

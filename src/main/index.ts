@@ -350,6 +350,9 @@ app.whenReady().then(async () => {
     }
   }
 
+  // Initialize plugins
+  await claude.initPlugins()
+
   // 从 settings 加载公网访问配置
   const publicAccess = await getGatewayPublicAccess()
   const configuredToken = publicAccess ? await getGatewayToken() : null

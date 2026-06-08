@@ -13,6 +13,7 @@ import { FileSessionStore } from '../session-store'
 import { loadSettings, NERVE_DIR, ClaudeSettings } from '../settings'
 import { getBuiltinTools } from '../tools'
 import { SkillRegistry } from '../skill-registry'
+import { PluginBus } from '../plugin-bus'
 import { ProviderRegistry } from '../provider-registry'
 import { McpPool } from '../mcp-pool'
 import { getOrchestratorTools } from '../orchestrator'
@@ -77,6 +78,7 @@ export class AgentCore {
   private memoryCore: MemoryTdaiCore | null = null
   private offloadBridge: OffloadBridge | null = null
   private skillRegistry: SkillRegistry = new SkillRegistry()
+  private pluginBus: PluginBus
 
   // 会话上下文管理器（用于多 session 并发）
   private sessionContextManager = new SessionContextManager()
@@ -101,6 +103,7 @@ export class AgentCore {
 
     this.registry = new ProviderRegistry(this.settings)
     this.mcpPool = new McpPool()
+    this.pluginBus = new PluginBus(this.sourceDir, this.projectDir)
   }
 
   private async ensureSessionStore(): Promise<FileSessionStore> {
@@ -116,6 +119,14 @@ export class AgentCore {
 
   setOffloadBridge(bridge: OffloadBridge) {
     this.offloadBridge = bridge
+  }
+
+  async initPlugins(): Promise<void> {
+    const result = await this.pluginBus.loadAll()
+    if (result.errors.length > 0) {
+      console.warn('[PluginBus] Load errors:', result.errors)
+    }
+    console.log(`[PluginBus] Loaded ${result.loaded.length} plugins:`, result.loaded)
   }
 
   private resolveModel(modelAlias: string, providerId?: string): string {
@@ -484,6 +495,8 @@ export class AgentCore {
       },
     }, this.sourceDir, this.skillRegistry)
 
+    const pluginTools = this.pluginBus.getAllPluginTools()
+
     const allToolDefs = [
       ...Object.entries(builtinTools).map(([name, tool]) => ({
         name,
@@ -500,6 +513,11 @@ export class AgentCore {
         description: (tool as any).description || '',
         input_schema: (tool as any).input_schema || {},
       })),
+      ...pluginTools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.input_schema,
+      })),
     ]
 
     const allToolExecutors = new Map<string, (args: any) => Promise<any>>()
@@ -508,6 +526,9 @@ export class AgentCore {
     }
     for (const [name, tool] of Object.entries(orchestratorTools)) {
       allToolExecutors.set(name, (tool as any).execute)
+    }
+    for (const tool of pluginTools) {
+      allToolExecutors.set(tool.name, tool.execute)
     }
     for (const [name, executor] of this.mcpPool.getAllToolExecutors()) {
       allToolExecutors.set(name, executor)
