@@ -207,6 +207,7 @@ interface PluginContext {
 
 **术语说明**：`scope` 指插件的安装位置（用户级 or 项目级），决定插件对哪些项目可见。`trust` 指安全信任级别，决定权限边界和隔离强度。两者关联但不等同：一个 `scope: 'user'` 的 plugin 信任级别为 `local`，一个从 marketplace 安装到 `~/.nerve/marketplace/` 的 plugin 信任级别为 `marketplace`。
 
+```ts
 interface PluginFs {
   readFile(path: string): Promise<string>
   readDir(path: string): Promise<string[]>
@@ -271,10 +272,7 @@ class PluginBus extends EventEmitter {
   private plugins = new Map<string, LoadedPlugin>()
   private toolReg: ToolRegistry
   private skillReg: SkillRegistry
-  private hookReg: HookRegistry
-  private mcpReg: McpRegistry
-  private agentReg: AgentRegistry
-  private componentReg: ComponentRegistry
+  // Phase 2+: hookReg, mcpReg, agentReg, componentReg（Phase 1 不实例化）
 
   async discover(): Promise<void>
   async loadAll(): Promise<void>
@@ -283,11 +281,9 @@ class PluginBus extends EventEmitter {
   async reload(pluginId: string): Promise<void>
   startWatching(): void
 
-  getToolSnapshot(): ToolSnapshot
+  getToolSnapshot(): PluginToolSnapshot
   getActiveSkills(): Skill[]
-  getMcpServers(): McpServerConfig[]
-  getAgents(): AgentDefinition[]
-  getComponents(): ComponentEntry[]
+  // Phase 2+: getMcpServers(), getAgents(), getComponents()
 }
 ```
 
@@ -479,10 +475,10 @@ plugin "hyperframes" 的 tool "render" → LLM 看到 "hyperframes:render"
 **Snapshot 范围**：Snapshot 是一次 `sendMessage` 调用中 LLM 可见的**全部 tool 的不可变快照**，包含 builtin tools + plugin tools + MCP tools + orchestrator tools。不是只包含 plugin tools。
 
 ```ts
-interface ToolSnapshot {
+interface PluginToolSnapshot {
   readonly version: number
-  readonly toolDefs: ToolDefinition[]         // 所有 tool 的 LLM schema
-  readonly toolExecutors: Map<string, ToolExecutor>
+  readonly toolDefs: ToolDefinition[]                  // 所有 plugin tool 的 LLM schema（immutable）
+  readonly toolExecutors: Map<string, ToolExecutor>    // plugin tool 的 executor（已绑定 PluginAPI ctx，immutable）
   ref(): void
   unref(): void
 }
@@ -550,21 +546,22 @@ try {
 
 ### 8.2 load_skill Tool
 
-内置 tool，LLM 根据 skill index 判断是否需要加载：
+内置 tool，LLM 根据 skill index 判断是否需要加载。**引用 SkillRegistry 而非闭包捕获**，确保热重载后始终看到最新 skill 列表：
 
 ```ts
 const loadSkillTool = {
   name: 'load_skill',
-  description: 'Load a skill by name. Available: ' + allSkills.map(s => s.name).join(', '),
+  description: 'Load a skill by name. Use this to access a skill\'s full instructions when relevant.',
   input_schema: { type: 'object', properties: { skill_name: { type: 'string' } }, required: ['skill_name'] },
   execute: async (args) => {
-    const skill = allSkills.find(s => s.name === args.skill_name)
-    if (!skill) return { error: `Skill "${args.skill_name}" not found` }
+    // 从 SkillRegistry 实时查询（非闭包快照）
+    const skill = skillRegistry.get(args.skill_name)
+    if (!skill) return { error: `Skill "${args.skill_name}" not found. Available: ${skillRegistry.listNames().join(', ')}` }
     // token budget 检查
     if (estimateTokens(skill.prompt) > remainingContext) {
       return { error: 'Skill too large for remaining context' }
     }
-    return { skill_name: skill.name, content: resolveTemplateVars(skill.prompt) }
+    return { skill_name: skill.name, content: resolveTemplateVars(skill.prompt, skill.skillDir, sessionId) }
   }
 }
 ```
@@ -635,7 +632,7 @@ const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'USER', 'SHELL', 'TERM', 'TEMP', 
 
 当前两个 MCP server 提供同名 tool 时，`Object.assign` 导致后者覆盖前者。MCP tools 应加 `serverName:` 前缀（与 plugin tool 的 `pluginId:` 前缀一致）。Phase 1 可先加 warning 日志，后续强制前缀。
 
-### 9.4 Rollback
+### 9.5 Rollback
 
 MCP 热替换后保留 10s rollback 窗口，UI 展示 rollback 按钮。
 
@@ -861,7 +858,9 @@ Module._initPaths()
 
 **Plugin 不需要自己的 node_modules**。Zod 和 zodToInputSchema 由 host 提供，plugin 只 export 原始 Zod schema，PluginLoader 在 host 侧调用 `zodToInputSchema()` 转换。
 
-- `.agents/skills/` 继续走现有加载逻辑
+### 14.7 向后兼容总结
+
+- `.agents/skills/` 继续走现有加载逻辑（Section 14.5 已覆盖扫描路径）
 - 新功能（tool 绑定、MCP、热重载）只对 plugin 结构可用
 - 用户不需要迁移即可保持现状
 
