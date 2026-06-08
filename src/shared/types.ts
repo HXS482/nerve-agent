@@ -274,7 +274,13 @@ export interface Skill {
   name: string
   description: string
   prompt: string
+  skillDir: string
   enabled: boolean
+}
+
+export interface SkillIndexEntry {
+  name: string
+  description: string
 }
 
 // Session token usage aggregation
