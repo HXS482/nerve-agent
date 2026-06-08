@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto'
 import { FileSessionStore } from '../session-store'
 import { loadSettings, NERVE_DIR, ClaudeSettings } from '../settings'
 import { getBuiltinTools } from '../tools'
-import { getSkills } from '../skills'
+import { SkillRegistry } from '../skill-registry'
 import { ProviderRegistry } from '../provider-registry'
 import { McpPool } from '../mcp-pool'
 import { getOrchestratorTools } from '../orchestrator'
@@ -76,6 +76,7 @@ export class AgentCore {
   private flowContentHashes = new Set<string>()
   private memoryCore: MemoryTdaiCore | null = null
   private offloadBridge: OffloadBridge | null = null
+  private skillRegistry: SkillRegistry = new SkillRegistry()
 
   // 会话上下文管理器（用于多 session 并发）
   private sessionContextManager = new SessionContextManager()
@@ -387,16 +388,30 @@ export class AgentCore {
       messages.push({ role: 'user', content: payload.prompt })
     }
 
-    // 注入 Skills
-    const skills = (await getSkills(this.sourceDir)).filter((s) => s.enabled)
-    if (skills.length > 0) {
-      const skillsDir = join(this.sourceDir, '.agents', 'skills')
+    // 注入 Skills（两层模型 or eager 兼容模式）
+    const disabledSkills: string[] = (this.settings as any).disabledSkills || []
+    this.skillRegistry.discoverFromDirs(
+      [this.sourceDir, join(homedir(), '.nerve'), join(homedir(), '.claude')],
+      disabledSkills
+    )
+
+    const skillLoading = (this.settings as any).skillLoading || 'lazy'
+
+    if (skillLoading === 'eager') {
+      // 兼容模式：全量注入（现有行为）
+      const skills = this.skillRegistry.getEnabled()
       for (const skill of skills) {
-        const skillDir = join(skillsDir, skill.id)
-        const resolvedPrompt = skill.prompt
-          .replace(/\$\{CLAUDE_SKILL_DIR\}/g, skillDir)
-          .replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId)
-        systemPrompt += `\n\n---\n\n# Skill: ${skill.name}\n\nBase directory for this skill: ${skillDir}\n\n${resolvedPrompt}`
+        const resolvedPrompt = this.skillRegistry.resolvePrompt(skill, sessionId)
+        systemPrompt += `\n\n---\n\n# Skill: ${skill.name}\n\nBase directory for this skill: ${skill.skillDir}\n\n${resolvedPrompt}`
+      }
+    } else {
+      // 两层模型：只注入 index，LLM 通过 load_skill 按需加载
+      const skillIndex = this.skillRegistry.listIndex()
+      if (skillIndex.length > 0) {
+        const indexText = skillIndex
+          .map(s => `- **${s.name}**: ${s.description}`)
+          .join('\n')
+        systemPrompt += `\n\n## Available Skills\n\n${indexText}\n\nUse the \`load_skill\` tool to access a skill's full instructions when relevant to the user's request.`
       }
     }
 
@@ -466,7 +481,7 @@ export class AgentCore {
       refresh: () => {
         if (isElectronChannel(channel)) channel.sendGitRefresh()
       },
-    }, this.sourceDir)
+    }, this.sourceDir, this.skillRegistry)
 
     const allToolDefs = [
       ...Object.entries(builtinTools).map(([name, tool]) => ({
