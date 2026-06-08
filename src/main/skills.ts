@@ -53,6 +53,7 @@ export async function getSkills(projectDir?: string): Promise<Skill[]> {
         name: parsed.meta.name || dir,
         description: parsed.meta.description || '',
         prompt: parsed.body,
+        skillDir: join(skillsDir, dir),
         enabled: !disabled.has(dir),
       }
     }).filter(Boolean) as Skill[]
