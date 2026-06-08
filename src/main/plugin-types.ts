@@ -109,3 +109,58 @@ export const VALID_PERMISSIONS = new Set([
   'nerve:memory',
   'nerve:channel',
 ])
+
+// --- Hook types ---
+
+export type HookEvent =
+  | 'onMessageSend'
+  | 'onToolCall'
+  | 'onToolComplete'
+  | 'onStreamDelta'
+  | 'onSessionStart'
+  | 'onSessionEnd'
+
+export interface HookData {
+  message?: { prompt: string }
+  toolCall?: {
+    id: string
+    name: string
+    input: unknown
+    result?: string
+    isError?: boolean
+    pluginSource?: string
+  }
+  streamDelta?: {
+    text: string
+    accumulated: string
+  }
+}
+
+export interface HookContext {
+  readonly sessionId: string
+  readonly pluginId: string
+  readonly data: Readonly<HookData>
+  readonly metadata: Map<string, unknown>
+}
+
+export interface HookResult {
+  handled: boolean
+  modified?: Partial<HookData>
+  error?: Error
+}
+
+export type HookFn = (ctx: HookContext) => Promise<HookResult>
+
+export interface PrioritizedHook {
+  pluginId: string
+  event: HookEvent
+  fn: HookFn
+  priority: number
+}
+
+export const HOOK_PRIORITY_FLOORS: Record<string, number> = {
+  builtin: 0,
+  local: 200,
+  project: 200,
+  marketplace: 300,
+}
