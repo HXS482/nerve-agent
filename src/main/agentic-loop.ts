@@ -25,6 +25,8 @@ export interface AgenticLoopParams {
   onToolApproval?: (id: string, name: string, input: Record<string, unknown>) => Promise<boolean>
   onBeforeStep?: (messages: Array<{ role: string; content: unknown }>) => Promise<void>
   onAfterToolCall?: (toolName: string, toolCallId: string, params: unknown, result: unknown) => void
+  hookRegistry?: import('./hook-registry').HookRegistry
+  sessionId?: string
 }
 
 export interface AgenticLoopResult {
@@ -141,6 +143,21 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
 
       onToolCall?.(block.id, block.name, block.input)
 
+      // onToolCall hook — plugins can intercept
+      if (params.hookRegistry && params.sessionId) {
+        const hookResult = await params.hookRegistry.execute('onToolCall', {
+          toolCall: { id: block.id, name: block.name, input: block.input },
+        }, params.sessionId)
+        if (hookResult.handled) {
+          const hookContent = typeof hookResult.modified?.toolCall?.result === 'string'
+            ? hookResult.modified.toolCall.result
+            : 'intercepted by hook'
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: hookContent })
+          onToolResult?.(block.id, hookContent, false)
+          continue
+        }
+      }
+
       // Approval gate — ask user before executing (if onToolApproval is set)
       if (onToolApproval) {
         const approved = await onToolApproval(block.id, block.name, block.input)
@@ -176,8 +193,20 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
         )
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
         const isToolError = typeof result === 'object' && result !== null && 'error' in result
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr.slice(0, 50000), ...(isToolError ? { is_error: true } : {}) })
-        onToolResult?.(block.id, resultStr.slice(0, 50000), isToolError || undefined)
+
+        // onToolComplete hook — plugins can modify result
+        let finalResultStr = resultStr
+        if (params.hookRegistry && params.sessionId) {
+          const hookResult = await params.hookRegistry.execute('onToolComplete', {
+            toolCall: { id: block.id, name: block.name, input: block.input, result: resultStr, isError: isToolError },
+          }, params.sessionId)
+          if (hookResult.modified?.toolCall?.result !== undefined) {
+            finalResultStr = hookResult.modified.toolCall.result
+          }
+        }
+
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: finalResultStr.slice(0, 50000), ...(isToolError ? { is_error: true } : {}) })
+        onToolResult?.(block.id, finalResultStr.slice(0, 50000), isToolError || undefined)
         onAfterToolCall?.(block.name, block.id, block.input, result)
       } catch (err: any) {
         const errMsg = err.message || 'Tool execution failed'

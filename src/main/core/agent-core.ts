@@ -20,6 +20,7 @@ import { getOrchestratorTools } from '../orchestrator'
 import { runAgenticLoop } from '../agentic-loop'
 import { MemoryTdaiCore } from '../memory-tdai'
 import { OffloadBridge } from '../offload-bridge'
+import { HookRegistry } from '../hook-registry'
 import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
@@ -79,6 +80,7 @@ export class AgentCore {
   private offloadBridge: OffloadBridge | null = null
   private skillRegistry: SkillRegistry = new SkillRegistry()
   private pluginBus: PluginBus
+  private hookRegistry: HookRegistry = new HookRegistry()
 
   // 会话上下文管理器（用于多 session 并发）
   private sessionContextManager = new SessionContextManager()
@@ -621,6 +623,8 @@ export class AgentCore {
       onAfterToolCall: (toolName, toolCallId, params, result) => {
         this.offloadBridge?.onAfterToolCall(toolName, toolCallId, params, result)
       },
+      hookRegistry: this.hookRegistry,
+      sessionId: ctx.sessionId,
     })
 
     return {
