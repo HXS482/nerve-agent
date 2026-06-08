@@ -394,6 +394,7 @@ export class AgentCore {
       [this.sourceDir, join(homedir(), '.nerve'), join(homedir(), '.claude')],
       disabledSkills
     )
+    this.skillRegistry.setSessionId(sessionId)
 
     const skillLoading = (this.settings as any).skillLoading || 'lazy'
 

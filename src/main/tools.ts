@@ -548,7 +548,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             if (!skill) {
               return { error: `Skill "${args.skill_name}" not found. Available: ${skillRegistry.listNames().join(', ')}` }
             }
-            const prompt = skillRegistry.resolvePrompt(skill, '')
+            const prompt = skillRegistry.resolvePrompt(skill)
             const promptTokens = estimateTokens(prompt)
             return {
               skill_name: skill.name,

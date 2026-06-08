@@ -6,6 +6,11 @@ import { parseSkillFrontmatter } from './skill-parser'
 export class SkillRegistry {
   private skills = new Map<string, Skill>()
   private disabled = new Set<string>()
+  private currentSessionId: string = ''
+
+  setSessionId(sessionId: string) {
+    this.currentSessionId = sessionId
+  }
 
   setDisabled(disabledSkills: string[]) {
     this.disabled = new Set(disabledSkills)
@@ -38,10 +43,10 @@ export class SkillRegistry {
     }
   }
 
-  resolvePrompt(skill: Skill, sessionId: string): string {
+  resolvePrompt(skill: Skill, sessionId?: string): string {
     return skill.prompt
       .replace(/\$\{CLAUDE_SKILL_DIR\}/g, skill.skillDir)
-      .replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId)
+      .replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId ?? this.currentSessionId)
   }
 
   /**
