@@ -787,10 +787,10 @@ function ImageView({ src }: { src: string }) {
   } else if (isImageUrl(src)) {
     resolved = src
   } else if (src.includes('.nerve/gallery/') || src.includes('.nerve\\gallery\\') || src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
-    // Internal gallery path — use file:// protocol
-    resolved = `file:///${src.replace(/\\/g, '/')}`
+    // Internal gallery path — use nerve-file:// protocol
+    resolved = `nerve-file:///${src.replace(/\\/g, '/')}`
   } else {
-    resolved = `file:///${src.replace(/\\/g, '/')}`
+    resolved = `nerve-file:///${src.replace(/\\/g, '/')}`
   }
 
   return (

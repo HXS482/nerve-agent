@@ -164,7 +164,7 @@ export const Gallery = memo(function Gallery({ onClose }: GalleryProps) {
                   }}
                 >
                   <img
-                    src={`file:///${img.path.replace(/\\/g, '/')}`}
+                    src={`nerve-file:///${img.path.replace(/\\/g, '/')}`}
                     alt={img.source || img.filename}
                     className="w-full h-full object-cover"
                     loading="lazy"
@@ -206,7 +206,7 @@ export const Gallery = memo(function Gallery({ onClose }: GalleryProps) {
           onClick={() => setPreview(null)}
         >
           <img
-            src={`file:///${preview.path.replace(/\\/g, '/')}`}
+            src={`nerve-file:///${preview.path.replace(/\\/g, '/')}`}
             alt={preview.source || preview.filename}
             className="max-w-[90vw] max-h-[85vh] rounded-xl object-contain"
             style={{ border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}

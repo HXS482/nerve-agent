@@ -93,8 +93,8 @@ function createWindow(): BrowserWindow {
     shadow: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: false,
+      sandbox: true,
+      webSecurity: true,
     },
   })
 
@@ -165,8 +165,8 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
     title: '',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: false,
+      sandbox: true,
+      webSecurity: true,
     },
   })
 
@@ -304,6 +304,10 @@ protocol.registerSchemesAsPrivileged([
     scheme: 'pet-sprite',
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
   },
+  {
+    scheme: 'nerve-file',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+  },
 ])
 
 app.whenReady().then(async () => {
@@ -401,6 +405,12 @@ app.whenReady().then(async () => {
     const resolved = resolve(petsDir, skinId, filename)
     if (!resolved.startsWith(petsDir)) return new Response('Not found', { status: 404 })
     return net.fetch(`file://${resolved.replace(/\\/g, '/')}`)
+  })
+
+  // Handle nerve-file:// protocol for sandbox-safe local file access
+  protocol.handle('nerve-file', (request) => {
+    const filePath = decodeURIComponent(request.url.replace('nerve-file://', ''))
+    return net.fetch(`file://${filePath.replace(/\\/g, '/')}`)
   })
 
   // Load renderer
