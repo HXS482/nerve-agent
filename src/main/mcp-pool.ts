@@ -8,6 +8,8 @@ interface PooledClient {
   client: InstanceType<typeof Client>
   tools: Record<string, unknown>
   lastHealthCheck: number
+  drainMode: boolean
+  inflightCalls: number
 }
 
 const HEALTH_CHECK_INTERVAL = 60_000
@@ -79,6 +81,8 @@ export class McpPool {
         client,
         tools: toolsMap,
         lastHealthCheck: Date.now(),
+        drainMode: false,
+        inflightCalls: 0,
       })
     } catch {
       // Failed servers are skipped silently — lazy connect means they'll be retried next call
@@ -156,6 +160,8 @@ export class McpPool {
         client,
         tools,
         lastHealthCheck: Date.now(),
+        drainMode: false,
+        inflightCalls: 0,
       })
     } catch (err) {
       // Close client if it was created but tools() failed
@@ -182,6 +188,79 @@ export class McpPool {
       try { await entry.client.close() } catch { /* ignore */ }
     }
     this.pool.clear()
+  }
+
+  private pendingRollback = new Map<string, { oldEntry: PooledClient; deadline: ReturnType<typeof setTimeout> }>()
+
+  async drainServer(name: string, timeoutMs = 30_000): Promise<void> {
+    const entry = this.pool.get(name)
+    if (!entry) return
+    entry.drainMode = true
+    const start = Date.now()
+    while (entry.inflightCalls > 0 && Date.now() - start < timeoutMs) {
+      await sleep(100)
+    }
+  }
+
+  isDraining(name: string): boolean {
+    return this.pool.get(name)?.drainMode ?? false
+  }
+
+  trackCallStart(name: string): void {
+    const entry = this.pool.get(name)
+    if (entry) entry.inflightCalls++
+  }
+
+  trackCallEnd(name: string): void {
+    const entry = this.pool.get(name)
+    if (entry) entry.inflightCalls--
+  }
+
+  async replaceServer(name: string, newConfig: McpServerConfig): Promise<void> {
+    const old = this.pool.get(name)
+    if (!old) {
+      await this.connectWithTimeout(name, newConfig)
+      return
+    }
+
+    await this.drainServer(name)
+
+    const client = await this.connectServer(name, newConfig)
+    const { tools: toolList } = await client.listTools()
+    const toolsMap: Record<string, unknown> = {}
+    for (const tool of toolList) {
+      toolsMap[tool.name] = { description: tool.description, parameters: tool.inputSchema }
+    }
+
+    const newEntry: PooledClient = {
+      client,
+      tools: toolsMap,
+      lastHealthCheck: Date.now(),
+      drainMode: false,
+      inflightCalls: 0,
+    }
+
+    this.pool.set(name, newEntry)
+
+    const deadline = setTimeout(() => {
+      old.client.close().catch(() => {})
+      this.pendingRollback.delete(name)
+    }, 10_000)
+    this.pendingRollback.set(name, { oldEntry: old, deadline })
+  }
+
+  async rollbackServer(name: string): Promise<boolean> {
+    const pending = this.pendingRollback.get(name)
+    if (!pending) return false
+
+    clearTimeout(pending.deadline)
+    const current = this.pool.get(name)
+    this.pool.set(name, pending.oldEntry)
+    pending.oldEntry.drainMode = false
+    this.pendingRollback.delete(name)
+
+    if (current) await current.client.close().catch(() => {})
+    return true
   }
 
   async closeServer(name: string) {
