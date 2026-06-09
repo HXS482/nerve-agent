@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
+import { pathToFileURL } from 'url'
 import { EventEmitter } from 'events'
 import chokidar from 'chokidar'
 import { Mutex } from 'async-mutex'
@@ -111,17 +112,19 @@ export class PluginBus extends EventEmitter {
       }
 
       try {
-        const mod = await import(modulePath + `?v=${Date.now()}`)
+        const fileUrl = pathToFileURL(modulePath).href + `?v=${Date.now()}`
+        const mod = await import(fileUrl)
         if (!mod.schema || !mod.execute) {
           return { error: `Tool "${toolEntry.name}" must export { schema, execute }` }
         }
 
-        const input_schema = zodToInputSchema(mod.schema)
+        const isZodSchema = mod.schema && typeof mod.schema.parse === 'function' && mod.schema._def
+        const input_schema = isZodSchema ? zodToInputSchema(mod.schema) : mod.schema
         const qualifiedName = `${manifest.name}:${toolEntry.name}`
 
         const executor = async (args: any) => {
           try {
-            const parsed = mod.schema.parse(args)
+            const parsed = isZodSchema ? mod.schema.parse(args) : args
             return await mod.execute(parsed, ctx)
           } catch (err: any) {
             return { error: `[plugin:${manifest.name}] ${toolEntry.name}: ${err.message}` }
