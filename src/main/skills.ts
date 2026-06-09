@@ -2,7 +2,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { readFileSync, existsSync, readdirSync } from 'fs'
 import { Skill } from '../shared/types'
-import { getNerveSettings, saveNerveSettings } from './settings'
+import { toggleSkillSetting, getDisabledSkills } from './settings'
 import { parseSkillFrontmatter } from './skill-parser'
 
 export async function getSkills(projectDir?: string): Promise<Skill[]> {
@@ -22,8 +22,7 @@ export async function getSkills(projectDir?: string): Promise<Skill[]> {
   }
   if (!skillsDir) return []
 
-  const settings = await getNerveSettings()
-  const disabled = new Set<string>((settings as any).disabledSkills || [])
+  const disabled = new Set<string>(getDisabledSkills())
 
   try {
     const dirs = readdirSync(skillsDir, { withFileTypes: true })
@@ -52,12 +51,5 @@ export async function getSkills(projectDir?: string): Promise<Skill[]> {
 }
 
 export async function toggleSkill(id: string, enabled: boolean) {
-  const settings = await getNerveSettings()
-  const disabled: string[] = (settings as any).disabledSkills || []
-  if (enabled) {
-    ;(settings as any).disabledSkills = disabled.filter((d) => d !== id)
-  } else {
-    ;(settings as any).disabledSkills = [...disabled, id]
-  }
-  await saveNerveSettings(settings)
+  await toggleSkillSetting(id, enabled)
 }
