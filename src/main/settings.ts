@@ -373,3 +373,59 @@ export async function saveGatewayPublicAccess(config: { publicAccess: boolean; t
   existing.gateway = gateway
   await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
 }
+
+// --- Plugin / Skill toggle ---
+
+export async function togglePluginSetting(pluginId: string, enabled: boolean) {
+  await ensureNerveDir()
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(nerveSettingsPath)) {
+    try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
+  }
+  const disabled: string[] = (existing.disabledPlugins as string[]) || []
+  if (enabled) {
+    existing.disabledPlugins = disabled.filter(d => d !== pluginId)
+  } else {
+    existing.disabledPlugins = [...disabled, pluginId]
+  }
+  await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
+}
+
+export async function toggleSkillSetting(skillId: string, enabled: boolean) {
+  await ensureNerveDir()
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(nerveSettingsPath)) {
+    try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
+  }
+  const disabled: string[] = (existing.disabledSkills as string[]) || []
+  if (enabled) {
+    existing.disabledSkills = disabled.filter(d => d !== skillId)
+  } else {
+    existing.disabledSkills = [...disabled, skillId]
+  }
+  await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
+}
+
+export function getDisabledPlugins(): string[] {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return []
+  try {
+    const raw = JSON.parse(readFileSync(nerveSettingsPath, 'utf-8'))
+    return (raw.disabledPlugins as string[]) || []
+  } catch {
+    return []
+  }
+}
+
+export function getDisabledSkills(): string[] {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return []
+  try {
+    const raw = JSON.parse(readFileSync(nerveSettingsPath, 'utf-8'))
+    return (raw.disabledSkills as string[]) || []
+  } catch {
+    return []
+  }
+}
