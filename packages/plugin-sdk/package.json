@@ -1,0 +1,25 @@
+{
+  "name": "@nerve/plugin-sdk",
+  "version": "0.1.0",
+  "description": "SDK for building Nerve plugins",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "nerve-plugin": "./bin/nerve-plugin.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "peerDependencies": {
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "scripts"
+  ],
+  "license": "MIT"
+}
