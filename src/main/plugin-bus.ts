@@ -111,7 +111,7 @@ export class PluginBus extends EventEmitter {
       }
 
       try {
-        const mod = await import(modulePath)
+        const mod = await import(modulePath + `?v=${Date.now()}`)
         if (!mod.schema || !mod.execute) {
           return { error: `Tool "${toolEntry.name}" must export { schema, execute }` }
         }
@@ -155,12 +155,23 @@ export class PluginBus extends EventEmitter {
     return { plugin }
   }
 
-  async loadAll(): Promise<{ loaded: string[]; errors: string[] }> {
+  async loadAll(disabledIds: string[] = []): Promise<{ loaded: string[]; errors: string[] }> {
     const { dirs, errors: discoverErrors } = this.discover()
+    const disabled = new Set(disabledIds)
     const loaded: string[] = []
     const errors = [...discoverErrors]
 
     for (const dir of dirs) {
+      // Pre-read manifest to check disabled status
+      const manifestPath = join(dir, 'plugin.json')
+      try {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+        if (disabled.has(manifest.name)) {
+          console.log(`[PluginBus] Skipping disabled plugin: ${manifest.name}`)
+          continue
+        }
+      } catch { /* let loadPlugin handle the error */ }
+
       const result = await this.loadPlugin(dir)
       if (result.error) {
         errors.push(`[${dir}]: ${result.error}`)
@@ -188,13 +199,14 @@ export class PluginBus extends EventEmitter {
     return this.plugins.get(pluginId)
   }
 
-  listPlugins(): Array<{ id: string; version: string; description: string; trust: string; toolCount: number }> {
+  listPlugins(disabled?: Set<string>): Array<{ id: string; version: string; description: string; trust: string; toolCount: number; enabled: boolean }> {
     return Array.from(this.plugins.values()).map(p => ({
       id: p.id,
       version: p.manifest.version,
       description: p.manifest.description || '',
       trust: p.trust,
       toolCount: p.tools.size,
+      enabled: disabled ? !disabled.has(p.id) : true,
     }))
   }
 
