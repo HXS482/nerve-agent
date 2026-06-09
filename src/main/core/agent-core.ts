@@ -10,7 +10,7 @@ import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { FileSessionStore } from '../session-store'
-import { loadSettings, NERVE_DIR, ClaudeSettings } from '../settings'
+import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins } from '../settings'
 import { getBuiltinTools } from '../tools'
 import { SkillRegistry } from '../skill-registry'
 import { PluginBus } from '../plugin-bus'
@@ -124,7 +124,8 @@ export class AgentCore {
   }
 
   async initPlugins(): Promise<void> {
-    const result = await this.pluginBus.loadAll()
+    const disabledPlugins = getDisabledPlugins()
+    const result = await this.pluginBus.loadAll(disabledPlugins)
     if (result.errors.length > 0) {
       console.warn('[PluginBus] Load errors:', result.errors)
     }
@@ -920,10 +921,14 @@ export class AgentCore {
   }
 
   // Plugins
-  getPlugins() { return this.pluginBus.listPlugins() }
+  getPlugins() {
+    const disabled = new Set<string>(getDisabledPlugins())
+    return this.pluginBus.listPlugins(disabled)
+  }
 
   async togglePlugin(pluginId: string, enabled: boolean) {
-    return { success: true, message: 'toggle not yet implemented' }
+    await togglePluginSetting(pluginId, enabled)
+    return { success: true }
   }
 
   async reloadPlugin(pluginId: string) {
