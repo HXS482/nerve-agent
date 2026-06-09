@@ -9,7 +9,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'provider' | 'mcp' | 'skills' | 'voice' | 'channels'
+type Tab = 'general' | 'provider' | 'mcp' | 'skills' | 'voice' | 'channels' | 'plugins'
 
 const EFFORTS: ClaudeConfig['effort'][] = ['low', 'medium', 'high', 'xhigh', 'max']
 const PERMISSION_MODES: ClaudeConfig['permissionMode'][] = ['default', 'acceptEdits', 'auto', 'bypassPermissions']
@@ -73,6 +73,17 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'plugins',
+    label: 'Plugins',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
       </svg>
     ),
   },
@@ -241,6 +252,123 @@ function StatusBadge({ ok, text }: { ok: boolean; text: string }) {
   )
 }
 
+// --- Plugins Tab ---
+
+interface PluginInfo {
+  id: string
+  version: string
+  description: string
+  trust: string
+  toolCount: number
+  enabled: boolean
+}
+
+function PluginsTab() {
+  const [plugins, setPlugins] = useState<PluginInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  const loadPlugins = async () => {
+    setLoading(true)
+    try {
+      const list = await (window as any).claude.getPlugins()
+      setPlugins(list || [])
+    } catch { setPlugins([]) }
+    setLoading(false)
+  }
+
+  useEffect(() => { loadPlugins() }, [])
+
+  const handleToggle = async (pluginId: string, enabled: boolean) => {
+    await (window as any).claude.togglePlugin(pluginId, enabled)
+    await loadPlugins()
+  }
+
+  const handleReload = async (pluginId: string) => {
+    await (window as any).claude.reloadPlugin(pluginId)
+    await loadPlugins()
+  }
+
+  if (loading) {
+    return <div className="text-[12px]" style={{ color: 'var(--text-outline-variant)', padding: '20px 0', textAlign: 'center' }}>Loading plugins...</div>
+  }
+
+  return (
+    <div className="flex flex-col" style={{ gap: 10 }}>
+      <Section title="Installed Plugins">
+        {plugins.length === 0 ? (
+          <div className="text-[12px]" style={{ color: 'var(--text-outline-variant)', padding: '12px 0' }}>
+            No plugins installed. Place plugins in <code style={{ color: 'var(--text-on-surface-variant)', background: 'var(--bg-surface-container-high)', padding: '1px 5px', borderRadius: 4 }}>~/.nerve/plugins/</code>
+          </div>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {plugins.map(plugin => (
+              <div key={plugin.id} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container)' }}>
+                {/* Header row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center" style={{ gap: 8 }}>
+                    {/* Toggle switch */}
+                    <button
+                      onClick={() => handleToggle(plugin.id, !plugin.enabled)}
+                      className="cursor-pointer transition-colors"
+                      style={{
+                        width: 32, height: 18, borderRadius: 9, border: 'none', position: 'relative', flexShrink: 0,
+                        background: plugin.enabled ? 'var(--accent-primary)' : 'var(--bg-surface-container-highest)',
+                      }}
+                    >
+                      <div style={{
+                        width: 14, height: 14, borderRadius: 7, background: '#fff',
+                        position: 'absolute', top: 2, left: plugin.enabled ? 16 : 2,
+                        transition: 'left 0.15s',
+                      }} />
+                    </button>
+                    <span className="text-[12px] font-medium" style={{ color: plugin.enabled ? 'var(--text-on-surface)' : 'var(--text-outline)' }}>
+                      {plugin.id}
+                    </span>
+                    <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)' }}>v{plugin.version}</span>
+                    <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)', background: 'var(--bg-surface-container-high)', padding: '1px 6px', borderRadius: 4 }}>
+                      {plugin.trust}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleReload(plugin.id)}
+                    className="text-[11px] cursor-pointer transition-colors"
+                    style={{ padding: '3px 10px', borderRadius: 6, background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface-variant)', border: '1px solid var(--border-subtle)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-highest)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
+                  >
+                    Reload
+                  </button>
+                </div>
+
+                {/* Description */}
+                {plugin.description && (
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-on-surface-variant)' }}>{plugin.description}</p>
+                )}
+
+                {/* Expandable details */}
+                <button
+                  onClick={() => setExpanded(expanded === plugin.id ? null : plugin.id)}
+                  className="text-[10px] mt-2 cursor-pointer"
+                  style={{ color: 'var(--text-outline)', background: 'none', border: 'none', padding: 0 }}
+                >
+                  {expanded === plugin.id ? '▾' : '▸'} Tools ({plugin.toolCount})
+                </button>
+
+                {expanded === plugin.id && (
+                  <div className="mt-1 text-[10px]" style={{ color: 'var(--text-outline-variant)', paddingLeft: 8 }}>
+                    <div>Tools: {plugin.toolCount} registered</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  )
+}
+
 // --- Main Panel ---
 
 export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose }: Props) {
@@ -381,6 +509,7 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
             {tab === 'skills' && <SkillsTab />}
             {tab === 'voice' && <VoiceTab />}
             {tab === 'channels' && <ChannelsTab />}
+            {tab === 'plugins' && <PluginsTab />}
           </div>
         </div>
       </div>
