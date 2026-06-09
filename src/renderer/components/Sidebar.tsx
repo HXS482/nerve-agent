@@ -11,12 +11,11 @@ interface SidebarProps {
   onNewChat: () => void
   onOpenSettings: () => void
   onOpenGallery: () => void
-  onOpenPlugins: () => void
   onClose: () => void
   onSelectSession: (sessionId: string) => void
 }
 
-export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onOpenPlugins, onClose, onSelectSession }: SidebarProps) {
+export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onSelectSession }: SidebarProps) {
   const config = useChatStore((s) => s.config)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   const theme = useChatStore((s) => s.theme)
@@ -263,7 +262,6 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onOpenPlugin
             onOpenGallery={onOpenGallery}
             onOpenCustomize={() => setCustomizeOpen(!customizeOpen)}
             onOpenMemory={() => setMemoryOpen(!memoryOpen)}
-            onOpenPlugins={onOpenPlugins}
             customizeOpen={customizeOpen}
           />
         </div>

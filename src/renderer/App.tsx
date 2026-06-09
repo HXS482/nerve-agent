@@ -8,7 +8,6 @@ import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
-import { PluginPanel } from './components/PluginPanel'
 import { ModelIsland } from './components/ModelIsland'
 import Grainient from './components/Grainient'
 import { useState, useEffect, useCallback } from 'react'
@@ -138,7 +137,6 @@ export default function App() {
   const theme = useChatStore((s) => s.theme)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const [pluginsOpen, setPluginsOpen] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -189,7 +187,6 @@ export default function App() {
           onNewChat={claude.clearMessages}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenGallery={() => setGalleryOpen(true)}
-          onOpenPlugins={() => setPluginsOpen(true)}
           onClose={() => setSidebarOpen(false)}
           onSelectSession={claude.loadSessionMessages}
         />
@@ -297,9 +294,6 @@ export default function App() {
 
       {/* Gallery modal */}
       {galleryOpen && <Gallery onClose={() => setGalleryOpen(false)} />}
-
-      {/* Plugins modal */}
-      {pluginsOpen && <PluginPanel onClose={() => setPluginsOpen(false)} />}
 
       {/* Right Sidebar */}
       <RightSidebar />
