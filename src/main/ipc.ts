@@ -498,6 +498,21 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   if (mcpBridge) {
     ipcMain.handle(IPC_CHANNELS.MCP_BRIDGE_STATUS, async () => mcpBridge.getHealth())
+    ipcMain.handle(IPC_CHANNELS.MCP_BRIDGE_TOGGLE, async (_event, enabled: boolean) => {
+      try {
+        if (enabled) {
+          await mcpBridge.start()
+        } else {
+          await mcpBridge.stop()
+        }
+        const config = await loadMcpBridgeConfig()
+        config.enabled = enabled
+        await saveMcpBridgeConfig(config)
+        return { success: true }
+      } catch (err: any) {
+        return { success: false, error: err.message }
+      }
+    })
   }
 
   // Gateway Channels (settings, no gateway instance needed)

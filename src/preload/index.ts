@@ -201,6 +201,9 @@ const api = {
   gatewayProxySave: (proxy: any) => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_PROXY_SAVE, proxy),
   gatewayPublicAccessGet: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_GET),
   gatewayPublicAccessSave: (config: any) => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_SAVE, config),
+  // MCP Bridge
+  mcpBridgeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.MCP_BRIDGE_STATUS),
+  mcpBridgeToggle: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.MCP_BRIDGE_TOGGLE, enabled),
   onGatewayLog: (callback: (entry: { level: string; message: string; timestamp: number }) => void) => {
     const handler = (_event: any, entry: any) => callback(entry)
     ipcRenderer.on(IPC_CHANNELS.GATEWAY_LOG, handler)

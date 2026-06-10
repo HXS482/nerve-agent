@@ -118,6 +118,7 @@ export const IPC_CHANNELS = {
   GATEWAY_PUBLIC_ACCESS_GET: 'gateway:publicAccess:get',
   GATEWAY_PUBLIC_ACCESS_SAVE: 'gateway:publicAccess:save',
   MCP_BRIDGE_STATUS: 'mcp-bridge:status',
+  MCP_BRIDGE_TOGGLE: 'mcp-bridge:toggle',
 } as const
 
 // Our 9 behavioral states — maps 1:1 to Petdex animations

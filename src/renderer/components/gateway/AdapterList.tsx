@@ -6,9 +6,13 @@ interface AdapterListProps {
   adapters: AdapterInfo[];
   running: boolean;
   onToggle: (name: string, enabled: boolean) => void;
+  bridgeHealth: { toolCount: number; tunnelUrl: string | null } | null;
+  onBridgeToggle: (enabled: boolean) => void;
 }
 
-export function AdapterList({ adapters, running, onToggle }: AdapterListProps) {
+export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridgeToggle }: AdapterListProps) {
+  const bridgeEnabled = bridgeHealth !== null;
+  const bridgeConnected = bridgeHealth !== null;
   return (
     <div className="flex-shrink-0" style={{ padding: '0 14px', marginBottom: '12px' }}>
       {/* Section label */}
@@ -122,6 +126,96 @@ export function AdapterList({ adapters, running, onToggle }: AdapterListProps) {
             );
           })
         )}
+      </div>
+
+      {/* MCP Bridge card */}
+      <div
+        style={{
+          backgroundColor: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.04)',
+          borderRadius: '8px',
+          marginTop: '6px',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          className="flex items-center justify-between"
+          style={{ padding: '8px 10px' }}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="flex-shrink-0"
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: bridgeConnected ? '#34A853' : '#484F58',
+                boxShadow: bridgeConnected ? '0 0 6px #34A85360' : 'none',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                color: bridgeConnected ? '#E9ECF0' : '#8B949E',
+              }}
+            >
+              MCP Bridge
+            </span>
+            {bridgeHealth && (
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontFamily: 'var(--font-mono)',
+                  color: '#484F58',
+                }}
+              >
+                {bridgeHealth.toolCount} tools
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span
+              style={{
+                color: bridgeConnected ? '#34A853' : '#484F58',
+                fontSize: '9px',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              {bridgeConnected ? '● ON' : '○ OFF'}
+            </span>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onBridgeToggle(!bridgeEnabled);
+              }}
+              className="relative cursor-pointer flex-shrink-0"
+              style={{
+                width: '28px',
+                height: '14px',
+                borderRadius: '7px',
+                backgroundColor: bridgeEnabled ? '#4d8eff' : 'rgba(255,255,255,0.06)',
+                transition: 'background-color 0.2s',
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  backgroundColor: bridgeEnabled ? '#fff' : '#484F58',
+                  left: bridgeEnabled ? '16px' : '2px',
+                  transition: 'left 0.2s',
+                }}
+              />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

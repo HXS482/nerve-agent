@@ -22,6 +22,8 @@ interface GatewayAPI {
   gatewayStart: () => Promise<{ success: boolean; error?: string }>;
   gatewayStop: () => Promise<{ success: boolean; error?: string }>;
   gatewayAdapterToggle: (name: string, enabled: boolean) => Promise<void>;
+  mcpBridgeStatus: () => Promise<{ status: string; toolCount: number; port: number; tunnelUrl: string | null }>;
+  mcpBridgeToggle: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onGatewayLog: (callback: (entry: { level: string; message: string; timestamp: number }) => void) => () => void;
 }
 
@@ -38,6 +40,7 @@ export function GatewayView() {
   const [memory, setMemory] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+  const [bridgeHealth, setBridgeHealth] = useState<{ toolCount: number; tunnelUrl: string | null } | null>(null);
   const [logs, setLogs] = useState<SidebarLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [sparklineData, setSparklineData] = useState<number[]>([]);
@@ -70,6 +73,16 @@ export function GatewayView() {
     }
   }, []);
 
+  // ── Fetch MCP Bridge status ──
+  const fetchBridgeHealth = useCallback(async () => {
+    try {
+      const health = await getGatewayAPI().mcpBridgeStatus();
+      setBridgeHealth({ toolCount: health.toolCount, tunnelUrl: health.tunnelUrl });
+    } catch {
+      setBridgeHealth(null);
+    }
+  }, []);
+
   // ── Count errors from logs ──
   useEffect(() => {
     setErrorCount(logs.filter(l => l.level === 'error').length);
@@ -79,6 +92,7 @@ export function GatewayView() {
   useEffect(() => {
     fetchHealth();
     fetchAdapters();
+    fetchBridgeHealth();
 
     const unsub = getGatewayAPI().onGatewayLog((entry) => {
       const now = new Date(entry.timestamp).toLocaleTimeString().substring(0, 8);
@@ -95,7 +109,7 @@ export function GatewayView() {
       ]);
     });
     return unsub;
-  }, [fetchHealth, fetchAdapters]);
+  }, [fetchHealth, fetchAdapters, fetchBridgeHealth]);
 
   // ── Poll health when running (5s) ──
   useEffect(() => {
@@ -103,9 +117,10 @@ export function GatewayView() {
     const timer = setInterval(() => {
       fetchHealth();
       fetchAdapters();
+      fetchBridgeHealth();
     }, 5000);
     return () => clearInterval(timer);
-  }, [status, fetchHealth, fetchAdapters]);
+  }, [status, fetchHealth, fetchAdapters, fetchBridgeHealth]);
 
   // ── Local log helper ──
   const addLocalLog = useCallback((level: 'info' | 'warn' | 'error', category: string, text: string) => {
@@ -172,6 +187,21 @@ export function GatewayView() {
     fetchAdapters();
   }, [fetchAdapters, addLocalLog]);
 
+  // ── MCP Bridge toggle ──
+  const handleBridgeToggle = useCallback(async (enabled: boolean) => {
+    try {
+      const result = await getGatewayAPI().mcpBridgeToggle(enabled);
+      if (result.success) {
+        addLocalLog('info', 'SYS', `MCP Bridge ${enabled ? 'started' : 'stopped'}`);
+      } else {
+        addLocalLog('error', 'ERR', `MCP Bridge toggle failed: ${result.error}`);
+      }
+    } catch (err: any) {
+      addLocalLog('error', 'ERR', `MCP Bridge toggle error: ${err.message}`);
+    }
+    fetchBridgeHealth();
+  }, [fetchBridgeHealth, addLocalLog]);
+
   // ── Render ──
   return (
     <div
@@ -210,7 +240,7 @@ export function GatewayView() {
         running={status === 'running'}
       />
       <ControlButtons status={status} loading={loading} onStart={handleStart} onStop={handleStop} />
-      <AdapterList adapters={adapters} running={status === 'running'} onToggle={handleAdapterToggle} />
+      <AdapterList adapters={adapters} running={status === 'running'} onToggle={handleAdapterToggle} bridgeHealth={bridgeHealth} onBridgeToggle={handleBridgeToggle} />
       <LogTerminal logs={logs} />
     </div>
   );
