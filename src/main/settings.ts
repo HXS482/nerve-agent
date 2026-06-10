@@ -3,6 +3,7 @@ import { homedir } from 'os'
 import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { ModelInfo, GatewayChannel, GatewayProxy } from '../shared/types'
+import type { McpBridgeConfig } from './mcp-bridge/types'
 
 async function atomicWriteFile(filePath: string, data: string, encoding: BufferEncoding = 'utf-8') {
   const tmpPath = filePath + '.tmp'
@@ -428,4 +429,36 @@ export function getDisabledSkills(): string[] {
   } catch {
     return []
   }
+}
+
+// MCP Bridge 配置
+
+const MCP_BRIDGE_CONFIG_PATH = join(NERVE_DIR, 'mcp-bridge.json')
+
+const DEFAULT_MCP_BRIDGE_CONFIG: McpBridgeConfig = {
+  enabled: false,
+  port: 18800,
+  host: '127.0.0.1',
+  cwd: homedir(),
+  projectDir: homedir(),
+  tools: {
+    include: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'GitStageAll', 'GitCommit', 'GitPull', 'GitInit'],
+    exclude: [],
+  },
+  auth: { mode: 'token', token: '' },
+  cloudflare: { enabled: false },
+}
+
+export async function loadMcpBridgeConfig(): Promise<McpBridgeConfig> {
+  try {
+    const raw = await readFile(MCP_BRIDGE_CONFIG_PATH, 'utf-8')
+    const parsed = JSON.parse(raw)
+    return { ...DEFAULT_MCP_BRIDGE_CONFIG, ...parsed }
+  } catch {
+    return { ...DEFAULT_MCP_BRIDGE_CONFIG }
+  }
+}
+
+export async function saveMcpBridgeConfig(config: McpBridgeConfig): Promise<void> {
+  await atomicWriteFile(MCP_BRIDGE_CONFIG_PATH, JSON.stringify(config, null, 2))
 }
