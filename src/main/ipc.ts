@@ -4,7 +4,7 @@ import { join, relative, extname, basename } from 'path'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess } from './settings'
+import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
@@ -508,7 +508,7 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
         const config = await loadMcpBridgeConfig()
         config.enabled = enabled
         await saveMcpBridgeConfig(config)
-        return { success: true }
+        return { success: true, enabled }
       } catch (err: any) {
         return { success: false, error: err.message }
       }

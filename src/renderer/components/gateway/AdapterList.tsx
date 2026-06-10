@@ -135,7 +135,6 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
           border: '1px solid rgba(255,255,255,0.04)',
           borderRadius: '8px',
           marginTop: '6px',
-          overflow: 'hidden',
         }}
       >
         <div

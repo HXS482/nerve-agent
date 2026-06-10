@@ -59,6 +59,8 @@ export class McpBridgeServer {
   }
 
   async start(): Promise<void> {
+    // 已经在运行则跳过
+    if (this.httpServer) return
     this.httpServer = createServer(async (req, res) => {
       // Health endpoint — no auth required
       if (req.url === '/health' && req.method === 'GET') {

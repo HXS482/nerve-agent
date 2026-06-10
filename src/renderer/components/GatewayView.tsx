@@ -192,14 +192,21 @@ export function GatewayView() {
     try {
       const result = await getGatewayAPI().mcpBridgeToggle(enabled);
       if (result.success) {
+        if (enabled) {
+          await fetchBridgeHealth();
+        } else {
+          setBridgeHealth(null);
+        }
         addLocalLog('info', 'SYS', `MCP Bridge ${enabled ? 'started' : 'stopped'}`);
       } else {
+        // 失败后刷新真实状态，确保 UI 同步
+        await fetchBridgeHealth();
         addLocalLog('error', 'ERR', `MCP Bridge toggle failed: ${result.error}`);
       }
     } catch (err: any) {
+      await fetchBridgeHealth();
       addLocalLog('error', 'ERR', `MCP Bridge toggle error: ${err.message}`);
     }
-    fetchBridgeHealth();
   }, [fetchBridgeHealth, addLocalLog]);
 
   // ── Render ──
