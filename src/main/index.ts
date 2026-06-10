@@ -11,7 +11,8 @@ import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
 import { initImagesDir } from './images'
-import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess, getGatewayToken } from './settings'
+import { McpBridgeServer } from './mcp-bridge'
+import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess, getGatewayToken, loadMcpBridgeConfig } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
@@ -394,7 +395,18 @@ app.whenReady().then(async () => {
     console.error('[Nerve] Failed to load gateway config:', err)
   })
 
-  setupIPC(mainWindow, claude, skinManager, gitService, gateway)
+  // MCP Bridge
+  const mcpBridgeConfig = await loadMcpBridgeConfig()
+  mcpBridgeConfig.cwd = app.getPath('home')
+  mcpBridgeConfig.projectDir = projectDir
+
+  const mcpBridge = new McpBridgeServer(mcpBridgeConfig)
+
+  if (mcpBridgeConfig.enabled) {
+    mcpBridge.start().catch(err => console.error('[Nerve] MCP Bridge start failed:', err.message))
+  }
+
+  setupIPC(mainWindow, claude, skinManager, gitService, gateway, mcpBridge)
 
   // Handle pet-sprite:// protocol for serving local spritesheets
   const petsDir = join(homedir(), '.nerve', 'pets')
@@ -449,6 +461,7 @@ app.on('window-all-closed', () => {
 
   // 应用退出前清理
   app.on('before-quit', async () => {
+    await mcpBridge.stop().catch(() => {})
     await memoryCore.destroy().catch(() => {})
     await claude.close()
   })
