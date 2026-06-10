@@ -10,7 +10,7 @@ import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
 import { NerveGateway } from './gateway'
 
-export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway) {
+export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway, mcpBridge?: import('./mcp-bridge').McpBridgeServer) {
   ipcMain.handle(IPC_CHANNELS.SEND_MESSAGE, async (_event, payload: SendMessagePayload) => {
     await claude.sendMessage(payload)
   })
@@ -494,6 +494,10 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
         return { success: false, error: err.message }
       }
     })
+  }
+
+  if (mcpBridge) {
+    ipcMain.handle(IPC_CHANNELS.MCP_BRIDGE_STATUS, async () => mcpBridge.getHealth())
   }
 
   // Gateway Channels (settings, no gateway instance needed)
