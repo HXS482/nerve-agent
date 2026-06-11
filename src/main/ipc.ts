@@ -11,6 +11,14 @@ import { GitService } from './git'
 import { NerveGateway } from './gateway'
 
 export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway, mcpBridge?: import('./mcp-bridge').McpBridgeServer) {
+  // ── Forward gateway / mcp-bridge logs to renderer ──
+  const forwardLog = (entry: { level: string; message: string; timestamp: number }) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.GATEWAY_LOG, entry)
+    }
+  }
+  gateway?.on('log', forwardLog)
+  mcpBridge?.on('log', forwardLog)
   ipcMain.handle(IPC_CHANNELS.SEND_MESSAGE, async (_event, payload: SendMessagePayload) => {
     await claude.sendMessage(payload)
   })

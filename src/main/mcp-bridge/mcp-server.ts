@@ -1,6 +1,7 @@
 // src/main/mcp-bridge/mcp-server.ts
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { EventEmitter } from 'node:events'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { ListToolsRequestSchema, CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
@@ -15,7 +16,7 @@ interface Session {
   transport: StreamableHTTPServerTransport
 }
 
-export class McpBridgeServer {
+export class McpBridgeServer extends EventEmitter {
   private httpServer: ReturnType<typeof createServer> | null = null
   private tunnel: TunnelManager
   private tools: Record<string, NerveTool>
@@ -23,9 +24,14 @@ export class McpBridgeServer {
   private actualPort: number = 0
 
   constructor(private config: McpBridgeConfig) {
+    super()
     const allTools = getBuiltinTools(config.cwd, undefined, config.projectDir)
     this.tools = filterTools(allTools, config.tools)
     this.tunnel = new TunnelManager()
+  }
+
+  private log(level: 'info' | 'warn' | 'error', message: string) {
+    this.emit('log', { level, message, timestamp: Date.now() })
   }
 
   private createServerInstance(): Server {
@@ -48,9 +54,11 @@ export class McpBridgeServer {
         const name = request.params.name
         const tool = this.tools[name]
         if (!tool) throw new Error(`Tool not found: ${name}`)
+        this.log('info', `Tool call: ${name}`)
         const result = await tool.execute(request.params.arguments ?? {})
         return { content: [{ type: 'text' as const, text: serializeResult(result) }] }
       } catch (err: any) {
+        this.log('error', `Tool error: ${err.message}`)
         return { content: [{ type: 'text' as const, text: err.message }], isError: true }
       }
     })
@@ -61,6 +69,7 @@ export class McpBridgeServer {
   async start(): Promise<void> {
     // 已经在运行则跳过
     if (this.httpServer) return
+    this.log('info', `Starting on ${this.config.host}:${this.config.port}...`)
     this.httpServer = createServer(async (req, res) => {
       // Health endpoint — no auth required
       if (req.url === '/health' && req.method === 'GET') {
@@ -73,6 +82,7 @@ export class McpBridgeServer {
       if (!this.verifyAuth(req)) {
         res.writeHead(401, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: 'Unauthorized' }))
+        this.log('warn', `Auth failed from ${req.socket.remoteAddress}`)
         return
       }
 
@@ -99,8 +109,11 @@ export class McpBridgeServer {
     if (this.config.cloudflare?.enabled) {
       await this.tunnel.start(this.actualPort).catch((err) => {
         console.error('[MCP Bridge] Tunnel start failed:', err.message)
+        this.log('error', `Tunnel start failed: ${err.message}`)
       })
     }
+
+    this.log('info', `Listening on ${this.config.host}:${this.actualPort} (${Object.keys(this.tools).length} tools)`)
   }
 
   private async handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -131,6 +144,7 @@ export class McpBridgeServer {
         const mcpServer = this.createServerInstance()
         await mcpServer.connect(transport)
         session = { server: mcpServer, transport }
+        this.log('info', `New MCP session created`)
       }
 
       await session.transport.handleRequest(req, res, parsed)
@@ -152,9 +166,15 @@ export class McpBridgeServer {
       if (!this.httpServer) return resolve()
       this.httpServer.close(() => resolve())
     })
+    this.httpServer = null
+    this.actualPort = 0
+    this.log('info', 'Stopped')
   }
 
   getHealth() {
+    if (!this.httpServer) {
+      return { status: 'stopped', toolCount: 0, port: 0, tunnelUrl: null }
+    }
     return {
       status: 'ok',
       toolCount: Object.keys(this.tools).length,

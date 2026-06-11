@@ -10,6 +10,7 @@
  */
 
 import { randomUUID } from 'crypto'
+import { EventEmitter } from 'events'
 import { GatewayWSServer } from './ws-server'
 import { SessionRouter } from './session-router'
 import { WebSocketChannel } from './ws-channel'
@@ -36,7 +37,7 @@ export interface GatewayConfig {
   sourceDir: string
 }
 
-export class NerveGateway {
+export class NerveGateway extends EventEmitter {
   private server: GatewayWSServer
   private sessionRouter: SessionRouter
   private agentCore: AgentCore
@@ -49,6 +50,7 @@ export class NerveGateway {
   private channels = new Map<string, Map<string, WebSocketChannel>>()
 
   constructor(private config: GatewayConfig) {
+    super()
     // 创建 AgentCore
     this.agentCore = new AgentCore({
       projectDir: config.projectDir,
@@ -72,12 +74,16 @@ export class NerveGateway {
     this.server.onDisconnect(this.handleDisconnect.bind(this))
   }
 
+  private log(level: 'info' | 'warn' | 'error', message: string) {
+    this.emit('log', { level, message, timestamp: Date.now() })
+  }
+
   /**
    * 注册 IM 适配器
    */
   registerAdapter(adapter: BaseAdapter) {
     const name = adapter.name
-    console.log(`[Gateway] Registering adapter: ${name}`)
+    this.log('info', `Registering adapter: ${name}`)
 
     // 监听消息
     adapter.on('message', (msg: IncomingMessage) => {
@@ -93,9 +99,9 @@ export class NerveGateway {
   setProxy(proxy: GatewayProxy | null): void {
     this.proxy = proxy
     if (proxy && proxy.enabled && proxy.host && proxy.port) {
-      console.log(`[Gateway] Proxy configured: ${proxy.protocol}://${proxy.host}:${proxy.port}`)
+      this.log('info', `Proxy configured: ${proxy.protocol}://${proxy.host}:${proxy.port}`)
     } else {
-      console.log('[Gateway] Proxy disabled')
+      this.log('info', 'Proxy disabled')
     }
   }
 
@@ -104,7 +110,7 @@ export class NerveGateway {
    */
   setHost(host: string): void {
     this.config.host = host
-    console.log(`[Gateway] Host set to ${host} (restart required)`)
+    this.log('info', `Host set to ${host} (restart required)`)
   }
 
   /**
@@ -117,7 +123,7 @@ export class NerveGateway {
       try {
         if (adapter.isConnected) await adapter.disconnect()
       } catch (err) {
-        console.error(`[Gateway] Failed to disconnect adapter ${name}:`, err)
+        this.log('error', `Failed to disconnect adapter ${name}: ${err}`)
       }
     }
     this.adapters.clear()
@@ -159,16 +165,16 @@ export class NerveGateway {
 
           // 企业微信/飞书/钉钉 — 暂不支持，跳过
           default:
-            console.log(`[Gateway] Adapter for ${ch.platform} not implemented yet, skipping`)
+            this.log('info', `Adapter for ${ch.platform} not implemented yet, skipping`)
             continue
         }
 
         if (adapter) {
           this.registerAdapter(adapter)
-          console.log(`[Gateway] Loaded adapter: ${ch.name} (${ch.platform})`)
+          this.log('info', `Loaded adapter: ${ch.name} (${ch.platform})`)
         }
       } catch (err) {
-        console.error(`[Gateway] Failed to create adapter ${ch.name}:`, err)
+        this.log('error', `Failed to create adapter ${ch.name}: ${err}`)
       }
     }
   }
@@ -178,11 +184,11 @@ export class NerveGateway {
    */
   async start(): Promise<void> {
     if (this.running) {
-      console.warn('[Gateway] Already running')
+      this.log('warn', 'Already running')
       return
     }
 
-    console.log('[Gateway] Starting...')
+    this.log('info', 'Starting...')
     this.startTime = Date.now()
 
     // 启动 WebSocket 服务
@@ -191,16 +197,16 @@ export class NerveGateway {
     // 启动所有适配器
     for (const [name, adapter] of this.adapters.entries()) {
       try {
-        console.log(`[Gateway] Starting adapter: ${name}`)
+        this.log('info', `Starting adapter: ${name}`)
         await adapter.connect()
-        console.log(`[Gateway] Adapter ${name} started`)
+        this.log('info', `Adapter ${name} started`)
       } catch (err) {
-        console.error(`[Gateway] Failed to start adapter ${name}:`, err)
+        this.log('error', `Failed to start adapter ${name}: ${err}`)
       }
     }
 
     this.running = true
-    console.log('[Gateway] Started successfully')
+    this.log('info', 'Started successfully')
   }
 
   /**
@@ -208,19 +214,19 @@ export class NerveGateway {
    */
   async stop(): Promise<void> {
     if (!this.running) {
-      console.warn('[Gateway] Not running')
+      this.log('warn', 'Not running')
       return
     }
 
-    console.log('[Gateway] Stopping...')
+    this.log('info', 'Stopping...')
 
     // 停止所有适配器
     for (const [name, adapter] of this.adapters.entries()) {
       try {
-        console.log(`[Gateway] Stopping adapter: ${name}`)
+        this.log('info', `Stopping adapter: ${name}`)
         await adapter.disconnect()
       } catch (err) {
-        console.error(`[Gateway] Failed to stop adapter ${name}:`, err)
+        this.log('error', `Failed to stop adapter ${name}: ${err}`)
       }
     }
 
@@ -228,7 +234,7 @@ export class NerveGateway {
     this.channels.clear()
     this.running = false
 
-    console.log('[Gateway] Stopped')
+    this.log('info', 'Stopped')
   }
 
   /**
@@ -269,7 +275,7 @@ export class NerveGateway {
   }
 
   private async handleAdapterMessage(adapter: BaseAdapter, msg: IncomingMessage) {
-    console.log(`[Gateway] Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)
+    this.log('info', `Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)
 
     const sessionId = this.sessionRouter.resolve(adapter.platform, msg.userId, msg.chatId)
     const channel = new AdapterChannel(adapter, msg.chatId, msg.messageId)
@@ -291,6 +297,7 @@ export class NerveGateway {
         downloaded.forEach((r, i) => {
           if (r.status === 'rejected') {
             console.warn(`[Gateway] Attachment download failed:`, r.reason)
+            this.log('warn', `Attachment download failed: ${r.reason}`)
           }
         })
       }
@@ -298,7 +305,7 @@ export class NerveGateway {
 
     this.sessionRouter.submit(sessionId, msg.content, channel, files).catch((err) => {
       const errorMsg = err instanceof Error ? err.message : String(err)
-      console.error(`[Gateway] Adapter message error:`, errorMsg)
+      this.log('error', `Adapter message error: ${errorMsg}`)
       adapter.send(msg.chatId, `❌ Error: ${errorMsg}`)
     })
   }
@@ -348,7 +355,7 @@ export class NerveGateway {
   private handleDisconnect(clientId: string) {
     // 清理该客户端的所有 channel 引用
     this.channels.delete(clientId)
-    console.log(`[Gateway] Cleaned up channels for client: ${clientId}`)
+    this.log('info', `Cleaned up channels for client: ${clientId}`)
   }
 
   private async handleMessage(client: WSClient, request: GatewayRequest): Promise<void> {
@@ -389,7 +396,7 @@ export class NerveGateway {
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)
-      console.error(`[Gateway] Handler error (${method}):`, errorMsg)
+      this.log('error', `Handler error (${method}): ${errorMsg}`)
       this.server.sendResponse(client.id, createResponse(id, false, undefined, errorMsg))
     }
   }
@@ -472,7 +479,7 @@ export class NerveGateway {
     // 提交到会话队列（串行处理）
     this.sessionRouter.submit(sessionId, params.message, channel, params.files).catch((err) => {
       const errorMsg = err instanceof Error ? err.message : String(err)
-      console.error('[Gateway] Agent error:', errorMsg)
+      this.log('error', `Agent error: ${errorMsg}`)
       channel.sendError(errorMsg)
     })
   }
@@ -513,7 +520,7 @@ export class NerveGateway {
     // 禁止通过 Gateway 修改 permissionMode（防止提权）
     // permissionMode 只能通过 Electron UI 或配置文件修改
     if (params.permissionMode) {
-      console.warn(`[Gateway] Client ${client.id} attempted to set permissionMode (blocked)`)
+      this.log('warn', `Client ${client.id} attempted to set permissionMode (blocked)`)
     }
 
     this.server.sendResponse(client.id, createResponse(requestId, true))

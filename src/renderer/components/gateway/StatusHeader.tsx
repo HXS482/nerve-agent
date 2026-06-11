@@ -51,7 +51,7 @@ export function StatusHeader({ status, uptime, connections, sessions, sparklineD
               <stop offset="100%" stopColor="#4d8eff" />
             </linearGradient>
           </defs>
-          <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="4" />
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--border-subtle)" strokeWidth="4" />
           <circle
             cx="28" cy="28" r="24"
             fill="none"
@@ -61,10 +61,10 @@ export function StatusHeader({ status, uptime, connections, sessions, sparklineD
             strokeLinecap="round"
             transform="rotate(-90 28 28)"
           />
-          <text x="28" y="25" textAnchor="middle" fontSize="14" fontWeight="700" fill="#E9ECF0">
+          <text x="28" y="25" textAnchor="middle" fontSize="14" fontWeight="700" fill="var(--text-on-surface)">
             {gaugeValue}
           </text>
-          <text x="28" y="36" textAnchor="middle" fontSize="7" fill="#8B949E">
+          <text x="28" y="36" textAnchor="middle" fontSize="7" fill="var(--text-outline)">
             连接
           </text>
         </svg>
@@ -72,7 +72,7 @@ export function StatusHeader({ status, uptime, connections, sessions, sparklineD
         {/* Info area */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-sm" style={{ color: '#E9ECF0' }}>Gateway</span>
+            <span className="font-bold text-sm" style={{ color: 'var(--text-on-surface)' }}>Gateway</span>
             <span
               className="font-semibold leading-none"
               style={{
@@ -86,7 +86,7 @@ export function StatusHeader({ status, uptime, connections, sessions, sparklineD
               {badge.label}
             </span>
           </div>
-          <div style={{ color: '#8B949E', fontSize: '10px', marginTop: '2px' }}>
+          <div style={{ color: 'var(--text-outline)', fontSize: '10px', marginTop: '2px' }}>
             {status === 'running' ? `UP ${formatUptime(uptime)} · ${sessions} sessions` : '—'}
           </div>
           {/* Sparkline */}

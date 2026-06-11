@@ -18,7 +18,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
       {/* Section label */}
       <div
         style={{
-          color: '#8B949E',
+          color: 'var(--text-outline)',
           fontSize: '8px',
           textTransform: 'uppercase',
           letterSpacing: '0.8px',
@@ -31,8 +31,8 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
       {/* Card container */}
       <div
         style={{
-          backgroundColor: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.04)',
+          backgroundColor: 'var(--bg-surface-container-lowest)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '8px',
           overflow: 'hidden',
         }}
@@ -40,7 +40,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
         {adapters.length === 0 ? (
           <div
             className="flex items-center justify-center"
-            style={{ height: '36px', color: '#484F58', fontSize: '11px' }}
+            style={{ height: '36px', color: 'var(--text-outline-variant)', fontSize: '11px' }}
           >
             {running ? 'No adapters' : 'Gateway not running'}
           </div>
@@ -56,7 +56,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                 className="flex items-center justify-between"
                 style={{
                   padding: '8px 10px',
-                  borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.03)',
+                  borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
                 }}
               >
                 <div className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                       width: '6px',
                       height: '6px',
                       borderRadius: '50%',
-                      backgroundColor: isConnected ? platformColor : '#484F58',
+                      backgroundColor: isConnected ? platformColor : 'var(--text-outline-variant)',
                       boxShadow: isConnected ? `0 0 6px ${platformColor}60` : 'none',
                     }}
                   />
@@ -74,7 +74,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                     style={{
                       fontSize: '11px',
                       fontWeight: 500,
-                      color: isConnected ? '#E9ECF0' : '#8B949E',
+                      color: isConnected ? 'var(--text-on-surface)' : 'var(--text-outline)',
                     }}
                   >
                     {ad.name}
@@ -84,7 +84,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                 <div className="flex items-center gap-2">
                   <span
                     style={{
-                      color: isConnected ? '#34A853' : '#484F58',
+                      color: isConnected ? '#34A853' : 'var(--text-outline-variant)',
                       fontSize: '9px',
                       fontFamily: 'var(--font-mono)',
                     }}
@@ -104,7 +104,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                       width: '28px',
                       height: '14px',
                       borderRadius: '7px',
-                      backgroundColor: ad.enabled ? '#4d8eff' : 'rgba(255,255,255,0.06)',
+                      backgroundColor: ad.enabled ? 'var(--accent-primary-container)' : 'var(--border-subtle)',
                       transition: 'background-color 0.2s',
                     }}
                   >
@@ -115,7 +115,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                         width: '10px',
                         height: '10px',
                         borderRadius: '50%',
-                        backgroundColor: ad.enabled ? '#fff' : '#484F58',
+                        backgroundColor: ad.enabled ? '#fff' : 'var(--text-outline-variant)',
                         left: ad.enabled ? '16px' : '2px',
                         transition: 'left 0.2s',
                       }}
@@ -131,8 +131,8 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
       {/* MCP Bridge card */}
       <div
         style={{
-          backgroundColor: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.04)',
+          backgroundColor: 'var(--bg-surface-container-lowest)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '8px',
           marginTop: '6px',
         }}
@@ -148,7 +148,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                backgroundColor: bridgeConnected ? '#34A853' : '#484F58',
+                backgroundColor: bridgeConnected ? '#34A853' : 'var(--text-outline-variant)',
                 boxShadow: bridgeConnected ? '0 0 6px #34A85360' : 'none',
               }}
             />
@@ -156,7 +156,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
               style={{
                 fontSize: '11px',
                 fontWeight: 500,
-                color: bridgeConnected ? '#E9ECF0' : '#8B949E',
+                color: bridgeConnected ? 'var(--text-on-surface)' : 'var(--text-outline)',
               }}
             >
               MCP Bridge
@@ -166,7 +166,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                 style={{
                   fontSize: '9px',
                   fontFamily: 'var(--font-mono)',
-                  color: '#484F58',
+                  color: 'var(--text-outline-variant)',
                 }}
               >
                 {bridgeHealth.toolCount} tools
@@ -177,7 +177,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
           <div className="flex items-center gap-2">
             <span
               style={{
-                color: bridgeConnected ? '#34A853' : '#484F58',
+                color: bridgeConnected ? '#34A853' : 'var(--text-outline-variant)',
                 fontSize: '9px',
                 fontFamily: 'var(--font-mono)',
               }}
@@ -196,7 +196,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                 width: '28px',
                 height: '14px',
                 borderRadius: '7px',
-                backgroundColor: bridgeEnabled ? '#4d8eff' : 'rgba(255,255,255,0.06)',
+                backgroundColor: bridgeEnabled ? 'var(--accent-primary-container)' : 'var(--border-subtle)',
                 transition: 'background-color 0.2s',
               }}
             >
@@ -207,7 +207,7 @@ export function AdapterList({ adapters, running, onToggle, bridgeHealth, onBridg
                   width: '10px',
                   height: '10px',
                   borderRadius: '50%',
-                  backgroundColor: bridgeEnabled ? '#fff' : '#484F58',
+                  backgroundColor: bridgeEnabled ? '#fff' : 'var(--text-outline-variant)',
                   left: bridgeEnabled ? '16px' : '2px',
                   transition: 'left 0.2s',
                 }}

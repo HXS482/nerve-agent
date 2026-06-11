@@ -77,7 +77,11 @@ export function GatewayView() {
   const fetchBridgeHealth = useCallback(async () => {
     try {
       const health = await getGatewayAPI().mcpBridgeStatus();
-      setBridgeHealth({ toolCount: health.toolCount, tunnelUrl: health.tunnelUrl });
+      if (health.status === 'ok') {
+        setBridgeHealth({ toolCount: health.toolCount, tunnelUrl: health.tunnelUrl });
+      } else {
+        setBridgeHealth(null);
+      }
     } catch {
       setBridgeHealth(null);
     }
@@ -214,9 +218,9 @@ export function GatewayView() {
     <div
       className="w-full h-full flex flex-col overflow-hidden select-none relative"
       style={{
-        color: '#E9ECF0',
+        color: 'var(--text-on-surface)',
         fontFamily: 'var(--font-sans)',
-        backgroundColor: '#0D0D0D',
+        backgroundColor: 'var(--bg-background)',
       }}
     >
       {/* Background glow */}
@@ -228,7 +232,8 @@ export function GatewayView() {
           transform: 'translateX(-50%)',
           width: '200px',
           height: '120px',
-          background: 'radial-gradient(ellipse, rgba(77,142,255,0.08) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse, var(--accent-primary-container) 0%, transparent 70%)',
+          opacity: 0.06,
           pointerEvents: 'none',
         }}
       />

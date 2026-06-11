@@ -27,9 +27,9 @@ export function ControlButtons({ status, loading, onStart, onStop }: ControlButt
         className="flex-1 flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed active:scale-[0.97] transition-transform"
         style={{
           background: startDisabled
-            ? 'rgba(255,255,255,0.04)'
+            ? 'var(--bg-surface-container-lowest)'
             : 'linear-gradient(135deg, #34A853 0%, #2d9348 100%)',
-          color: startDisabled ? '#484F58' : '#000',
+          color: startDisabled ? 'var(--text-outline-variant)' : '#000',
           fontSize: '11px',
           fontWeight: 700,
           letterSpacing: '0.5px',
@@ -38,7 +38,7 @@ export function ControlButtons({ status, loading, onStart, onStop }: ControlButt
           boxShadow: startDisabled
             ? 'none'
             : '0 2px 12px rgba(52,168,83,0.2), inset 0 1px 0 rgba(255,255,255,0.15)',
-          border: startDisabled ? '1px solid rgba(255,255,255,0.06)' : 'none',
+          border: startDisabled ? '1px solid var(--border-subtle)' : 'none',
         }}
       >
         {loading ? (
@@ -56,12 +56,12 @@ export function ControlButtons({ status, loading, onStart, onStop }: ControlButt
         className="flex items-center justify-center cursor-pointer disabled:cursor-not-allowed active:scale-[0.97] transition-transform"
         style={{
           width: '44px',
-          background: 'rgba(255,255,255,0.04)',
-          color: stopDisabled ? '#30363D' : '#8B949E',
+          background: 'var(--bg-surface-container-lowest)',
+          color: stopDisabled ? 'var(--text-outline-variant)' : 'var(--text-outline)',
           fontSize: '11px',
           borderRadius: '8px',
           padding: '7px',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid var(--border-subtle)',
         }}
       >
         {loading ? (

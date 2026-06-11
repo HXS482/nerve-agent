@@ -23,20 +23,20 @@ export function MetricCards({ sessions, memoryBytes, errorCount, running }: Metr
     >
       <div
         className="flex overflow-hidden"
-        style={{ borderRadius: '6px', gap: '1px', background: 'rgba(255,255,255,0.01)' }}
+        style={{ borderRadius: '6px', gap: '1px', background: 'var(--bg-surface-container-lowest)' }}
       >
         {metrics.map((m) => (
           <div
             key={m.label}
             className="flex-1 flex flex-col items-center justify-center"
             style={{
-              backgroundColor: 'rgba(255,255,255,0.03)',
+              backgroundColor: 'var(--bg-surface-container-low)',
               padding: '8px 10px',
             }}
           >
             <div
               style={{
-                color: '#8B949E',
+                color: 'var(--text-outline)',
                 fontSize: '8px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
@@ -52,13 +52,13 @@ export function MetricCards({ sessions, memoryBytes, errorCount, running }: Metr
                 style={{
                   fontSize: '16px',
                   fontWeight: 700,
-                  color: m.isError && m.value === 0 ? '#34A853' : '#E9ECF0',
+                  color: m.isError && m.value === 0 ? '#34A853' : 'var(--text-on-surface)',
                 }}
               >
                 {m.value}
               </span>
               {m.unit && (
-                <span style={{ fontSize: '9px', color: '#8B949E', marginLeft: '2px' }}>
+                <span style={{ fontSize: '9px', color: 'var(--text-outline)', marginLeft: '2px' }}>
                   {m.unit}
                 </span>
               )}
