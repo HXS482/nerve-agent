@@ -124,10 +124,12 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
         <button
           onClick={handlePickFiles}
           className="w-9 h-9 rounded-full dynamic-island flex items-center justify-center text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] hover:brightness-125 active:scale-90 transition-all duration-150 shrink-0 cursor-pointer"
-          style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+          style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.3)', border: '1px solid var(--glass-border)' }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M8 12h8" />
+            <path d="M12 8v8" />
           </svg>
         </button>
 

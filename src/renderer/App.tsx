@@ -43,20 +43,20 @@ function ApprovalBar() {
     <div
       style={{
         position: 'absolute',
-        bottom: 72,
+        bottom: 52,
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 50,
-        minWidth: 360,
-        maxWidth: '72%',
-        background: 'rgba(30,30,32,0.85)',
+        minWidth: 357,
+        maxWidth: '70%',
+        background: 'color-mix(in srgb, var(--glass-bg) 30%, transparent)',
         backdropFilter: 'blur(20px) saturate(180%)',
         WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid var(--glass-border)',
         borderRadius: 12,
-        padding: '10px 14px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)',
-        animation: 'slideUp 0.2s ease-out',
+        padding: '7px 14px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+        animation: 'fade-in-simple 0.15s ease-out',
       }}
     >
       <div className="flex items-center gap-3">
@@ -75,17 +75,17 @@ function ApprovalBar() {
 
         {/* Tool info */}
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span style={{ fontSize: '12px', fontWeight: 600, color: '#e0e0e0', flexShrink: 0 }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-on-surface)', flexShrink: 0 }}>
             {current.toolName}
           </span>
-          <span className="truncate font-mono" style={{ fontSize: '11px', color: '#9e9e9e' }}>
+          <span className="truncate font-mono" style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
             {getApprovalSummary(current)}
           </span>
         </div>
 
         {/* Queue count */}
         {pendingApprovals.length > 1 && (
-          <span style={{ fontSize: '11px', color: '#9e9e9e', flexShrink: 0 }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-outline)', flexShrink: 0 }}>
             +{pendingApprovals.length - 1}
           </span>
         )}
