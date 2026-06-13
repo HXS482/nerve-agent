@@ -15,6 +15,22 @@ interface SidebarProps {
   onSelectSession: (sessionId: string) => void
 }
 
+const getSidebarBackground = (theme: string) => {
+  if (theme === 'aurora') {
+    return 'var(--bg-mica)' // Keep existing Aurora style
+  }
+  return theme === 'light'
+    ? 'rgba(255, 255, 255, 0.5)'
+    : 'rgba(20, 20, 22, 0.5)'
+}
+
+const getBackdropFilter = (theme: string) => {
+  if (theme === 'aurora') {
+    return undefined // Keep existing Aurora style
+  }
+  return 'blur(20px) saturate(150%)'
+}
+
 export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onSelectSession }: SidebarProps) {
   const config = useChatStore((s) => s.config)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
@@ -187,6 +203,35 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       {/* Session list */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '12px 10px' }}>
         <UsageStatsPanel />
+
+        {/* New session button */}
+        <button
+          onClick={onNewChat}
+          className="flex items-center gap-2 w-full transition-colors cursor-pointer"
+          style={{
+            padding: '8px 10px',
+            borderRadius: '6px',
+            background: 'transparent',
+            border: '1px dashed var(--border-default)',
+            marginBottom: 8,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--bg-surface-container)'
+            e.currentTarget.style.borderColor = 'var(--accent-primary)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.borderColor = 'var(--border-default)'
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span className="text-[12px] font-medium" style={{ color: 'var(--text-on-surface-variant)' }}>
+            New session
+          </span>
+        </button>
+
         <SessionList
           currentSessionId={currentSessionId}
           onSelectSession={handleSelectSession}
@@ -200,18 +245,12 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
           className="relative"
           style={{
             width: '100%',
-            height: '56px',
             cursor: petDocked && petVisible ? 'pointer' : 'default',
           }}
           onMouseEnter={() => setIsHoveringDock(true)}
           onMouseLeave={() => setIsHoveringDock(false)}
           onClick={petDocked && petVisible ? handleUndock : undefined}
         >
-          <div className="absolute inset-0 flex items-end justify-center" style={{ paddingBottom: '30px', pointerEvents: 'none', opacity: petDocked && petVisible ? 0 : 1 }}>
-            <p className="text-[10px]" style={{ color: theme !== 'light' ? 'rgba(120, 130, 160, 0.25)' : 'rgba(80, 130, 180, 0.35)' }}>
-              Drop pet here
-            </p>
-          </div>
 
           {petDocked && petVisible && (
             <div
