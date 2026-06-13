@@ -2,13 +2,13 @@
 
 ## Overview
 
-Optimize the left sidebar UI to have a semi-transparent blurred background that allows the desktop wallpaper to show through, creating a modern glassmorphism effect. The effect applies to dark and light themes while preserving the existing Aurora theme style.
+Optimize the left sidebar UI to have a semi-transparent blurred background that allows the desktop wallpaper to show through, creating a modern glassmorphism effect. The effect applies to dark and light themes (50% opacity) while preserving the existing Aurora theme style.
 
 ## Requirements
 
 ### Transparency Level
 - **Medium transparency**: Desktop background is clearly visible through the sidebar
-- **Opacity**: 65% opacity for background color
+- **Opacity**: 50% opacity for background color
 
 ### Blur Effect
 - **Medium blur**: Desktop content is blurred but colors and shapes are still perceptible
@@ -31,14 +31,14 @@ Optimize the left sidebar UI to have a semi-transparent blurred background that 
 
 #### Dark Theme
 ```css
-background: rgba(20, 20, 22, 0.65);
+background: rgba(20, 20, 22, 0.5);
 backdrop-filter: blur(20px) saturate(150%);
 -webkit-backdrop-filter: blur(20px) saturate(150%);
 ```
 
 #### Light Theme
 ```css
-background: rgba(255, 255, 255, 0.65);
+background: rgba(255, 255, 255, 0.5);
 backdrop-filter: blur(20px) saturate(150%);
 -webkit-backdrop-filter: blur(20px) saturate(150%);
 ```
@@ -55,8 +55,9 @@ const getSidebarBackground = (theme: string) => {
     return 'var(--bg-mica)' // Keep existing Aurora style
   }
   return theme === 'light'
-    ? 'rgba(255, 255, 255, 0.65)'
-    : 'rgba(20, 20, 22, 0.65)'
+    ? 'rgba(255, 255, 255, 0.5)'
+    : 'rgba(20, 20, 22, 0.5)'
+}
 }
 
 const getBackdropFilter = (theme: string) => {
@@ -105,7 +106,7 @@ Apply these functions to the `<aside>` element's style prop.
 
 ## Success Criteria
 
-- [x] Desktop background visible through sidebar at 65% opacity
+- [x] Desktop background visible through sidebar at 50% opacity
 - [x] Medium blur effect (20px) applied
 - [x] Dark and light themes have glassmorphism
 - [x] Aurora theme unchanged
