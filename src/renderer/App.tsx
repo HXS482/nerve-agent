@@ -138,6 +138,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
 
+  const SIDEBAR_OFFSET = 8 // 4px (root margin) + 4px (gap between sidebar and main content border)
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
@@ -146,11 +148,25 @@ export default function App() {
     <div
       className="h-screen w-screen flex overflow-hidden"
       style={{
-        background: 'var(--bg-background)',
+        background: 'transparent',
         borderRadius: 'var(--app-window-radius)',
         clipPath: 'inset(0 round var(--app-window-radius))',
       }}
     >
+      {/* Solid background layer — clipped to exclude sidebar area */}
+      <div
+        className="fixed inset-0"
+        style={{
+          background: 'var(--bg-background)',
+          borderRadius: 'var(--app-window-radius)',
+          clipPath: sidebarOpen
+            ? `inset(0 0 0 ${sidebarWidth + SIDEBAR_OFFSET}px)`
+            : 'none',
+          transition: 'clip-path 0.3s ease',
+          zIndex: 0,
+        }}
+      />
+
       {/* Aurora theme background */}
       {theme === 'aurora' && (
         <div className="fixed inset-0 z-0">
@@ -197,9 +213,9 @@ export default function App() {
         className="flex-1 flex flex-col overflow-hidden relative"
         style={{
           margin: '4px',
-          marginLeft: sidebarOpen ? `${sidebarWidth + 8}px` : '4px',
+          marginLeft: sidebarOpen ? `${sidebarWidth + SIDEBAR_OFFSET}px` : '4px',
           marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
-          background: 'var(--bg-mica)',
+          background: 'transparent',
           border: '1px solid var(--border-default)',
           borderRadius: 'var(--app-shell-radius)',
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
