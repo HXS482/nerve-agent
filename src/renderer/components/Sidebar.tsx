@@ -6,6 +6,11 @@ import { PetSkin } from '../../shared/types'
 import { GradientButtonGroup } from './GradientButtonGroup'
 import { MemoryBrowser } from './MemoryBrowser'
 import { UsageStatsPanel } from './UsageStatsPanel'
+import { Theme } from '../../shared/types'
+
+const LIGHT_SIDEBAR_BG = 'rgba(255, 255, 255, 0.5)'
+const DARK_SIDEBAR_BG = 'rgba(20, 20, 22, 0.5)'
+const SIDEBAR_BACKDROP_FILTER = 'blur(20px) saturate(150%)'
 
 interface SidebarProps {
   onNewChat: () => void
@@ -15,20 +20,18 @@ interface SidebarProps {
   onSelectSession: (sessionId: string) => void
 }
 
-const getSidebarBackground = (theme: string) => {
+const getSidebarBackground = (theme: Theme) => {
   if (theme === 'aurora') {
-    return 'var(--bg-mica)' // Keep existing Aurora style
+    return 'var(--bg-mica)'
   }
-  return theme === 'light'
-    ? 'rgba(255, 255, 255, 0.5)'
-    : 'rgba(20, 20, 22, 0.5)'
+  return theme === 'light' ? LIGHT_SIDEBAR_BG : DARK_SIDEBAR_BG
 }
 
-const getBackdropFilter = (theme: string) => {
+const getBackdropFilter = (theme: Theme) => {
   if (theme === 'aurora') {
-    return undefined // Keep existing Aurora style
+    return undefined
   }
-  return 'blur(20px) saturate(150%)'
+  return SIDEBAR_BACKDROP_FILTER
 }
 
 export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onSelectSession }: SidebarProps) {
