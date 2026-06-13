@@ -121,6 +121,8 @@ function ApprovalBar() {
   )
 }
 
+const SIDEBAR_OFFSET = 8 // 4px (root margin) + 4px (gap between sidebar and main content border)
+
 export default function App() {
   // Hash routing: #/pet renders the pet window
   if (window.location.hash === '#/pet') {
@@ -137,8 +139,6 @@ export default function App() {
   const theme = useChatStore((s) => s.theme)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
-
-  const SIDEBAR_OFFSET = 8 // 4px (root margin) + 4px (gap between sidebar and main content border)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -161,13 +161,13 @@ export default function App() {
           borderRadius: 'var(--app-window-radius)',
           clipPath: sidebarOpen
             ? `inset(0 0 0 ${sidebarWidth + SIDEBAR_OFFSET}px)`
-            : 'none',
+            : 'inset(0 0 0 0)',
           transition: 'clip-path 0.3s ease',
           zIndex: 0,
         }}
       />
 
-      {/* Aurora theme background */}
+      {/* Aurora Grainient — intentionally not clipped, glow extends under sidebar */}
       {theme === 'aurora' && (
         <div className="fixed inset-0 z-0">
           <Grainient
