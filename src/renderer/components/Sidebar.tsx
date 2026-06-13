@@ -130,7 +130,15 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
   return (
     <aside
       className="fixed left-1 top-1 bottom-1 flex flex-col z-50 transition-[width] duration-300"
-      style={{ width: sidebarWidth, background: 'var(--bg-mica)', border: '1px solid var(--border-default)', borderRadius: 'var(--app-shell-radius)', boxShadow: '0 4px 24px rgba(0, 0, 0, 0.15)', backdropFilter: theme === 'aurora' ? 'blur(20px) saturate(150%)' : undefined, WebkitBackdropFilter: theme === 'aurora' ? 'blur(20px) saturate(150%)' : undefined }}
+      style={{
+        width: sidebarWidth,
+        background: getSidebarBackground(theme),
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--app-shell-radius)',
+        boxShadow: '0 4px 24px rgba(0, 0, 0, 0.15)',
+        backdropFilter: getBackdropFilter(theme),
+        WebkitBackdropFilter: getBackdropFilter(theme)
+      }}
     >
       {/* Window Controls / Header */}
       <div className="px-4 pt-6 pb-4" style={{ borderColor: 'rgba(255,255,255,0.06)', WebkitAppRegion: 'drag' } as React.CSSProperties}>
