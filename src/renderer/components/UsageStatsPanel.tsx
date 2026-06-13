@@ -155,7 +155,7 @@ export function UsageStatsPanel() {
       </div>
 
       {!collapsed && (
-        <div style={{ padding: '0 6px 6px' }}>
+        <div style={{ padding: '0 3px 3px' }}>
           {/* Heatmap card — glassmorphism like functional island */}
           <div
             className={`rounded-[10px] ${theme === 'aurora' ? 'dynamic-island' : ''}`}
