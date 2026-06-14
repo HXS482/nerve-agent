@@ -187,6 +187,35 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       {/* Session list */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '12px 10px' }}>
         <UsageStatsPanel />
+
+        {/* New session button */}
+        <button
+          onClick={onNewChat}
+          className="flex items-center gap-2 w-full transition-colors cursor-pointer"
+          style={{
+            padding: '8px 10px',
+            borderRadius: '6px',
+            background: 'transparent',
+            border: '1px dashed var(--border-default)',
+            marginBottom: 8,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--bg-surface-container)'
+            e.currentTarget.style.borderColor = 'var(--accent-primary)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.borderColor = 'var(--border-default)'
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span className="text-[12px] font-medium" style={{ color: 'var(--text-on-surface-variant)' }}>
+            New session
+          </span>
+        </button>
+
         <SessionList
           currentSessionId={currentSessionId}
           onSelectSession={handleSelectSession}
