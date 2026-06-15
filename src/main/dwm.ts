@@ -51,7 +51,7 @@ export function applyDwmFix(win: BrowserWindow) {
     const DwmSetWindowAttribute = dwmapi.func('int DwmSetWindowAttribute(void* hwnd, int dwAttribute, void* pvAttribute, uint cbAttribute)')
 
     const style = GetWindowLongW(hwnd, GWL_STYLE)
-    const cleanStyle = style & ~(WS_CAPTION | WS_BORDER | WS_DLGFRAME | WS_THICKFRAME)
+    const cleanStyle = style & ~(WS_CAPTION | WS_BORDER | WS_DLGFRAME)
     if (cleanStyle !== style) {
       SetWindowLongW(hwnd, GWL_STYLE, cleanStyle)
     }
