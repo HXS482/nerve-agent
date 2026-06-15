@@ -72,7 +72,7 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
         style={{
           padding: '4px 10px',
           height: 28,
-          borderRadius: 9,
+          borderRadius: 11,
           fontSize: 11,
           fontWeight: 500,
           background: theme === 'aurora' ? undefined : 'var(--bg-surface-container)',
