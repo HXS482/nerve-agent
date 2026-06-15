@@ -41,10 +41,8 @@ export function applyDwmFix(win: BrowserWindow) {
     const SWP_NOZORDER = 0x0004
     const SWP_NOACTIVATE = 0x0010
     const DWMWA_NCRENDERING_POLICY = 2
-    const DWMWA_WINDOW_CORNER_PREFERENCE = 33
     const DWMWA_BORDER_COLOR = 34
     const DWMNCRP_DISABLED = 1
-    const DWMWCP_DONOTROUND = 1
     const DWMWA_COLOR_NONE = 0xfffffffe
 
     const GetWindowLongW = user32.func('int GetWindowLongW(void* hWnd, int nIndex)')
@@ -66,9 +64,6 @@ export function applyDwmFix(win: BrowserWindow) {
 
     const ncPolicy = new Int32Array([DWMNCRP_DISABLED])
     DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, ncPolicy, 4)
-
-    const cornerPreference = new Int32Array([DWMWCP_DONOTROUND])
-    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, cornerPreference, 4)
 
     const borderColor = new Uint32Array([DWMWA_COLOR_NONE])
     DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, borderColor, 4)

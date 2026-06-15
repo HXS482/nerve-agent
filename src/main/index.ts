@@ -30,8 +30,8 @@ process.on('uncaughtException', (err) => {
 
 // Window control IPC — registered once, reference updated per window
 let currentMainWindow: BrowserWindow | null = null
-const MAIN_WINDOW_RADIUS = 16
-const MAIN_WINDOW_SHAPE_GUARD_RADIUS = 15
+const MAIN_WINDOW_RADIUS = 19
+const MAIN_WINDOW_SHAPE_GUARD_RADIUS = 18
 
 ipcMain.on('window:minimize', () => currentMainWindow?.minimize())
 ipcMain.on('window:maximize', () => {
@@ -88,8 +88,6 @@ function createWindow(): BrowserWindow {
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
     thickFrame: false,
-    roundedCorners: false,
-    backgroundMaterial: 'none',
     backgroundColor: '#00000000',
     shadow: false,
     webPreferences: {

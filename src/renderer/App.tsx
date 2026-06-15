@@ -149,6 +149,7 @@ export default function App() {
         background: 'var(--bg-background)',
         borderRadius: 'var(--app-window-radius)',
         clipPath: 'inset(0 round var(--app-window-radius))',
+        border: '1px solid var(--border-default)',
       }}
     >
       {/* Aurora theme background */}
@@ -199,7 +200,7 @@ export default function App() {
           margin: '4px',
           marginLeft: sidebarOpen ? `${sidebarWidth + 8}px` : '4px',
           marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
-          background: 'var(--bg-mica)',
+          background: 'var(--bg-surface)',
           border: '1px solid var(--border-default)',
           borderRadius: 'var(--app-shell-radius)',
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',

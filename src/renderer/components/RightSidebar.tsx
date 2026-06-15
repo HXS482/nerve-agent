@@ -529,7 +529,7 @@ export function RightSidebar() {
           className="fixed top-1 bottom-1 right-1 z-40 flex flex-col overflow-hidden"
           style={{
             width,
-            background: 'var(--bg-mica)',
+            background: 'var(--bg-surface)',
             border: '1px solid var(--border-default)',
             borderRadius: 'var(--app-shell-radius)',
             boxShadow: '0 4px 24px rgba(0,0,0,0.15)',

@@ -11,7 +11,8 @@
   --window-alpha-floor: rgba(13, 13, 13, 0.01);
   --bg-background: #0D0D0D;
   --bg-mica: rgba(13,13,13,0.15);
-  --bg-surface: #131313;
+  --bg-mica-sidebar: rgba(13,13,13,0.6);
+  --bg-surface: #111111;
   --bg-surface-dim: #131313;
   --bg-surface-bright: #3a3939;
   --bg-surface-container-lowest: #0e0e0e;
@@ -73,6 +74,7 @@
   --window-alpha-floor: rgba(248, 249, 250, 0.01);
   --bg-background: #f8f9fa;
   --bg-mica: rgba(248,249,250,0.15);
+  --bg-mica-sidebar: rgba(248,249,250,0.6);
   --bg-surface: #ffffff;
   --bg-surface-dim: #f0f0f0;
   --bg-surface-bright: #ffffff;
@@ -203,7 +205,7 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
-  --app-window-radius: 16px;
+  --app-window-radius: 19px;
   --app-shell-radius: 16px;
 
   /* Fluid typography — scales with viewport width (min 600px, max 1400px) */

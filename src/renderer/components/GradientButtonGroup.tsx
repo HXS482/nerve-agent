@@ -153,7 +153,7 @@ export function GradientButtonGroup({
   return (
     <div className="relative flex items-center">
       <nav
-        className={`inline-flex items-center gap-1.5 rounded-[10px] p-1 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+        className={`inline-flex items-center gap-1.5 rounded-[14px] p-1 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
         style={{
           background: theme === 'aurora'
             ? undefined

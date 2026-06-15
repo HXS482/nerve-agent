@@ -111,11 +111,11 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
 
   return (
     <aside
-      className="fixed left-0 top-0 bottom-0 flex flex-col z-50 transition-[width] duration-300"
-      style={{ width: sidebarWidth, background: 'var(--bg-background)' }}
+      className="fixed left-[1px] top-[1px] bottom-[1px] flex flex-col z-50 transition-[width] duration-300"
+      style={{ width: sidebarWidth, background: 'transparent' }}
     >
       {/* Window Controls / Header */}
-      <div className="px-4 pt-6 pb-4" style={{ borderColor: 'rgba(255,255,255,0.06)', WebkitAppRegion: 'drag' } as React.CSSProperties}>
+      <div className="px-4 pt-6 pb-4" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="flex items-center justify-between mb-4" style={{ marginTop: '8px' }}>
           <div className="flex gap-2 group/tl" style={{ marginLeft: '10px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <div className="w-3 h-3 rounded-full bg-[#FF5F56] cursor-pointer flex items-center justify-center" onClick={() => window.claude.windowClose()}>
@@ -223,7 +223,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       </div>
 
       {/* Bottom area: pedestal + buttons */}
-      <div style={{ padding: '0 4px 4px 4px', marginTop: '0px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ padding: '0 4px 14px 4px', marginTop: '0px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Pet dock pedestal */}
         <div
           className="relative"
