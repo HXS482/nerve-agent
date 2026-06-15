@@ -1,4 +1,5 @@
 import React, { useState, useMemo, memo, useCallback } from 'react'
+import { useImageSrc } from '../hooks/useImageSrc'
 import { ChatMessage, ContentBlock } from '../../shared/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -773,6 +774,8 @@ function isImageUrl(src: string): boolean {
 function ImageView({ src }: { src: string }) {
   const [error, setError] = useState(false)
   const label = src.split(/[/\\]/).pop() || src
+  const isLocal = !src.startsWith('data:') && !isImageUrl(src)
+  const localSrc = useImageSrc(isLocal ? src : null)
   if (error) {
     return (
       <div className="my-2 px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--bg-surface-container)', color: 'var(--text-outline)', border: '1px solid var(--border-subtle)' }}>
@@ -781,27 +784,19 @@ function ImageView({ src }: { src: string }) {
     )
   }
 
-  let resolved: string
-  if (src.startsWith('data:')) {
-    resolved = src
-  } else if (isImageUrl(src)) {
-    resolved = src
-  } else if (src.includes('.nerve/gallery/') || src.includes('.nerve\\gallery\\') || src.includes('.nerve/images/') || src.includes('.nerve\\images\\')) {
-    // Internal gallery path — use nerve-file:// protocol
-    resolved = `nerve-file:///${src.replace(/\\/g, '/')}`
-  } else {
-    resolved = `nerve-file:///${src.replace(/\\/g, '/')}`
-  }
+  const resolved = isLocal ? (localSrc ?? '') : src
 
   return (
     <div className="my-3">
-      <img
-        src={resolved}
-        alt={label}
-        className="rounded-xl max-w-full max-h-[512px] object-contain"
-        style={{ border: '1px solid var(--border-subtle)' }}
-        onError={() => setError(true)}
-      />
+      {resolved && (
+        <img
+          src={resolved}
+          alt={label}
+          className="rounded-xl max-w-full max-h-[512px] object-contain"
+          style={{ border: '1px solid var(--border-subtle)' }}
+          onError={() => setError(true)}
+        />
+      )}
     </div>
   )
 }

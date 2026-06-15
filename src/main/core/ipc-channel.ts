@@ -64,7 +64,7 @@ export class IPCChannel implements OutputChannel {
 
   sendImage(pathOrBuffer: string | Buffer, caption?: string): void {
     if (typeof pathOrBuffer === 'string') {
-      this.send(IPC_CHANNELS.FLOW_ITEM, { type: 'image', content: pathOrBuffer, meta: { caption } })
+      this.send(IPC_CHANNELS.FLOW_ITEM, { type: 'image', content: pathOrBuffer, meta: { caption, localPath: pathOrBuffer } })
     }
   }
 

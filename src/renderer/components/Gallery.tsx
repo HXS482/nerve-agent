@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react'
+import { useImageSrc } from '../hooks/useImageSrc'
 
 interface GalleryImage {
   id: string
@@ -28,6 +29,86 @@ function timeAgo(ts: number): string {
   if (h < 24) return `${h}h ago`
   const d = Math.floor(h / 24)
   return `${d}d ago`
+}
+
+function GalleryImageCard({ img, onClick, onDelete }: { img: GalleryImage; onClick: () => void; onDelete: (filename: string) => void }) {
+  const src = useImageSrc(img.path)
+  return (
+    <div
+      className="group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-200"
+      style={{
+        aspectRatio: '1',
+        background: 'var(--bg-surface-container-high)',
+        border: '1px solid var(--border-subtle)',
+      }}
+      onClick={onClick}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(173, 198, 255, 0.25)'
+        e.currentTarget.style.transform = 'scale(1.02)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-subtle)'
+        e.currentTarget.style.transform = 'scale(1)'
+      }}
+    >
+      {src && <img src={src} alt={img.source || img.filename} className="w-full h-full object-cover" />}
+      {/* Hover overlay */}
+      <div
+        className="absolute inset-0 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        style={{ background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.7))' }}
+      >
+        <div className="px-2.5 pb-2.5 flex items-end justify-between">
+          <span className="text-[10px] truncate flex-1" style={{ color: 'rgba(255,255,255,0.8)' }}>
+            {img.source?.slice(0, 40) || img.filename}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(img.filename) }}
+            className="shrink-0 p-1 rounded transition-colors cursor-pointer"
+            style={{ color: 'rgba(255,255,255,0.5)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#ff5f56'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GalleryPreview({ img, onClose }: { img: GalleryImage; onClose: () => void }) {
+  const src = useImageSrc(img.path)
+  return (
+    <div
+      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
+      style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}
+      onClick={onClose}
+    >
+      {src && (
+        <img
+          src={src}
+          alt={img.source || img.filename}
+          className="max-w-[90vw] max-h-[85vh] rounded-xl object-contain"
+          style={{ border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
+      <div
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 rounded-xl"
+        style={{
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.7)' }}>{img.source?.slice(0, 60) || img.filename}</span>
+        <span className="text-[10px] tabular-nums" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' }}>{formatSize(img.size)}</span>
+        <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{timeAgo(img.createdAt)}</span>
+      </div>
+    </div>
+  )
 }
 
 export const Gallery = memo(function Gallery({ onClose }: GalleryProps) {
@@ -145,53 +226,12 @@ export const Gallery = memo(function Gallery({ onClose }: GalleryProps) {
           ) : (
             <div className="grid grid-cols-3 gap-2.5">
               {images.map((img) => (
-                <div
+                <GalleryImageCard
                   key={img.id}
-                  className="group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-200"
-                  style={{
-                    aspectRatio: '1',
-                    background: 'var(--bg-surface-container-high)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
+                  img={img}
                   onClick={() => setPreview(img)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(173, 198, 255, 0.25)'
-                    e.currentTarget.style.transform = 'scale(1.02)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--border-subtle)'
-                    e.currentTarget.style.transform = 'scale(1)'
-                  }}
-                >
-                  <img
-                    src={`nerve-file:///${img.path.replace(/\\/g, '/')}`}
-                    alt={img.source || img.filename}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  {/* Hover overlay */}
-                  <div
-                    className="absolute inset-0 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    style={{ background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.7))' }}
-                  >
-                    <div className="px-2.5 pb-2.5 flex items-end justify-between">
-                      <span className="text-[10px] truncate flex-1" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                        {img.source?.slice(0, 40) || img.filename}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(img.filename) }}
-                        className="shrink-0 p-1 rounded transition-colors cursor-pointer"
-                        style={{ color: 'rgba(255,255,255,0.5)', background: 'transparent', border: 'none' }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ff5f56'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <path d="M4 4l8 8M12 4l-8 8" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  onDelete={handleDelete}
+                />
               ))}
             </div>
           )}
@@ -199,33 +239,7 @@ export const Gallery = memo(function Gallery({ onClose }: GalleryProps) {
       </div>
 
       {/* Preview overlay */}
-      {preview && (
-        <div
-          className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
-          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}
-          onClick={() => setPreview(null)}
-        >
-          <img
-            src={`nerve-file:///${preview.path.replace(/\\/g, '/')}`}
-            alt={preview.source || preview.filename}
-            className="max-w-[90vw] max-h-[85vh] rounded-xl object-contain"
-            style={{ border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 rounded-xl"
-            style={{
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.7)' }}>{preview.source?.slice(0, 60) || preview.filename}</span>
-            <span className="text-[10px] tabular-nums" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' }}>{formatSize(preview.size)}</span>
-            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{timeAgo(preview.createdAt)}</span>
-          </div>
-        </div>
-      )}
+      {preview && <GalleryPreview img={preview} onClose={() => setPreview(null)} />}
     </>
   )
 })

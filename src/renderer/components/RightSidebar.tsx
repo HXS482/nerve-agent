@@ -1,6 +1,7 @@
 import { useChatStore } from '../stores/chatStore'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCallback, useRef, useEffect, useState } from 'react'
+import { useImageSrc } from '../hooks/useImageSrc'
 import { GitView } from './GitView'
 import { GatewayView } from './GatewayView'
 
@@ -132,6 +133,7 @@ const MAX_HTML_LENGTH = 50000
 function FlowCard({ item }: { item: FlowItem }) {
   const [hovered, setHovered] = useState(false)
   const removeFlowItem = useChatStore((s) => s.removeFlowItem)
+  const imageSrc = useImageSrc(item.type === 'image' ? item.meta?.localPath : null)
 
   return (
     <motion.div
@@ -145,7 +147,7 @@ function FlowCard({ item }: { item: FlowItem }) {
     >
       {item.type === 'image' ? (
         <div className="overflow-hidden" style={{ border: '1px solid var(--border-subtle)', borderRadius: 7 }}>
-          <img src={item.content} alt="" className="w-full" style={{ display: 'block', objectFit: 'cover' }} />
+          {imageSrc && <img src={imageSrc} alt="" className="w-full" style={{ display: 'block', objectFit: 'cover' }} />}
         </div>
       ) : (
         <div className="overflow-hidden h-full" style={{ border: '1px solid var(--border-subtle)', borderRadius: 7 }}>

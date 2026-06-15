@@ -1,11 +1,11 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { readdirSync, statSync, readFileSync } from 'fs'
-import { join, relative, extname, basename } from 'path'
+import { join, relative, extname, basename, resolve } from 'path'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
 import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig } from './settings'
-import { saveImage, listImages, deleteImage, getImagePath } from './images'
+import { saveImage, listImages, deleteImage, getImagePath, getImagesDir } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
 import { NerveGateway } from './gateway'
@@ -260,6 +260,24 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   ipcMain.handle(IPC_CHANNELS.IMAGE_GET_PATH, (_event, filename: string) => {
     return getImagePath(filename)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.IMAGE_LOAD, (_event, filePath: string) => {
+    const absPath = resolve(filePath)
+    const imagesDir = resolve(getImagesDir())
+    if (!absPath.startsWith(imagesDir)) return null
+    try {
+      const buffer = readFileSync(absPath)
+      const ext = extname(absPath).toLowerCase()
+      const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+        : ext === '.gif' ? 'image/gif'
+        : ext === '.webp' ? 'image/webp'
+        : ext === '.svg' ? 'image/svg+xml'
+        : 'image/png'
+      return `data:${mime};base64,${buffer.toString('base64')}`
+    } catch {
+      return null
+    }
   })
 
   // Memory Browser (replaces Brain)

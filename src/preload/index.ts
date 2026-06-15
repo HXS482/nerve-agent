@@ -30,6 +30,8 @@ const api = {
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowMaximize: () => ipcRenderer.send('window:maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
+  windowGetBounds: () => ipcRenderer.invoke('window:get-bounds'),
+  windowSetBounds: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.send('window:set-bounds', bounds),
   onMessage: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data)
     ipcRenderer.on(IPC_CHANNELS.MESSAGE, handler)
@@ -130,6 +132,7 @@ const api = {
   listImages: () => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LIST),
   deleteImage: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_DELETE, filename),
   getImagePath: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_GET_PATH, filename),
+  loadImage: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LOAD, path),
   // Memory Browser (replaces Brain)
   brainScan: () => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_SCAN),
   brainReadFile: (type: string, id: string) => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_READ_FILE, type, id),

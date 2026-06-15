@@ -804,19 +804,8 @@ export class AgentCore {
             savedPath,
           })
         }
-        return
       }
     }
-
-    if (toolName === 'GenerateImage' && !resultText.startsWith('{')) return
-    try {
-      const parsed = JSON.parse(resultText)
-      if (parsed.path && parsed.filename && /\.(png|jpg|jpeg|gif|webp)$/i.test(parsed.filename)) {
-        channel.sendFlowItem('image', `file://${parsed.path}`, {
-          label: parsed.prompt || parsed.source || parsed.filename,
-        })
-      }
-    } catch {}
   }
 
   getConfig(): ClaudeConfig { return { ...this.config } }

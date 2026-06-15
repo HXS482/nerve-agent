@@ -65,6 +65,7 @@ export const IPC_CHANNELS = {
   IMAGE_LIST: 'nerve:image-list',
   IMAGE_DELETE: 'nerve:image-delete',
   IMAGE_GET_PATH: 'nerve:image-get-path',
+  IMAGE_LOAD: 'nerve:image-load',
   // File upload
   PICK_AND_READ_FILES: 'nerve:pick-and-read-files',
   // Brain

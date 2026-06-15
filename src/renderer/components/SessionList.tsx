@@ -129,19 +129,6 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
         >
           Recent
         </span>
-        <span
-          className="text-[10px]"
-          style={{
-            color: 'var(--text-outline-variant)',
-            background: 'var(--bg-surface-container)',
-            padding: '1px 5px',
-            borderRadius: '8px',
-            fontWeight: 500,
-            flexShrink: 0,
-          }}
-        >
-          {recentSessions.length}
-        </span>
       </button>
 
       {!isRecentCollapsed && recentSessions.map((session) => {
@@ -155,7 +142,8 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
               onClick={() => onSelectSession(session)}
               className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
               style={{
-                padding: '5px 6px 5px 8px',
+                padding: '5px 6px 5px 0px',
+                marginLeft: '-4px',
                 borderRadius: '6px',
                 background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
               }}
@@ -283,19 +271,6 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
             >
               Channels
             </span>
-            <span
-              className="text-[10px]"
-              style={{
-                color: 'var(--text-outline)',
-                background: 'var(--bg-surface-container)',
-                padding: '1px 5px',
-                borderRadius: '8px',
-                fontWeight: 500,
-                flexShrink: 0,
-              }}
-            >
-              {channelSessions.length}
-            </span>
           </button>
 
           {!isChannelsCollapsed && [...channelGroups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([groupKey, groupSessions]) => {
@@ -316,18 +291,6 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
-                  <svg
-                    width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                    style={{
-                      transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
-                      transition: 'transform 0.15s',
-                      color: 'var(--text-outline-variant)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-
                   {meta ? (
                     <span style={{ color: meta.color, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                       {meta.icon}
@@ -350,20 +313,6 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                   >
                     {meta ? meta.label : (groupKey.charAt(0).toUpperCase() + groupKey.slice(1))}
                   </span>
-
-                  <span
-                    className="text-[10px]"
-                    style={{
-                      color: meta ? meta.color : 'var(--text-outline-variant)',
-                      background: meta ? `${meta.color}18` : 'var(--bg-surface-container)',
-                      padding: '1px 5px',
-                      borderRadius: '8px',
-                      fontWeight: 500,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {groupSessions.length}
-                  </span>
                 </button>
 
                 {!isCollapsed && groupSessions.map((session) => {
@@ -377,7 +326,8 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                         onClick={() => onSelectSession(session)}
                         className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
                         style={{
-                          padding: '5px 6px 5px 22px',
+                          padding: '5px 6px 5px 0px',
+                          marginLeft: '-4px',
                           borderRadius: '6px',
                           background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
                         }}

@@ -9,6 +9,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
+import { ResizeBorder } from './components/ResizeBorder'
 import Grainient from './components/Grainient'
 import { useState, useEffect, useCallback } from 'react'
 
@@ -288,6 +289,9 @@ export default function App() {
 
       {/* Right Sidebar */}
       <RightSidebar />
+
+      {/* Resize handles — invisible border layer for frameless window drag-resize */}
+      <ResizeBorder />
     </div>
   )
 }

@@ -42,6 +42,14 @@ ipcMain.on('window:close', () => {
   // 最小化到托盘，而不是关闭窗口
   currentMainWindow?.hide()
 })
+ipcMain.handle('window:get-bounds', () => currentMainWindow?.getBounds())
+ipcMain.on('window:set-bounds', (_event, bounds: Electron.Rectangle) => {
+  if (currentMainWindow && !currentMainWindow.isDestroyed()) {
+    currentMainWindow.setBounds(bounds)
+  }
+})
+
+const RESIZE_BORDER = 4 // px — must stay within WS_THICKFRAME's hit-test area
 
 function buildRoundedWindowShape(width: number, height: number, radius: number) {
   const rects: Electron.Rectangle[] = []
@@ -52,10 +60,10 @@ function buildRoundedWindowShape(width: number, height: number, radius: number) 
 
     if (y < r) {
       const dy = r - y - 0.5
-      inset = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)))
+      inset = Math.min(RESIZE_BORDER, Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy))))
     } else if (y >= height - r) {
       const dy = y - (height - r) + 0.5
-      inset = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)))
+      inset = Math.min(RESIZE_BORDER, Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy))))
     }
 
     rects.push({ x: inset, y, width: Math.max(0, width - inset * 2), height: 1 })
@@ -98,7 +106,6 @@ function createWindow(): BrowserWindow {
 
   // Apply DWM fix before window is visible —抢先 in DWM's first render
   applyDwmFix(window)
-  applyMainWindowShape(window)
 
   window.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -113,7 +120,6 @@ function createWindow(): BrowserWindow {
   // DWM can redraw the inactive frame on focus changes, so keep the HWND style clean.
   const syncWindowChrome = () => {
     applyDwmFix(window)
-    applyMainWindowShape(window)
   }
 
   window.on('focus', syncWindowChrome)
@@ -418,8 +424,15 @@ app.whenReady().then(async () => {
 
   // Handle nerve-file:// protocol for sandbox-safe local file access
   protocol.handle('nerve-file', (request) => {
-    const filePath = decodeURIComponent(request.url.replace('nerve-file://', ''))
-    return net.fetch(`file://${filePath.replace(/\\/g, '/')}`)
+    try {
+      const url = new URL(request.url)
+      const filePath = decodeURIComponent(url.pathname).replace(/^\//, '')
+      const absPath = resolve(filePath)
+      return net.fetch(`file://${absPath.replace(/\\/g, '/')}`)
+    } catch (err: any) {
+      console.warn('[nerve-file] Failed to serve:', request.url, err.message?.slice(0, 200))
+      return new Response('Not found', { status: 404 })
+    }
   })
 
   // Load renderer
