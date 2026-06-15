@@ -52,7 +52,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "@vitest/coverage-v8": "^4.1.8",
-    "electron": "^35.0.0",
+    "electron": "^38.8.6",
     "electron-builder": "^25.0.0",
     "electron-vite": "^3.0.0",
     "tailwindcss": "^4.0.0",
