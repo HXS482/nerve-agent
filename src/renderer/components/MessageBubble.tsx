@@ -926,7 +926,7 @@ const MARKDOWN_COMPONENTS = {
       return (
         <code
           className="px-1.5 py-0.5 rounded-md"
-          style={{ fontSize: 'var(--fs-xs)', background: 'var(--bg-surface-container-high)', color: '#f07178', fontFamily: 'var(--font-mono)' }}
+          style={{ fontSize: 'var(--fs-xs)', background: 'var(--bg-surface-container-high)', color: '#60a5fa', fontFamily: 'var(--font-mono)' }}
           {...props}
         >
           {children}

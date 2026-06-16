@@ -120,7 +120,7 @@
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-blur: none;
 
-  --dynamic-island-bg: rgba(255, 255, 255, 0.85);
+  --dynamic-island-bg: rgba(255, 255, 255, 0.55);
   --dynamic-island-border: rgba(0, 0, 0, 0.1);
   --dynamic-island-blur: blur(20px) saturate(180%);
 
@@ -392,6 +392,12 @@ button, a, input, textarea, select {
 
 .prose tr:last-child td {
   border-bottom: none;
+}
+
+/* Override highlight.js CDN .hljs background (conflicts with CodeBlock component) */
+code.hljs,
+pre.hljs {
+  background: transparent !important;
 }
 
 /* Code highlight — darken for dark theme */

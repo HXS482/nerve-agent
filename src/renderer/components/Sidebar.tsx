@@ -191,13 +191,16 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
         {/* New session button */}
         <button
           onClick={onNewChat}
-          className="flex items-center gap-2 w-full transition-colors cursor-pointer"
+          className="flex items-center gap-2 transition-colors cursor-pointer"
           style={{
             padding: '8px 10px',
-            borderRadius: '6px',
+            borderRadius: '9px',
             background: 'transparent',
             border: '1px dashed var(--border-default)',
             marginBottom: 8,
+            marginLeft: 3,
+            marginRight: 2,
+            width: 'calc(100% - 5px)',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--bg-surface-container)'

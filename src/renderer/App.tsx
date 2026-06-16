@@ -266,13 +266,15 @@ export default function App() {
         <div className="flex-1 flex flex-col min-h-0 relative">
           <ChatPanel messages={claude.messages} isLoading={claude.isLoading} onSend={claude.send} />
           <ApprovalBar />
-          <InputBar
-            onSend={claude.send}
-            onCancel={claude.cancel}
-            isLoading={claude.isLoading}
-          />
         </div>
       </main>
+
+      {/* InputBar outside main so backdrop-filter blurs through the page background */}
+      <InputBar
+        onSend={claude.send}
+        onCancel={claude.cancel}
+        isLoading={claude.isLoading}
+      />
 
       {/* Settings modal */}
       {settingsOpen && (

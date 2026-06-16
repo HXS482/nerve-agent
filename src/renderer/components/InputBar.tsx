@@ -34,6 +34,10 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const setOrbState = useChatStore((s) => s.setOrbState)
+  const sidebarOpen = useChatStore((s) => s.sidebarOpen)
+  const sidebarWidth = useChatStore((s) => s.sidebarWidth)
+  const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
+  const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
 
   const voice = useVoiceInput((text) => {
     setHasVoice(true)
@@ -93,7 +97,17 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
   }
 
   return (
-    <div className="absolute left-0 right-0 z-50 flex flex-col items-center gap-2" style={{ paddingLeft: '11px', paddingRight: '11px', bottom: '8px' }}>
+    <div
+      className="absolute left-0 right-0 z-50 flex flex-col items-center gap-2"
+      style={{
+        paddingLeft: '11px',
+        paddingRight: '11px',
+        bottom: '8px',
+        marginLeft: sidebarOpen ? `${sidebarWidth + 8}px` : '4px',
+        marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
+        transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
+      }}
+    >
       {/* Attachment thumbnails */}
       {attachments.length > 0 && (
         <div className="flex gap-1.5 justify-center">

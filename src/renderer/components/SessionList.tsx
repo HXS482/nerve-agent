@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 
+function formatSessionTime(ts: number): string {
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
+}
+
 interface Branch {
   name: string
   head: string
@@ -142,9 +153,10 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
               onClick={() => onSelectSession(session)}
               className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
               style={{
-                padding: '5px 6px 5px 0px',
+                padding: '5px 2px 5px 0px',
                 marginLeft: '-4px',
-                borderRadius: '6px',
+                marginRight: '-4px',
+                borderRadius: '9px',
                 background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
               }}
               onMouseEnter={(e) => {
@@ -174,7 +186,7 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                   </svg>
                 </button>
               ) : (
-                <span style={{ width: 12, flexShrink: 0 }} />
+                <span style={{ width: 4, flexShrink: 0 }} />
               )}
 
               <span
@@ -193,6 +205,12 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                 }}
               >
                 {session.title}
+              </span>
+              <span
+                className="text-[10px] shrink-0"
+                style={{ color: 'var(--text-on-surface-variant)', fontVariantNumeric: 'tabular-nums', marginRight: '-12px' }}
+              >
+                {formatSessionTime(session.updatedAt || session.createdAt)}
               </span>
               <button
                 onClick={(e) => {
@@ -326,9 +344,9 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                         onClick={() => onSelectSession(session)}
                         className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
                         style={{
-                          padding: '5px 6px 5px 0px',
+                          padding: '5px 2px 5px 0px',
                           marginLeft: '-4px',
-                          borderRadius: '6px',
+                          borderRadius: '9px',
                           background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
                         }}
                         onMouseEnter={(e) => {
