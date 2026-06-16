@@ -365,15 +365,21 @@ export class AgentCore {
       systemPrompt += '\n\n## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
     }
 
-    // Memory recall via TencentDB (500ms timeout to avoid blocking user input)
+    // Memory recall via TencentDB (3s timeout to allow sqlite-vec init + FTS5 + file I/O)
     if (this.memoryCore) {
       try {
+        const start = Date.now()
         const recall = await Promise.race([
           this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
           new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) =>
-            setTimeout(() => r({}), 500),
+            setTimeout(() => {
+              console.warn(`[Nerve] memory recall timed out after 3000ms — no memories injected this turn`)
+              r({})
+            }, 3000),
           ),
         ])
+        const elapsed = Date.now() - start
+        if (elapsed > 1000) console.log(`[Nerve] memory recall took ${elapsed}ms`)
         if (recall.appendSystemContext) systemPrompt += '\n\n' + recall.appendSystemContext
         if (recall.prependContext) messages.push({ role: 'user', content: recall.prependContext })
       } catch (err) {
