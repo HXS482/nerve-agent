@@ -220,7 +220,7 @@ export function GatewayView() {
       style={{
         color: 'var(--text-on-surface)',
         fontFamily: 'var(--font-sans)',
-        backgroundColor: 'var(--bg-background)',
+        backgroundColor: 'var(--bg-surface)',
       }}
     >
       {/* Background glow */}

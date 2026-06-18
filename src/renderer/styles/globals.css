@@ -9,10 +9,10 @@
 /* ===== Proton Dark Theme (default) ===== */
 [data-theme="dark"] {
   --window-alpha-floor: rgba(13, 13, 13, 0.01);
-  --bg-background: #0D0D0D;
+  --bg-background: #111111;
   --bg-mica: rgba(13,13,13,0.15);
   --bg-mica-sidebar: rgba(13,13,13,0.6);
-  --bg-surface: #111111;
+  --bg-surface: #0D0D0D;
   --bg-surface-dim: #131313;
   --bg-surface-bright: #3a3939;
   --bg-surface-container-lowest: #0e0e0e;
