@@ -1,7 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useGitStore } from '../stores/gitStore'
 import { useChatStore } from '../stores/chatStore'
-import { DiffLine } from './DiffLine'
+import { parseUnifiedDiff } from '../lib/diff-parser'
+import { DiffFileHeader } from './DiffFileHeader'
+import { DiffLineView } from './DiffLineView'
 
 export function DiffView() {
   const {
@@ -10,7 +12,8 @@ export function DiffView() {
   } = useGitStore()
   const setView = useChatStore((s) => s.setRightSidebarView)
 
-  const lines = diff ? diff.split('\n') : []
+  const parsed = useMemo(() => parseUnifiedDiff(diff || ''), [diff])
+  const file = parsed.files[0] ?? null
 
   const handleStage = useCallback(async () => {
     if (selectedDiffFile) {
@@ -90,7 +93,7 @@ export function DiffView() {
             </svg>
             <div className="text-[11px] text-center" style={{ color: '#ef4444' }}>{error}</div>
           </div>
-        ) : lines.length === 0 || (lines.length === 1 && lines[0] === '') ? (
+        ) : !file ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-[12px]" style={{ color: 'var(--text-outline-variant)', opacity: 0.5 }}>
               No changes to show
@@ -98,8 +101,14 @@ export function DiffView() {
           </div>
         ) : (
           <div style={{ padding: '4px 0' }}>
-            {lines.map((line, i) => (
-              <DiffLine key={i} line={line} />
+            <DiffFileHeader file={file} />
+            {file.hunks.map((hunk, hi) => (
+              <div key={hi}>
+                <DiffLineView line={{ type: 'hunk', content: hunk.header, oldLine: null, newLine: null }} />
+                {hunk.lines.map((line, li) => (
+                  <DiffLineView key={li} line={line} />
+                ))}
+              </div>
             ))}
           </div>
         )}
