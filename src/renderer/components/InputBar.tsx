@@ -102,7 +102,7 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
       style={{
         paddingLeft: '11px',
         paddingRight: '11px',
-        bottom: '8px',
+        bottom: '12px',
         marginLeft: sidebarOpen ? `${sidebarWidth + 8}px` : '4px',
         marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
         transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
