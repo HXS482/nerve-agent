@@ -33,7 +33,6 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [petVisible, setPetVisible] = useState(true)
-  const resizing = useRef(false)
   const customizeRef = useRef<HTMLDivElement>(null)
 
   // Load available skins (refresh when customize panel opens)
@@ -70,29 +69,6 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
     await window.claude.togglePet()
   }, [])
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    resizing.current = true
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    const startX = e.clientX
-    const startWidth = sidebarWidth
-    const onMove = (e: MouseEvent) => {
-      if (!resizing.current) return
-      const delta = e.clientX - startX
-      setSidebarWidth(startWidth + delta)
-    }
-    const onUp = () => {
-      resizing.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [sidebarWidth, setSidebarWidth])
-
   const handleSelectSession = (session: Session) => {
     onSelectSession(session.id)
   }
@@ -111,13 +87,13 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
 
   return (
     <aside
-      className="fixed left-[1px] top-[1px] bottom-[1px] flex flex-col z-50 transition-[width] duration-300"
+      className="fixed left-0 top-0 bottom-0 flex flex-col z-50 transition-[width] duration-300"
       style={{ width: sidebarWidth, background: 'transparent' }}
     >
       {/* Window Controls / Header */}
       <div className="px-4 pt-6 pb-4" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="flex items-center justify-between mb-4" style={{ marginTop: '8px' }}>
-          <div className="flex gap-2 group/tl" style={{ marginLeft: '10px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="flex gap-2 group/tl" style={{ marginLeft: '8px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <div className="w-3 h-3 rounded-full bg-[#FF5F56] cursor-pointer flex items-center justify-center" onClick={() => window.claude.windowClose()}>
               <svg className="w-2 h-2 opacity-0 group-hover/tl:opacity-100 transition-opacity duration-150" viewBox="0 0 12 12" fill="none" stroke="#4a0002" strokeWidth="2" strokeLinecap="round"><path d="M3 3l6 6M9 3l-6 6" /></svg>
             </div>
@@ -128,7 +104,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
               <svg className="w-2 h-2 opacity-0 group-hover/tl:opacity-100 transition-opacity duration-150" viewBox="0 0 12 12" fill="none" stroke="#003a00" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8l4-4 4 4M2 4l4 4 4-4" /></svg>
             </div>
           </div>
-          <div className="flex items-center gap-1" style={{ paddingRight: '7px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="flex items-center gap-1" style={{ paddingRight: '8px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <button
               onClick={onClose}
               className="p-1.5 rounded-md text-[var(--text-on-surface-variant)] hover:bg-[var(--bg-surface-container-high)] hover:text-[var(--text-on-surface)] transition-colors cursor-pointer"
@@ -185,7 +161,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       </div>
 
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '12px 10px' }}>
+      <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '12px 8px' }}>
         <UsageStatsPanel />
 
         {/* New session button */}
@@ -198,9 +174,9 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
             background: 'transparent',
             border: '1px dashed var(--border-default)',
             marginBottom: 8,
-            marginLeft: 3,
+            marginLeft: 2,
             marginRight: 2,
-            width: 'calc(100% - 5px)',
+            width: 'calc(100% - 4px)',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--bg-surface-container)'
@@ -444,17 +420,6 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       {/* Brain panel */}
       <MemoryBrowser open={memoryOpen} onClose={() => setMemoryOpen(false)} />
 
-      {/* Resize handle */}
-      <div
-        onMouseDown={handleResizeStart}
-        style={{
-          position: 'absolute', top: 8, right: -2, bottom: 8,
-          width: 4, cursor: 'col-resize', borderRadius: 2,
-          background: 'transparent', transition: 'background 0.15s', zIndex: 60,
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-primary)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-      />
     </aside>
   )
 }

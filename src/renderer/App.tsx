@@ -11,7 +11,7 @@ import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import { ResizeBorder } from './components/ResizeBorder'
 import Grainient from './components/Grainient'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 function ApprovalBar() {
   const pendingApprovals = useChatStore((s) => s.pendingApprovals)
@@ -138,6 +138,29 @@ export default function App() {
   const theme = useChatStore((s) => s.theme)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const resizing = useRef(false)
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizing.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const startX = e.clientX
+    const startWidth = sidebarWidth
+    const onMove = (e: MouseEvent) => {
+      if (!resizing.current) return
+      useChatStore.getState().setSidebarWidth(startWidth + (e.clientX - startX))
+    }
+    const onUp = () => {
+      resizing.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [sidebarWidth])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -199,7 +222,7 @@ export default function App() {
         className="flex-1 flex flex-col overflow-hidden relative"
         style={{
           margin: '4px',
-          marginLeft: sidebarOpen ? `${sidebarWidth + 8}px` : '4px',
+          marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '4px',
           marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-default)',
@@ -207,10 +230,21 @@ export default function App() {
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
         }}
       >
+        {/* Sidebar resize handle — left edge of main */}
+        <div
+          onMouseDown={handleResizeStart}
+          style={{
+            position: 'absolute', top: 8, left: -2, bottom: 8,
+            width: 4, cursor: 'col-resize', borderRadius: 2,
+            background: 'transparent', transition: 'background 0.15s', zIndex: 60,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-primary)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        />
         {/* Floating header — drag region + controls */}
         <div
           className="absolute top-0 left-0 right-0 z-30 flex items-center no-select"
-          style={{ padding: '8px 11px', WebkitAppRegion: 'drag' } as React.CSSProperties}
+          style={{ padding: '6px 7px', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* Left: model island (with sidebar toggle when collapsed) */}
           <div
@@ -232,9 +266,9 @@ export default function App() {
           <div
             className={`flex items-center gap-1.5 shrink-0 ${theme === 'aurora' ? 'dynamic-island' : 'bg-[var(--bg-surface-container)]'} border ${theme === 'aurora' ? 'border-[var(--glass-border)]' : 'border-[var(--border-default)]'}`}
             style={{
-              padding: '4px 10px',
-              borderRadius: 11,
-              height: 28,
+              padding: '3px 8px',
+              borderRadius: 9,
+              height: 24,
               WebkitAppRegion: 'no-drag',
               boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
             } as React.CSSProperties}
@@ -261,9 +295,11 @@ export default function App() {
             </button>
           </div>
         </div>
+        {/* Divider below floating header */}
+        <div style={{ position: 'absolute', top: 35, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.15)', zIndex: 35, pointerEvents: 'none' }} />
 
         {/* Chat area */}
-        <div className="flex-1 flex flex-col min-h-0 relative">
+        <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 45 }}>
           <ChatPanel messages={claude.messages} isLoading={claude.isLoading} onSend={claude.send} />
           <ApprovalBar />
         </div>

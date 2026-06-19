@@ -70,10 +70,10 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 transition-colors cursor-pointer ${theme === 'aurora' ? 'dynamic-island' : ''}`}
         style={{
-          padding: '4px 10px',
-          height: 28,
-          borderRadius: 11,
-          fontSize: 11,
+          padding: '3px 8px',
+          height: 24,
+          borderRadius: 9,
+          fontSize: 10,
           fontWeight: 500,
           background: theme === 'aurora' ? undefined : 'var(--bg-surface-container)',
           color: 'var(--text-on-surface-variant)',
