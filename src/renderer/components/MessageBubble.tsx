@@ -825,11 +825,11 @@ function CodeBlock({ language, codeText, children }: {
   const showLineNumbers = !!language && lines.length > 3
 
   return (
-    <div className="group/code" style={{ borderRadius: '12px', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)', fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono)" }}>
+    <div className="group/code" style={{ borderRadius: '8px', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)', fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono)" }}>
       {hasHeader && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-surface-container)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', background: 'var(--bg-surface-container)' }}>
           {language ? (
-            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-outline-variant)', fontFamily: 'var(--font-mono)' }}>
               {language}
             </span>
           ) : <span />}
@@ -837,14 +837,14 @@ function CodeBlock({ language, codeText, children }: {
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity"
-              style={{ fontSize: 'var(--fs-xs)', color: copied ? '#34d399' : 'var(--text-outline)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}
+              style={{ fontSize: '10px', color: copied ? '#34d399' : 'var(--text-outline-variant)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
             >
               {copied ? (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 8l3.5 3.5L13 5" />
                 </svg>
               ) : (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="5" width="8" height="8" rx="1.5" />
                   <path d="M3 11V3.5A.5.5 0 013.5 3H11" />
                 </svg>
@@ -858,17 +858,17 @@ function CodeBlock({ language, codeText, children }: {
         {showLineNumbers && (
           <div
             style={{
-              padding: '12px 0',
-              paddingRight: '12px',
-              paddingLeft: '12px',
+              padding: '8px 0',
+              paddingRight: '8px',
+              paddingLeft: '10px',
               textAlign: 'right',
               userSelect: 'none',
               color: 'var(--text-outline-variant)',
-              fontSize: '12px',
+              fontSize: '11px',
               lineHeight: '1.65',
-              borderRight: '1px solid var(--border-subtle)',
               flexShrink: 0,
-              minWidth: '36px',
+              minWidth: '32px',
+              opacity: 0.5,
             }}
           >
             {lines.map((_, i) => (
