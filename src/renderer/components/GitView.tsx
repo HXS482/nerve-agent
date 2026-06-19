@@ -492,7 +492,7 @@ function HistoryTab() {
           <AnimatePresence>
             {selectedCommitHash === c.hash && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div style={{ borderLeft: `2px solid ${GIT.rowBorder}`, margin: '2px 0 2px 24px', padding: '6px 0' }}>
+                <div style={{ borderLeft: `2px solid ${GIT.rowBorder}`, margin: '2px 0', padding: '6px 0' }}>
                   {loading ? (
                     <div className="flex items-center justify-center py-3 gap-1.5" style={{ fontSize: 10, color: GIT.mutedSub, fontFamily: GIT.fontUi }}><I.Spinner s={9} /> Loading diff…</div>
                   ) : commitDiff ? (

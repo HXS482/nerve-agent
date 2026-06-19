@@ -398,6 +398,14 @@ button, a, input, textarea, select {
 code.hljs,
 pre.hljs {
   background: transparent !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+/* Prevent any highlight.js styling from bleeding to non-code text */
+.prose :not(pre):not(code) {
+  text-shadow: none !important;
+  filter: none !important;
 }
 
 /* Code highlight — darken for dark theme */

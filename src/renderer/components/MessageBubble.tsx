@@ -822,7 +822,7 @@ function CodeBlock({ language, codeText, children }: {
   }
   const hasHeader = !!language || !!codeText
   const lines = codeText?.split('\n') || []
-  const showLineNumbers = lines.length > 3
+  const showLineNumbers = !!language && lines.length > 3
 
   return (
     <div className="group/code" style={{ borderRadius: '12px', overflow: 'hidden', marginBlock: '0.75rem', border: '1px solid var(--border-subtle)', fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono)" }}>
@@ -920,18 +920,10 @@ const MARKDOWN_COMPONENTS = {
       {children}
     </p>
   ),
-  code: ({ className, children, ...props }: any) => {
-    const isInline = !className
-    if (isInline) {
-      return (
-        <code
-          className="px-1.5 py-0.5 rounded-md"
-          style={{ fontSize: 'var(--fs-xs)', background: 'var(--bg-surface-container-high)', color: '#60a5fa', fontFamily: 'var(--font-mono)' }}
-          {...props}
-        >
-          {children}
-        </code>
-      )
+  code: ({ className, children, node, ...props }: any) => {
+    const isInPre = node?.parent?.tagName === 'pre'
+    if (!className && !isInPre) {
+      return <code style={{ color: '#60a5fa', fontFamily: 'var(--font-mono)' }} {...props}>{children}</code>
     }
     return <code className={className} {...props}>{children}</code>
   },
@@ -1094,7 +1086,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
             <span key={i}>
               {part && (
                 <span className="prose">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={MARKDOWN_COMPONENTS}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { detect: false }]]} components={MARKDOWN_COMPONENTS}>
                     {part}
                   </ReactMarkdown>
                 </span>
@@ -1116,7 +1108,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
+          rehypePlugins={[[rehypeHighlight, { detect: false }]]}
           components={MARKDOWN_COMPONENTS}
         >
           {block.text}
