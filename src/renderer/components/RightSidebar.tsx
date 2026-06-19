@@ -540,20 +540,21 @@ export function RightSidebar() {
           {/* Resize handle — left edge */}
           <div
             onMouseDown={handleResizeStart}
-            className="absolute left-0 top-0 bottom-0 z-50"
+            className="absolute left-0 top-0 bottom-0 z-50 group/resize"
             style={{
-              width: 5,
+              width: 8,
               cursor: 'col-resize',
-              background: 'transparent',
-              transition: 'background 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
-            onMouseEnter={(e) => {
-              (e.target as HTMLElement).style.background = 'var(--accent-primary)'
-            }}
-            onMouseLeave={(e) => {
-              if (!resizing.current) (e.target as HTMLElement).style.background = 'transparent'
-            }}
-          />
+          >
+            <div
+              className="opacity-0 group-hover/resize:opacity-100 transition-opacity"
+              style={{
+                width: 3, height: 28, borderRadius: 2,
+                background: 'rgba(255,255,255,0.5)',
+              }}
+            />
+          </div>
           {/* Top Dock — glassmorphism style matching GradientButtonGroup */}
           <div
             className="flex items-center justify-center gap-1.5 shrink-0 relative z-50"

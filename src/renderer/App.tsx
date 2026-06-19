@@ -233,14 +233,21 @@ export default function App() {
         {/* Sidebar resize handle — left edge of main */}
         <div
           onMouseDown={handleResizeStart}
+          className="group/resize"
           style={{
-            position: 'absolute', top: 8, left: -2, bottom: 8,
-            width: 4, cursor: 'col-resize', borderRadius: 2,
-            background: 'transparent', transition: 'background 0.15s', zIndex: 60,
+            position: 'absolute', top: 0, left: -3, bottom: 0,
+            width: 8, cursor: 'col-resize', zIndex: 60,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-primary)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-        />
+        >
+          <div
+            className="opacity-0 group-hover/resize:opacity-100 transition-opacity"
+            style={{
+              width: 3, height: 28, borderRadius: 2,
+              background: 'rgba(255,255,255,0.5)',
+            }}
+          />
+        </div>
         {/* Floating header — drag region + controls */}
         <div
           className="absolute top-0 left-0 right-0 z-30 flex items-center no-select"
