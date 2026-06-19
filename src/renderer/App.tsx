@@ -302,8 +302,6 @@ export default function App() {
             </button>
           </div>
         </div>
-        {/* Divider below floating header */}
-        <div style={{ position: 'absolute', top: 35, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.15)', zIndex: 35, pointerEvents: 'none' }} />
 
         {/* Chat area */}
         <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 45 }}>
