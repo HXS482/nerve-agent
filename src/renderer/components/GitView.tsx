@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useGitStore } from '../stores/gitStore'
 import { useChatStore } from '../stores/chatStore'
 import { useShallow } from 'zustand/react/shallow'
-import { DiffLine } from './DiffLine'
+import { CommitDiffView } from './CommitDiffView'
 
 // ─── Icons ─────────────────────────────────────────────
 
@@ -495,8 +495,11 @@ function HistoryTab() {
                 <div style={{ borderLeft: `2px solid ${GIT.rowBorder}`, margin: '2px 0 2px 24px', padding: '6px 0' }}>
                   {loading ? (
                     <div className="flex items-center justify-center py-3 gap-1.5" style={{ fontSize: 10, color: GIT.mutedSub, fontFamily: GIT.fontUi }}><I.Spinner s={9} /> Loading diff…</div>
-                  ) : commitDiff ? commitDiff.split('\n').map((l, i) => <DiffLine key={i} line={l} />)
-                  : <div className="text-center py-3" style={{ fontSize: 10, color: GIT.mutedSub, opacity: 0.35, fontFamily: GIT.fontUi }}>No diff to show</div>}
+                  ) : commitDiff ? (
+                    <CommitDiffView commitDiff={commitDiff} />
+                  ) : (
+                    <div className="text-center py-3" style={{ fontSize: 10, color: GIT.mutedSub, opacity: 0.35, fontFamily: GIT.fontUi }}>No diff to show</div>
+                  )}
                 </div>
               </motion.div>
             )}
