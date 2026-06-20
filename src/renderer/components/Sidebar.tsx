@@ -93,7 +93,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       {/* Window Controls / Header */}
       <div className="px-4 pt-6 pb-4" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="flex items-center justify-between mb-4" style={{ marginTop: '8px' }}>
-          <div className="flex gap-2 group/tl" style={{ marginLeft: '8px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="flex gap-2 group/tl" style={{ marginLeft: '10px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <div className="w-3 h-3 rounded-full bg-[#FF5F56] cursor-pointer flex items-center justify-center" onClick={() => window.claude.windowClose()}>
               <svg className="w-2 h-2 opacity-0 group-hover/tl:opacity-100 transition-opacity duration-150" viewBox="0 0 12 12" fill="none" stroke="#4a0002" strokeWidth="2" strokeLinecap="round"><path d="M3 3l6 6M9 3l-6 6" /></svg>
             </div>
