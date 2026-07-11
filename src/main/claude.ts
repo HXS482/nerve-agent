@@ -44,9 +44,10 @@ export class ClaudeService {
       settings: this.settings,
     })
 
-    // 从 settings 初始化 config
-    if (this.settings.model) this.core.setModel(this.settings.model)
-    if (this.settings.defaultProvider) this.core.setProvider(this.settings.defaultProvider)
+    // 从 settings 初始化 config (AgentCore already reads these in its own constructor;
+    // these calls re-sync + persist. Fire-and-forget to avoid unhandled rejections.)
+    if (this.settings.model) this.core.setModel(this.settings.model).catch(() => {})
+    if (this.settings.defaultProvider) this.core.setProvider(this.settings.defaultProvider).catch(() => {})
   }
 
   setPetWindow(petWin: BrowserWindow) {
@@ -96,16 +97,16 @@ export class ClaudeService {
     this.core.handleToolApprovalResponse(response.approvalId, response.approved)
   }
 
-  setModel(model: string) {
-    this.core.setModel(model)
+  async setModel(model: string) {
+    await this.core.setModel(model)
   }
 
-  setProvider(providerId: string) {
-    this.core.setProvider(providerId)
+  async setProvider(providerId: string) {
+    await this.core.setProvider(providerId)
   }
 
-  setEffort(effort: ClaudeConfig['effort']) {
-    this.core.setEffort(effort)
+  async setEffort(effort: ClaudeConfig['effort']) {
+    await this.core.setEffort(effort)
   }
 
   async setCwd(cwd: string) {
@@ -113,8 +114,8 @@ export class ClaudeService {
     this.projectDir = cwd
   }
 
-  setPermissionMode(mode: ClaudeConfig['permissionMode']) {
-    this.core.setPermissionMode(mode)
+  async setPermissionMode(mode: ClaudeConfig['permissionMode']) {
+    await this.core.setPermissionMode(mode)
   }
 
   setWindow(window: BrowserWindow) {

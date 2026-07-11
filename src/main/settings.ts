@@ -31,6 +31,8 @@ export interface ClaudeSettings {
   cwd?: string
   model?: string
   provider?: string
+  effort?: string
+  permissionMode?: string
   providers?: Record<string, { type: 'anthropic' | 'openai' | 'google'; baseURL: string; authToken: string; models?: string[] }>
   defaultProvider?: string
   extraction?: { baseURL: string; authToken: string; model: string }
@@ -92,6 +94,8 @@ export function loadSettings(): ClaudeSettings {
       cwd: data.cwd || undefined,
       model: data.model || undefined,
       provider: data.provider || undefined,
+      effort: data.effort || undefined,
+      permissionMode: data.permissionMode || undefined,
       providers: data.providers || undefined,
       defaultProvider: data.defaultProvider || undefined,
       extraction: data.extraction || undefined,
@@ -234,6 +238,20 @@ export async function saveNerveSettings(settings: { baseURL?: string; authToken?
   if (settings.providers !== undefined) existing.providers = settings.providers
   if (settings.defaultProvider !== undefined) existing.defaultProvider = settings.defaultProvider
 
+  await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
+}
+
+export async function saveRuntimeConfig(config: { model?: string; provider?: string; effort?: string; permissionMode?: string }) {
+  await ensureNerveDir()
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(nerveSettingsPath)) {
+    try { existing = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')) } catch { /* ignore */ }
+  }
+  if (config.model !== undefined) existing.model = config.model
+  if (config.provider !== undefined) existing.provider = config.provider
+  if (config.effort !== undefined) existing.effort = config.effort
+  if (config.permissionMode !== undefined) existing.permissionMode = config.permissionMode
   await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
 }
 

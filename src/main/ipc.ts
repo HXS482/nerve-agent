@@ -27,24 +27,24 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     claude.cancel()
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_MODEL, (_event, model: string) => {
-    claude.setModel(model)
+  ipcMain.handle(IPC_CHANNELS.SET_MODEL, async (_event, model: string) => {
+    await claude.setModel(model)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_PROVIDER, (_event, providerId: string) => {
-    claude.setProvider(providerId)
+  ipcMain.handle(IPC_CHANNELS.SET_PROVIDER, async (_event, providerId: string) => {
+    await claude.setProvider(providerId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_EFFORT, (_event, effort: string) => {
-    claude.setEffort(effort as ClaudeConfig['effort'])
+  ipcMain.handle(IPC_CHANNELS.SET_EFFORT, async (_event, effort: string) => {
+    await claude.setEffort(effort as ClaudeConfig['effort'])
   })
 
   ipcMain.handle(IPC_CHANNELS.SET_CWD, async (_event, cwd: string) => {
     await claude.setCwd(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_PERMISSION_MODE, (_event, mode: string) => {
-    claude.setPermissionMode(mode as ClaudeConfig['permissionMode'])
+  ipcMain.handle(IPC_CHANNELS.SET_PERMISSION_MODE, async (_event, mode: string) => {
+    await claude.setPermissionMode(mode as ClaudeConfig['permissionMode'])
   })
 
   ipcMain.handle(IPC_CHANNELS.TOOL_APPROVAL_RESPONSE, (_event, response: ToolApprovalResponse) => {

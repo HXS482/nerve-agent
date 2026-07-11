@@ -10,7 +10,7 @@ import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { FileSessionStore } from '../session-store'
-import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins } from '../settings'
+import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins, saveRuntimeConfig } from '../settings'
 import { getBuiltinTools } from '../tools'
 import { SkillRegistry } from '../skill-registry'
 import { PluginBus } from '../plugin-bus'
@@ -93,6 +93,8 @@ export class AgentCore {
     // Initialize config from settings
     if (this.settings.model) this.config.model = this.settings.model
     if (this.settings.defaultProvider) this.config.provider = this.settings.defaultProvider
+    if (this.settings.effort) this.config.effort = this.settings.effort as ClaudeConfig['effort']
+    if (this.settings.permissionMode) this.config.permissionMode = this.settings.permissionMode as ClaudeConfig['permissionMode']
 
     if (!this.settings.cwd) {
       const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
@@ -777,10 +779,22 @@ export class AgentCore {
     }
   }
 
-  setModel(model: string) { this.config.model = model }
-  setProvider(providerId: string) { this.config.provider = providerId }
-  setEffort(effort: ClaudeConfig['effort']) { this.config.effort = effort }
-  setPermissionMode(mode: ClaudeConfig['permissionMode']) { this.config.permissionMode = mode }
+  async setModel(model: string) {
+    this.config.model = model
+    await saveRuntimeConfig({ model })
+  }
+  async setProvider(providerId: string) {
+    this.config.provider = providerId
+    await saveRuntimeConfig({ provider: providerId })
+  }
+  async setEffort(effort: ClaudeConfig['effort']) {
+    this.config.effort = effort
+    await saveRuntimeConfig({ effort })
+  }
+  async setPermissionMode(mode: ClaudeConfig['permissionMode']) {
+    this.config.permissionMode = mode
+    await saveRuntimeConfig({ permissionMode: mode })
+  }
 
   async setCwd(cwd: string) {
     this.config.cwd = cwd
