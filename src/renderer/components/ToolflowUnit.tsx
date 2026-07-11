@@ -6,6 +6,7 @@ import {
   type UnitStatus,
 } from './toolflow-utils'
 import { ToolflowRow, type RowStatus } from './ToolflowRow'
+import { useChatStore } from '../stores/chatStore'
 
 interface Props {
   blocks: ContentBlock[]
@@ -17,6 +18,7 @@ export const ToolflowUnit = memo(function ToolflowUnit({ blocks }: Props) {
 
   const unitStatus: UnitStatus = useMemo(() => deriveUnitStatus(blocks), [blocks])
   const { reasoningText, tools } = useMemo(() => pairTools(blocks), [blocks])
+  const pendingApprovals = useChatStore((s) => s.pendingApprovals)
 
   // autoMode latch：状态变化时自动展开/收起，用户手动操作后锁定
   useEffect(() => {
@@ -79,15 +81,21 @@ export const ToolflowUnit = memo(function ToolflowUnit({ blocks }: Props) {
               <div className="toolflow-section-label">工具</div>
               <div className="toolflow-tool-list">
                 {tools.map((pair, i) => {
-                  const status: RowStatus = pair.result
-                    ? (pair.result.is_error ? 'error' : 'done')
-                    : 'running'
+                  const toolName = pair.use.type === 'tool_use' ? pair.use.name : ''
+                  // NOTE: ToolApprovalRequest carries no toolCallId, so we match by
+                  // toolName. If two tools of the same name run concurrently, both
+                  // would render as pending — acceptable given the current data model.
+                  const isPending = pendingApprovals.some((a) => a.toolName === toolName)
                   const isSubagent =
                     pair.use.type === 'tool_use' &&
                     (pair.use.name === 'spawn_subagent' ||
                       pair.use.name === 'parallel_subagents' ||
                       pair.use.name === 'chain_subagents')
                   const toolCallId = isSubagent && pair.use.type === 'tool_use' ? pair.use.id : undefined
+                  let status: RowStatus
+                  if (isPending) status = 'pending'
+                  else if (pair.result) status = pair.result.is_error ? 'error' : 'done'
+                  else status = 'running'
                   return (
                     <ToolflowRow
                       key={i}
