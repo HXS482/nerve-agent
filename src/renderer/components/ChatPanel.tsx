@@ -81,17 +81,6 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
               </Fragment>
             )
           })}
-          {isLoading && (
-            <div className="flex justify-center my-4 animate-fade-in">
-              <div
-                className="flex items-center gap-2 px-3 py-1 rounded-full"
-                style={{ background: 'rgba(223,168,143,0.12)' }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse-soft" style={{ background: '#dfa88f' }} />
-                <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08px', color: '#dfa88f', textTransform: 'uppercase' }}>Thinking</span>
-              </div>
-            </div>
-          )}
           <div ref={bottomRef} />
         </div>
       </div>
