@@ -544,7 +544,17 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
         <PillGroup
           options={allProviderIds}
           value={activeProvider}
-          onChange={(id) => onUpdateConfig({ provider: id })}
+          onChange={(id) => {
+            const newModels = providerModels[id] || []
+            const currentModel = config.model
+            const modelExistsInNewProvider = newModels.some((m) => m === currentModel)
+            if (newModels.length > 0 && !modelExistsInNewProvider) {
+              // Current model is not in the new provider's list — switch to first available
+              onUpdateConfig({ provider: id, model: newModels[0] })
+            } else {
+              onUpdateConfig({ provider: id })
+            }
+          }}
         />
         {hasModels && (
           <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
