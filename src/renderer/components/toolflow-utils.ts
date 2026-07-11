@@ -1,4 +1,3 @@
-import type React from 'react'
 import type { ContentBlock } from '../../shared/types'
 
 // ─── 类型 ───
@@ -107,22 +106,6 @@ export const TIMELINE = {
   done: '#c08532',
   error: '#cf2d56',
 } as const
-
-export const TOOL_COLORS: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
-  Read: { color: TIMELINE.read, bg: 'rgba(159,187,224,0.12)', icon: null },
-  Write: { color: TIMELINE.done, bg: 'rgba(192,133,50,0.12)', icon: null },
-  Edit: { color: TIMELINE.edit, bg: 'rgba(192,168,221,0.12)', icon: null },
-  Bash: { color: TIMELINE.grep, bg: 'rgba(159,201,162,0.12)', icon: null },
-  Glob: { color: TIMELINE.grep, bg: 'rgba(159,201,162,0.12)', icon: null },
-  Grep: { color: TIMELINE.grep, bg: 'rgba(159,201,162,0.12)', icon: null },
-  Agent: { color: TIMELINE.thinking, bg: 'rgba(223,168,143,0.12)', icon: null },
-}
-
-const DEFAULT_TOOL_COLOR = { color: 'var(--text-outline)', bg: 'var(--bg-surface-container)', icon: null }
-
-export function getToolStyle(name: string) {
-  return TOOL_COLORS[name] || DEFAULT_TOOL_COLOR
-}
 
 export function getToolSummary(name: string, input: Record<string, unknown> | undefined): string {
   if (!input) return ''

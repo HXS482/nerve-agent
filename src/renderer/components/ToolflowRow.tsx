@@ -1,4 +1,4 @@
-import { useState, memo } from 'react'
+import { useState, memo, useMemo } from 'react'
 import type { ContentBlock } from '../../shared/types'
 import { getToolSummary, getToolDetail } from './toolflow-utils'
 import { useSubagentTracker } from '../stores/subagentTracker'
@@ -21,14 +21,21 @@ export const ToolflowRow = memo(function ToolflowRow({ pair, status, toolCallId 
   const summary = isUse ? getToolSummary(name, input) : ''
   const detail = isUse ? getToolDetail(name, input, pair.result) : ''
 
-  const subagentTasks = useSubagentTracker((s) => {
+  // Select cards with a stable reference (Zustand Object.is on s.cards avoids
+  // re-rendering every row on each tracker update); derive tasks in useMemo.
+  const cards = useSubagentTracker((s) => s.cards)
+  const subagentTasks = useMemo(() => {
     if (!toolCallId) return null
-    for (const card of s.cards) {
-      const tasks = card.tasks.filter((t) => t.toolCallId === toolCallId)
+    for (const card of cards) {
+      // spawn/chain tasks use toolCallId === parent id; parallel tasks use
+      // `${parent}-t${i}` per child, so match by prefix.
+      const tasks = card.tasks.filter(
+        (t) => t.toolCallId === toolCallId || t.toolCallId.startsWith(`${toolCallId}-t`)
+      )
       if (tasks.length > 0) return tasks
     }
     return null
-  })
+  }, [cards, toolCallId])
   const hasSubagent = !!subagentTasks && subagentTasks.length > 0
   const clickable = !!detail || hasSubagent
 
