@@ -46,7 +46,7 @@ declare global {
       onError: (callback: (data: { message: string }) => void) => () => void
       onDone: (callback: (data: { sessionId: string; cost: number; maxContextTokens: number }) => void) => () => void
       getNerveSettings: () => Promise<any>
-      saveNerveSettings: (settings: any) => Promise<void>
+      saveNerveSettings: (settings: any) => Promise<{ ok: boolean; error?: string; models?: { alias: string; name: string }[] }>
       testConnection: (baseURL: string, authToken: string) => Promise<{ ok: boolean; error?: string }>
       fetchModels: (baseURL: string, authToken: string) => Promise<{ ok: boolean; models?: string[]; error?: string }>
       getMcpServers: () => Promise<Record<string, any>>

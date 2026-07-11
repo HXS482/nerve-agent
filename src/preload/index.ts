@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, FileAttachment, ToolApprovalRequest, ToolApprovalResponse } from '../shared/types'
+import { IPC_CHANNELS, FileAttachment, ToolApprovalRequest, ToolApprovalResponse, ModelInfo } from '../shared/types'
+
+/** Result of saving nerve settings. */
+export interface SaveNerveSettingsResult {
+  ok: boolean
+  error?: string
+  models?: ModelInfo[]
+}
 
 const api = {
   sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) =>
@@ -91,7 +98,7 @@ const api = {
     ipcRenderer.send(IPC_CHANNELS.PET_SET_SHAPE, rects),
   // Nerve settings
   getNerveSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GET_NERVE_SETTINGS),
-  saveNerveSettings: (settings: any) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_NERVE_SETTINGS, settings),
+  saveNerveSettings: (settings: any): Promise<SaveNerveSettingsResult> => ipcRenderer.invoke(IPC_CHANNELS.SAVE_NERVE_SETTINGS, settings),
   testConnection: (baseURL: string, authToken: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.TEST_CONNECTION, { baseURL, authToken }),
   fetchModels: (baseURL: string, authToken: string) =>

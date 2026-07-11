@@ -190,14 +190,18 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   })
 
   ipcMain.handle(IPC_CHANNELS.SAVE_NERVE_SETTINGS, async (_event, settings) => {
-    // Basic type validation — reject obviously malformed payloads
-    if (settings && typeof settings !== 'object') return getAvailableModels()
-    if (settings.baseURL !== undefined && typeof settings.baseURL !== 'string') return getAvailableModels()
-    if (settings.authToken !== undefined && typeof settings.authToken !== 'string') return getAvailableModels()
-    if (settings.providers !== undefined && (typeof settings.providers !== 'object' || Array.isArray(settings.providers))) return getAvailableModels()
-    await saveNerveSettings(settings)
-    claude.reloadProvider()
-    return getAvailableModels()
+    try {
+      // Basic type validation — reject obviously malformed payloads
+      if (settings && typeof settings !== 'object') throw new Error('Invalid settings format')
+      if (settings.baseURL !== undefined && typeof settings.baseURL !== 'string') throw new Error('baseURL must be a string')
+      if (settings.authToken !== undefined && typeof settings.authToken !== 'string') throw new Error('authToken must be a string')
+      if (settings.providers !== undefined && (typeof settings.providers !== 'object' || Array.isArray(settings.providers))) throw new Error('providers must be an object')
+      await saveNerveSettings(settings)
+      claude.reloadProvider()
+      return { ok: true, models: await getAvailableModels() }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.TEST_CONNECTION, async (_event, { baseURL, authToken }) => {

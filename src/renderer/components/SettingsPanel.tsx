@@ -600,6 +600,7 @@ function ProviderTab() {
   const [baseURL, setBaseURL] = useState('')
   const [authToken, setAuthToken] = useState('')
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [newId, setNewId] = useState('')
@@ -627,12 +628,19 @@ function ProviderTab() {
   }, [])
 
   const handleSave = async () => {
-    await window.claude.saveNerveSettings({
+    const result = await window.claude.saveNerveSettings({
       baseURL, authToken,
       modelAliases: aliases,
       providers,
       defaultProvider,
     })
+    if (!result || !result.ok) {
+      setSaved(false)
+      setSaveError(result?.error || 'Save failed')
+      console.error('Save failed:', result?.error)
+      return
+    }
+    setSaveError(null)
     // Sync providerModels and defaultProvider in chatStore so UI updates immediately
     const { setProviderModels, setDefaultProvider } = useChatStore.getState()
     setDefaultProvider(defaultProvider)
@@ -1015,6 +1023,11 @@ function ProviderTab() {
 
       <div style={{ marginTop: 16 }}>
         <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save All'}</PrimaryButton>
+        {saveError && (
+          <div className="text-[11px]" style={{ color: 'var(--danger, #f87171)', marginTop: 8 }}>
+            Save failed: {saveError}
+          </div>
+        )}
       </div>
     </div>
   )
