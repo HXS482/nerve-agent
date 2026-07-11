@@ -82,7 +82,20 @@ export const ToolflowUnit = memo(function ToolflowUnit({ blocks }: Props) {
                   const status: RowStatus = pair.result
                     ? (pair.result.is_error ? 'error' : 'done')
                     : 'running'
-                  return <ToolflowRow key={i} pair={pair} status={status} />
+                  const isSubagent =
+                    pair.use.type === 'tool_use' &&
+                    (pair.use.name === 'spawn_subagent' ||
+                      pair.use.name === 'parallel_subagents' ||
+                      pair.use.name === 'chain_subagents')
+                  const toolCallId = isSubagent && pair.use.type === 'tool_use' ? pair.use.id : undefined
+                  return (
+                    <ToolflowRow
+                      key={i}
+                      pair={pair}
+                      status={status}
+                      toolCallId={toolCallId}
+                    />
+                  )
                 })}
               </div>
             </>

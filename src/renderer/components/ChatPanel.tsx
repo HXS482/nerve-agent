@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useMemo, useCallback, Fragment } from 'react'
 import { ChatMessage } from '../../shared/types'
 import { MessageBubble } from './MessageBubble'
-import { SubagentTracker } from './SubagentTracker'
 import { useChatStore } from '../stores/chatStore'
 import ASCIIText from './ASCIIText'
 
@@ -82,7 +81,6 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
               </Fragment>
             )
           })}
-          <SubagentTracker />
           {isLoading && (
             <div className="flex justify-center my-4 animate-fade-in">
               <div
