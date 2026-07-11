@@ -1087,3 +1087,100 @@ pre.hljs {
 }
 .toolflow-detail::-webkit-scrollbar { width: 3px; }
 .toolflow-detail::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
+
+/* 收起态胶囊 */
+.toolflow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 11px;
+  background: rgba(223,168,143,0.10);
+  border: 1px solid rgba(223,168,143,0.25);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: #c9a899;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
+  margin: 6px 0;
+}
+.toolflow-pill:hover {
+  background: rgba(223,168,143,0.16);
+  border-color: rgba(223,168,143,0.4);
+}
+.toolflow-pill[data-status="done"] {
+  background: rgba(141,184,141,0.08);
+  border-color: rgba(141,184,141,0.22);
+  color: #9ab8a0;
+}
+.toolflow-pill[data-status="error"] {
+  background: rgba(207,45,86,0.08);
+  border-color: rgba(207,45,86,0.25);
+  color: #d48898;
+}
+.toolflow-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+}
+.toolflow-pill[data-status="active"] .toolflow-pill-dot {
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+.toolflow-pill-chevron {
+  opacity: 0.6;
+  font-size: 10px;
+  transition: transform 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+.toolflow-pill-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+/* 展开态容器 */
+.toolflow-expanded {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  background: rgba(223,168,143,0.04);
+  border: 1px solid rgba(223,168,143,0.14);
+  border-radius: var(--radius-md);
+  animation: toolflow-detail-in 0.18s ease-out;
+}
+
+/* 展开态：分区标签 */
+.toolflow-section-label {
+  font-size: 10px;
+  color: var(--text-outline-variant);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 8px 0 4px;
+}
+.toolflow-section-label:first-child {
+  margin-top: 0;
+}
+
+/* 展开态：思考文本 */
+.toolflow-reasoning {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-container);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-on-surface-variant);
+  max-height: 280px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 6px;
+}
+.toolflow-reasoning::-webkit-scrollbar { width: 3px; }
+.toolflow-reasoning::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
+
+/* 展开态：工具列表区 */
+.toolflow-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
