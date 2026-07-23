@@ -5,24 +5,24 @@ import { UsageStats } from '../../shared/types'
 
 const ROWS = 7 // Sun=0 .. Sat=6
 
-/** UTC-safe date key — avoids toISOString timezone offset */
+/** Local date key — matches the LOCAL-time bucketing used by the backend. */
 function toDateKey(d: Date): string {
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(d.getUTCDate()).padStart(2, '0')
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
 function buildYearGrid(dailyActivity: Record<string, { messages: number; tokens: number }>): { grid: (number | null)[][]; maxVal: number } {
   const now = new Date()
-  const todayDow = now.getUTCDay()
+  const todayDow = now.getDay()
 
-  // End = today (UTC)
-  const endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  // End = today (local)
+  const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
   // Start = 52 weeks before the Sunday of today's week
   const startDate = new Date(endDate)
-  startDate.setUTCDate(startDate.getUTCDate() - todayDow - 52 * 7)
+  startDate.setDate(startDate.getDate() - todayDow - 52 * 7)
 
   // Build count map
   const countMap: Record<string, number> = {}
@@ -41,7 +41,7 @@ function buildYearGrid(dailyActivity: Record<string, { messages: number; tokens:
   for (let week = 0; week < totalWeeks; week++) {
     for (let day = 0; day < ROWS; day++) {
       const cellDate = new Date(startDate)
-      cellDate.setUTCDate(cellDate.getUTCDate() + week * 7 + day)
+      cellDate.setDate(cellDate.getDate() + week * 7 + day)
       if (cellDate > endDate) { grid[day][week] = null; continue }
 
       const key = toDateKey(cellDate)
