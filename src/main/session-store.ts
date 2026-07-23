@@ -261,6 +261,7 @@ export class FileSessionStore {
     hourlyDistribution: number[]
     modelUsage: Record<string, number>
     firstSessionAt: number
+    dailyHourlyTokens: Record<string, number[]>
   }> {
     const sessions = await this.listSessions()
     let totalSessions = 0
@@ -270,7 +271,13 @@ export class FileSessionStore {
     const dailyActivity: Record<string, { messages: number; tokens: number }> = {}
     const hourlyDistribution = new Array(24).fill(0)
     const modelUsage: Record<string, number> = {}
+    const dailyHourlyTokens: Record<string, number[]> = {}
     let firstSessionAt = Infinity
+
+    const localDateKey = (ms: number): string => {
+      const d = new Date(ms)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
 
     for (const { sessionId, mtime } of sessions) {
       totalSessions++
@@ -289,14 +296,14 @@ export class FileSessionStore {
           : typeof rawTs === 'string' ? new Date(rawTs).getTime() || mtime
           : mtime
 
+        // Hoisted once per entry; reused by message-count + token blocks.
+        const dateKey = localDateKey(ts)
+        const hour = new Date(ts).getHours()
+
         if (e.type === 'user' || e.type === 'assistant') {
           totalMessages++
-          const d = new Date(ts)
-          const dateKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
           if (!dailyActivity[dateKey]) dailyActivity[dateKey] = { messages: 0, tokens: 0 }
           dailyActivity[dateKey].messages++
-
-          const hour = new Date(ts).getHours()
           hourlyDistribution[hour]++
         }
 
@@ -307,9 +314,10 @@ export class FileSessionStore {
             const out = usage.outputTokens || 0
             totalInputTokens += inp
             totalOutputTokens += out
-            const td = new Date(ts)
-            const dateKey = `${td.getUTCFullYear()}-${String(td.getUTCMonth() + 1).padStart(2, '0')}-${String(td.getUTCDate()).padStart(2, '0')}`
-            if (dailyActivity[dateKey]) dailyActivity[dateKey].tokens += inp + out
+            if (!dailyActivity[dateKey]) dailyActivity[dateKey] = { messages: 0, tokens: 0 }
+            dailyActivity[dateKey].tokens += inp + out
+            if (!dailyHourlyTokens[dateKey]) dailyHourlyTokens[dateKey] = new Array(24).fill(0)
+            dailyHourlyTokens[dateKey][hour] += inp + out
           }
           const model = e.model as string | undefined
           if (model) {
@@ -331,6 +339,7 @@ export class FileSessionStore {
       hourlyDistribution,
       modelUsage,
       firstSessionAt,
+      dailyHourlyTokens,
     }
   }
 

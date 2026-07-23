@@ -314,6 +314,8 @@ export interface UsageStats {
   modelUsage: Record<string, number>
   // earliest session timestamp (ms)
   firstSessionAt: number
+  // Local date `YYYY-MM-DD` → 24-element array of token counts per hour.
+  dailyHourlyTokens: Record<string, number[]>
 }
 
 // Provider info
