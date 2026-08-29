@@ -36,6 +36,8 @@ export interface ClaudeSettings {
   providers?: Record<string, { type: 'anthropic' | 'openai' | 'google'; baseURL: string; authToken: string; models?: string[] }>
   defaultProvider?: string
   extraction?: { baseURL: string; authToken: string; model: string }
+  soul?: string
+  persona?: string
   memoryTDAI?: {
     enabled: boolean
     embedding?: { provider: string; baseUrl: string; apiKey: string; model: string; dimensions: number }
@@ -43,6 +45,16 @@ export interface ClaudeSettings {
     recall?: { strategy: 'embedding' | 'keyword' | 'hybrid'; maxResults: number }
     offload?: { enabled: boolean; model?: string }
   }
+}
+
+// Soul 读取：settings.json 优先；首次迁移期回退读 ~/.nerve/CLAUDE.md
+function loadSoul(data: Record<string, unknown>): string | undefined {
+  if (typeof data.soul === 'string') return data.soul
+  const legacyPath = join(NERVE_DIR, 'CLAUDE.md')
+  if (existsSync(legacyPath)) {
+    try { return readFileSync(legacyPath, 'utf-8') } catch { /* ignore */ }
+  }
+  return undefined
 }
 
 // Sync version — used by ClaudeService constructor (can't be async)
@@ -99,6 +111,9 @@ export function loadSettings(): ClaudeSettings {
       providers: data.providers || undefined,
       defaultProvider: data.defaultProvider || undefined,
       extraction: data.extraction || undefined,
+      soul: loadSoul(data),
+      persona: typeof data.persona === 'string' ? data.persona : undefined,
+      memoryTDAI: data.memoryTDAI || undefined,
     }
   } catch {
     return defaults
@@ -177,6 +192,8 @@ export async function getNerveSettings() {
   let stt: Record<string, string> = {}
   let providers: Record<string, { type: string; baseURL: string; authToken: string; models?: string[] }> = {}
   let defaultProvider = ''
+  let soul = ''
+  let persona = ''
   if (existsSync(nerveSettingsPath)) {
     try {
       const data = JSON.parse(await readFile(nerveSettingsPath, 'utf-8'))
@@ -184,6 +201,8 @@ export async function getNerveSettings() {
       stt = data.stt || {}
       providers = data.providers || {}
       defaultProvider = data.defaultProvider || ''
+      soul = loadSoul(data) || ''
+      persona = typeof data.persona === 'string' ? data.persona : ''
     } catch { /* ignore */ }
   }
   return {
@@ -195,10 +214,12 @@ export async function getNerveSettings() {
     sttModel: stt.model || 'whisper-1',
     providers,
     defaultProvider,
+    soul,
+    persona,
   }
 }
 
-export async function saveNerveSettings(settings: { baseURL?: string; authToken?: string; modelAliases?: Record<string, string>; sttEndpoint?: string; sttApiKey?: string; sttModel?: string; providers?: Record<string, { type: string; baseURL: string; authToken: string; models?: string[] }>; defaultProvider?: string }) {
+export async function saveNerveSettings(settings: { baseURL?: string; authToken?: string; modelAliases?: Record<string, string>; sttEndpoint?: string; sttApiKey?: string; sttModel?: string; providers?: Record<string, { type: string; baseURL: string; authToken: string; models?: string[] }>; defaultProvider?: string; soul?: string; persona?: string }) {
   await ensureNerveDir()
   const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
 
@@ -237,6 +258,11 @@ export async function saveNerveSettings(settings: { baseURL?: string; authToken?
   // Providers config
   if (settings.providers !== undefined) existing.providers = settings.providers
   if (settings.defaultProvider !== undefined) existing.defaultProvider = settings.defaultProvider
+
+  // Soul (agent persona / system prompt)
+  if (settings.soul !== undefined) existing.soul = settings.soul
+  // Persona (agent 人设层：说话风格/角色，独立于记忆系统的用户画像)
+  if (settings.persona !== undefined) existing.persona = settings.persona
 
   await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
 }

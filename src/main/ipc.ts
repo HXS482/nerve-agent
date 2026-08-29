@@ -196,6 +196,8 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       if (settings.baseURL !== undefined && typeof settings.baseURL !== 'string') throw new Error('baseURL must be a string')
       if (settings.authToken !== undefined && typeof settings.authToken !== 'string') throw new Error('authToken must be a string')
       if (settings.providers !== undefined && (typeof settings.providers !== 'object' || Array.isArray(settings.providers))) throw new Error('providers must be an object')
+      if (settings.soul !== undefined && typeof settings.soul !== 'string') throw new Error('soul must be a string')
+      if (settings.persona !== undefined && typeof settings.persona !== 'string') throw new Error('persona must be a string')
       await saveNerveSettings(settings)
       claude.reloadProvider()
       return { ok: true, models: await getAvailableModels() }
