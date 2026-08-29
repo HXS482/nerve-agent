@@ -120,7 +120,8 @@ export class PluginBus extends EventEmitter {
 
         const isZodSchema = mod.schema && typeof mod.schema.parse === 'function' && mod.schema._def
         const input_schema = isZodSchema ? zodToInputSchema(mod.schema) : mod.schema
-        const qualifiedName = `${manifest.name}:${toolEntry.name}`
+        // Note: LLM APIs (Anthropic/Kimi) only allow [a-zA-Z0-9_-] in tool names — ':' would be rejected
+        const qualifiedName = `${manifest.name}__${toolEntry.name}`
 
         const executor = async (args: any) => {
           try {

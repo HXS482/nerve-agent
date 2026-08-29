@@ -34,6 +34,7 @@ declare global {
       sendPetColorScheme: (scheme: string) => void
       onPetColorScheme: (callback: (scheme: string) => void) => () => void
       undockPet: () => Promise<void>
+      setPetSidebarVisible: (visible: boolean) => void
       listPetSkins: () => Promise<any[]>
       importPetSkin: () => Promise<any | null>
       deletePetSkin: (id: string) => Promise<boolean>

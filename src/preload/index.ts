@@ -84,6 +84,8 @@ const api = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.PET_COLOR_SCHEME, handler)
   },
   undockPet: () => ipcRenderer.invoke(IPC_CHANNELS.PET_UNDOCK),
+  setPetSidebarVisible: (visible: boolean) =>
+    ipcRenderer.send(IPC_CHANNELS.PET_SIDEBAR_VISIBILITY, visible),
   // Pet skins
   listPetSkins: () => ipcRenderer.invoke(IPC_CHANNELS.PET_LIST_SKINS),
   importPetSkin: () => ipcRenderer.invoke(IPC_CHANNELS.PET_IMPORT_SKIN),

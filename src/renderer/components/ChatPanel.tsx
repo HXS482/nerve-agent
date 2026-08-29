@@ -72,7 +72,7 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
       style={{ paddingTop: '32px', paddingBottom: '80px' }}
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
-        <div style={{ maxWidth: '78%', margin: '0 auto' }}>
+        <div style={{ maxWidth: '90%', margin: '0 auto' }}>
           {filteredMessages.map((msg, i) => {
             const prev = i > 0 ? filteredMessages[i - 1] : undefined
             return (

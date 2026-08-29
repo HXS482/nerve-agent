@@ -356,12 +356,9 @@ export class AgentCore {
 
     const messages = [...history]
 
-    // 构建系统提示
-    let systemPrompt = ''
-    const nerveClaudeMd = join(homedir(), '.nerve', 'CLAUDE.md')
-    if (existsSync(nerveClaudeMd)) {
-      systemPrompt = readFileSync(nerveClaudeMd, 'utf-8')
-    }
+    // 构建系统提示：soul（行为准则）+ persona（人设/说话风格），均在设置面板维护
+    let systemPrompt = this.settings.soul || ''
+    if (this.settings.persona) systemPrompt += '\n\n' + this.settings.persona
 
     if (payload.prompt.startsWith('[语音指令]')) {
       systemPrompt += '\n\n## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'

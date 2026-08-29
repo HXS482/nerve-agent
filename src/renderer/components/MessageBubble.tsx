@@ -190,7 +190,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     const text = getMessageText(message)
 
     return (
-      <div className="animate-fade-in flex flex-col items-end" style={{ paddingInline: 'var(--sp-md)', marginBottom: sameRole ? 8 : 48 }}>
+      <div className="animate-fade-in flex flex-col items-end" style={{ marginBottom: sameRole ? 8 : 48 }}>
         {/* Image thumbnails */}
         {imageBlocks.length > 0 && (
           <div className="flex gap-1.5 mb-1.5">

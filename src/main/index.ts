@@ -2,8 +2,10 @@ import './proxy-bootstrap' // 必须在最前面，全局代理 HTTP/HTTPS
 import { app, BrowserWindow, shell, ipcMain, screen, protocol, net, Menu } from 'electron'
 import { join, resolve } from 'path'
 import { homedir } from 'os'
+import { existsSync } from 'fs'
 
 import { is } from '@electron-toolkit/utils'
+import chokidar from 'chokidar'
 import { ClaudeService } from './claude'
 import { GitService } from './git'
 import { PetSkinManager } from './pet-skins'
@@ -203,6 +205,7 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
   // Pet state
   let petDocked = false
   let petVisible = false
+  let sidebarVisible = true // 主窗口侧边栏是否展开（吸附落点仅在展开时生效）
   let dragOffset: { x: number; y: number } | null = null
   let mainWindowRef: BrowserWindow | null = null
   let currentWinPos: { x: number; y: number } = { x: screenW - 200, y: screenH - 240 }
@@ -228,8 +231,15 @@ function createPetWindow(): { petWin: BrowserWindow; setMainWindow: (win: Browse
     }
   })
 
+  ipcMain.on(IPC_CHANNELS.PET_SIDEBAR_VISIBILITY, (_event, visible: boolean) => {
+    sidebarVisible = !!visible
+  })
+
   ipcMain.on(IPC_CHANNELS.PET_DRAG_END, () => {
     dragOffset = null
+
+    // 侧边栏隐藏时，吸附区不存在，直接不落位
+    if (!sidebarVisible) return
 
     const petCenterX = currentWinPos.x + 64
     const petCenterY = currentWinPos.y + 80
@@ -332,6 +342,20 @@ app.whenReady().then(async () => {
   const gitService = new GitService()
   claude.setPetWindow(petWin)
 
+  // Watch settings.json for external edits → hot reload soul/persona/providers
+  // (事件驱动，平时零开销；debounce 300ms 吸收原子写的多次事件)
+  const nerveSettingsFile = join(homedir(), '.nerve', 'settings.json')
+  if (existsSync(nerveSettingsFile)) {
+    let settingsReloadTimer: NodeJS.Timeout | null = null
+    chokidar.watch(nerveSettingsFile, { ignoreInitial: true }).on('all', () => {
+      if (settingsReloadTimer) clearTimeout(settingsReloadTimer)
+      settingsReloadTimer = setTimeout(() => {
+        claude.reloadProvider()
+        console.log('[Nerve] settings.json changed on disk — reloaded soul/persona/providers')
+      }, 300)
+    })
+  }
+
   // Initialize TencentDB memory system
   const memoryCore = new MemoryTdaiCore(projectDir, claude.getSettings())
   memoryCore.initialize().catch((err) => console.error('[Nerve] MemoryTdaiCore init failed:', err))
@@ -342,7 +366,7 @@ app.whenReady().then(async () => {
   if (offloadSettings.extraction?.baseURL && offloadSettings.extraction?.authToken) {
     try {
       const offloadClient = new OpenAI({
-        baseURL: offloadSettings.extraction.baseURL.replace(/\/v1$/, ''),
+        baseURL: offloadSettings.extraction.baseURL,
         apiKey: offloadSettings.extraction.authToken,
       })
       const offloadBridge = new OffloadBridge({
