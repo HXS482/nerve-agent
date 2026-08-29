@@ -47,7 +47,7 @@ export interface LoadedPlugin {
 // --- Plugin Tool Definition ---
 
 export interface PluginToolDef {
-  name: string           // namespaced: "pluginId:toolName"
+  name: string           // namespaced: "pluginId__toolName" (API-safe: no ':')
   rawName: string        // original name from manifest
   description: string
   input_schema: Record<string, unknown>
