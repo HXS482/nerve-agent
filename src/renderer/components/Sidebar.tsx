@@ -115,16 +115,6 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
                 <line x1="9" y1="3" x2="9" y2="21" />
               </svg>
             </button>
-            <button
-              onClick={onNewChat}
-              className="p-1.5 rounded-md text-[var(--text-on-surface-variant)] hover:bg-[var(--bg-surface-container-high)] hover:text-[var(--text-on-surface)] transition-colors cursor-pointer"
-              title="New chat"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
           </div>
         </div>
 

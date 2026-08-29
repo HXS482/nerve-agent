@@ -166,6 +166,11 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
+  // 同步侧边栏可见性给主进程：宠物吸附落点仅在侧边栏展开时生效
+  useEffect(() => {
+    window.claude.setPetSidebarVisible?.(sidebarOpen)
+  }, [sidebarOpen])
+
   return (
     <div
       className="h-screen w-screen flex overflow-hidden"
@@ -173,7 +178,7 @@ export default function App() {
         background: 'var(--bg-background)',
         borderRadius: 'var(--app-window-radius)',
         clipPath: 'inset(0 round var(--app-window-radius))',
-        border: '1px solid var(--border-default)',
+        border: '1.5px solid var(--border-default)',
       }}
     >
       {/* Aurora theme background */}
@@ -225,7 +230,7 @@ export default function App() {
           marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '4px',
           marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
           background: 'var(--bg-surface)',
-          border: '1px solid var(--border-default)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--app-shell-radius)',
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
         }}
@@ -269,6 +274,26 @@ export default function App() {
           {/* Center spacer */}
           <div className="flex-1" />
 
+          {/* Center: task executing loader（常驻） */}
+          <div className="task-spinner-wrap">
+            <div className="task-loader">
+              <svg width={100} height={100} viewBox="0 0 100 100">
+                <defs>
+                  <mask id="tl-clipping">
+                    <polygon points="0,0 100,0 100,100 0,100" fill="black" />
+                    <polygon points="25,25 75,25 50,75" fill="white" />
+                    <polygon points="50,25 75,75 25,75" fill="white" />
+                    <polygon points="35,35 65,35 50,65" fill="white" />
+                    <polygon points="35,35 65,35 50,65" fill="white" />
+                    <polygon points="35,35 65,35 50,65" fill="white" />
+                    <polygon points="35,35 65,35 50,65" fill="white" />
+                  </mask>
+                </defs>
+              </svg>
+              <div className="task-loader-box" />
+            </div>
+          </div>
+
           {/* Right: toggle sidebar + settings + cmd */}
           <div
             className={`flex items-center gap-1.5 shrink-0 ${theme === 'aurora' ? 'dynamic-island' : 'bg-[var(--bg-surface-container)]'} border ${theme === 'aurora' ? 'border-[var(--glass-border)]' : 'border-[var(--border-default)]'}`}
@@ -304,7 +329,9 @@ export default function App() {
         </div>
 
         {/* Chat area */}
-        <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 45 }}>
+        <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 0 }}>
+          {/* iOS 风格顶部渐隐：progressive blur */}
+          <div className="chat-top-fade" />
           <ChatPanel messages={claude.messages} isLoading={claude.isLoading} onSend={claude.send} />
           <ApprovalBar />
         </div>
