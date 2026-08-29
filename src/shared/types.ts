@@ -27,6 +27,7 @@ export const IPC_CHANNELS = {
   PET_GET_STATE: 'pet:get-state',
   PET_COLOR_SCHEME: 'pet:color-scheme',
   PET_UNDOCK: 'pet:undock',
+  PET_SIDEBAR_VISIBILITY: 'pet:sidebar-visibility',
   PET_LIST_SKINS: 'pet:list-skins',
   PET_IMPORT_SKIN: 'pet:import-skin',
   PET_DELETE_SKIN: 'pet:delete-skin',
