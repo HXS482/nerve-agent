@@ -690,7 +690,7 @@ const MARKDOWN_COMPONENTS = {
   },
 }
 
-function ContentBlockView({ block }: { block: ContentBlock }) {
+export function ContentBlockView({ block }: { block: ContentBlock }) {
   if (block.type === 'image' && block.src) {
     return <ImageView src={block.src} />
   }

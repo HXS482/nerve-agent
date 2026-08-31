@@ -11,6 +11,8 @@ export interface Session {
   createdAt: number
   updatedAt: number
   platform?: string
+  /** 会话所属界面模式；旧会话无此字段 → 归 chat */
+  mode?: 'chat' | 'stage'
 }
 
 export interface FlowItem {

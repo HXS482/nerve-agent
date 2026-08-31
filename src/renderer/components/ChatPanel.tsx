@@ -21,7 +21,6 @@ export function getApprovalSummary(req: ToolApprovalRequest): string {
 }
 
 export function ChatPanel({ messages, isLoading, onSend }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
 
@@ -42,8 +41,10 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
     [onSend, filteredMessages]
   )
 
+  // 只滚动聊天自己的容器，不能用 scrollIntoView 污染根窗口滚动位置
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = containerRef.current
+    container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
   }, [filteredMessages.length])
 
   if (filteredMessages.length === 0) {
@@ -81,7 +82,6 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
               </Fragment>
             )
           })}
-          <div ref={bottomRef} />
         </div>
       </div>
     </div>

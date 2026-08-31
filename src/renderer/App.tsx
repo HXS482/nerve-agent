@@ -1,126 +1,19 @@
 import { useClaude } from './hooks/useClaude'
 import { useChatStore } from './stores/chatStore'
 import { ChatPanel } from './components/ChatPanel'
-import { getApprovalSummary } from './components/ChatPanel'
 import { InputBar } from './components/InputBar'
 import { Sidebar } from './components/Sidebar'
+import { StageShell } from './components/Stage/StageShell'
+import { useStageStore } from './stores/stageStore'
 import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
+import { ApprovalBar } from './components/ApprovalBar'
 import { ResizeBorder } from './components/ResizeBorder'
 import Grainient from './components/Grainient'
 import { useState, useEffect, useCallback, useRef } from 'react'
-
-function ApprovalBar() {
-  const pendingApprovals = useChatStore((s) => s.pendingApprovals)
-  const current = pendingApprovals[0]
-
-  const handleResponse = useCallback((approved: boolean) => {
-    if (!current) return
-    useChatStore.getState().removeApproval(current.approvalId)
-    window.claude.respondToolApproval({ approvalId: current.approvalId, approved })
-  }, [current?.approvalId])
-
-  useEffect(() => {
-    if (!current) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault()
-        handleResponse(true)
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        handleResponse(false)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [current?.approvalId, handleResponse])
-
-  if (!current) return null
-
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 52,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 50,
-        minWidth: 357,
-        maxWidth: '70%',
-        background: 'color-mix(in srgb, var(--glass-bg) 30%, transparent)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: '1px solid var(--glass-border)',
-        borderRadius: 12,
-        padding: '7px 14px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
-        animation: 'fade-in-simple 0.15s ease-out',
-      }}
-    >
-      <div className="flex items-center gap-3">
-        {/* Warning icon */}
-        <div
-          style={{
-            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(255, 193, 7, 0.12)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffc107" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-        </div>
-
-        {/* Tool info */}
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-on-surface)', flexShrink: 0 }}>
-            {current.toolName}
-          </span>
-          <span className="truncate font-mono" style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
-            {getApprovalSummary(current)}
-          </span>
-        </div>
-
-        {/* Queue count */}
-        {pendingApprovals.length > 1 && (
-          <span style={{ fontSize: '11px', color: 'var(--text-outline)', flexShrink: 0 }}>
-            +{pendingApprovals.length - 1}
-          </span>
-        )}
-
-        {/* Deny */}
-        <button
-          onClick={() => handleResponse(false)}
-          style={{
-            fontSize: '12px', fontWeight: 500, padding: '5px 14px', borderRadius: 8,
-            background: 'rgba(244, 67, 54, 0.1)', color: '#ef5350',
-            border: '1px solid rgba(244, 67, 54, 0.2)',
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          Deny
-        </button>
-
-        {/* Allow */}
-        <button
-          onClick={() => handleResponse(true)}
-          autoFocus
-          style={{
-            fontSize: '12px', fontWeight: 500, padding: '5px 16px', borderRadius: 8,
-            background: 'rgba(76, 175, 80, 0.15)', color: '#66bb6a',
-            border: '1px solid rgba(76, 175, 80, 0.25)',
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          Allow
-        </button>
-      </div>
-    </div>
-  )
-}
 
 export default function App() {
   // Hash routing: #/pet renders the pet window
@@ -131,6 +24,8 @@ export default function App() {
   const claude = useClaude()
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
   const setSidebarOpen = useChatStore((s) => s.setSidebarOpen)
+  const viewMode = useStageStore((s) => s.viewMode)
+  const setViewMode = useStageStore((s) => s.setViewMode)
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
@@ -166,10 +61,10 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // 同步侧边栏可见性给主进程：宠物吸附落点仅在侧边栏展开时生效
+  // 同步侧边栏可见性给主进程：宠物吸附落点仅在侧边栏展开时生效（stage 模式侧边栏不存在）
   useEffect(() => {
-    window.claude.setPetSidebarVisible?.(sidebarOpen)
-  }, [sidebarOpen])
+    window.claude.setPetSidebarVisible?.(sidebarOpen && viewMode === 'chat')
+  }, [sidebarOpen, viewMode])
 
   return (
     <div
@@ -211,6 +106,14 @@ export default function App() {
         </div>
       )}
 
+      {/* Stage 模式：整屏独立界面 */}
+      {viewMode === 'stage' && (
+        <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
+      )}
+
+      {/* Chat 模式：侧边栏 + 聊天区（不受影响） */}
+      {viewMode === 'chat' && (
+        <>
       {/* Floating Sidebar */}
       {sidebarOpen && (
         <Sidebar
@@ -274,26 +177,6 @@ export default function App() {
           {/* Center spacer */}
           <div className="flex-1" />
 
-          {/* Center: task executing loader（常驻） */}
-          <div className="task-spinner-wrap">
-            <div className="task-loader">
-              <svg width={100} height={100} viewBox="0 0 100 100">
-                <defs>
-                  <mask id="tl-clipping">
-                    <polygon points="0,0 100,0 100,100 0,100" fill="black" />
-                    <polygon points="25,25 75,25 50,75" fill="white" />
-                    <polygon points="50,25 75,75 25,75" fill="white" />
-                    <polygon points="35,35 65,35 50,65" fill="white" />
-                    <polygon points="35,35 65,35 50,65" fill="white" />
-                    <polygon points="35,35 65,35 50,65" fill="white" />
-                    <polygon points="35,35 65,35 50,65" fill="white" />
-                  </mask>
-                </defs>
-              </svg>
-              <div className="task-loader-box" />
-            </div>
-          </div>
-
           {/* Right: toggle sidebar + settings + cmd */}
           <div
             className={`flex items-center gap-1.5 shrink-0 ${theme === 'aurora' ? 'dynamic-island' : 'bg-[var(--bg-surface-container)]'} border ${theme === 'aurora' ? 'border-[var(--glass-border)]' : 'border-[var(--border-default)]'}`}
@@ -328,6 +211,31 @@ export default function App() {
           </div>
         </div>
 
+        {/* 光亮小球：点击进入 Stage 模式（独立于拖拽顶栏，直接挂在 main 上） */}
+        <button
+          className="task-spinner-wrap task-orb-btn"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          onClick={() => setViewMode('stage')}
+          title="进入产物空间"
+        >
+          <div className="task-loader">
+            <svg width={100} height={100} viewBox="0 0 100 100">
+              <defs>
+                <mask id="tl-clipping">
+                  <polygon points="0,0 100,0 100,100 0,100" fill="black" />
+                  <polygon points="25,25 75,25 50,75" fill="white" />
+                  <polygon points="50,25 75,75 25,75" fill="white" />
+                  <polygon points="35,35 65,35 50,65" fill="white" />
+                  <polygon points="35,35 65,35 50,65" fill="white" />
+                  <polygon points="35,35 65,35 50,65" fill="white" />
+                  <polygon points="35,35 65,35 50,65" fill="white" />
+                </mask>
+              </defs>
+            </svg>
+            <div className="task-loader-box" />
+          </div>
+        </button>
+
         {/* Chat area */}
         <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 0 }}>
           {/* iOS 风格顶部渐隐：progressive blur */}
@@ -336,6 +244,8 @@ export default function App() {
           <ApprovalBar />
         </div>
       </main>
+        </>
+      )}
 
       {/* InputBar outside main so backdrop-filter blurs through the page background */}
       <InputBar
@@ -357,8 +267,8 @@ export default function App() {
       {/* Gallery modal */}
       {galleryOpen && <Gallery onClose={() => setGalleryOpen(false)} />}
 
-      {/* Right Sidebar */}
-      <RightSidebar />
+      {/* Right Sidebar（仅 chat 模式） */}
+      {viewMode === 'chat' && <RightSidebar />}
 
       {/* Resize handles — invisible border layer for frameless window drag-resize */}
       <ResizeBorder />

@@ -22,6 +22,8 @@ interface Props {
   currentSessionId: string | null
   onSelectSession: (session: Session) => void
   searchQuery?: string
+  /** 按界面模式过滤；缺省显示全部（旧会话无 mode 归 chat） */
+  mode?: 'chat' | 'stage'
 }
 
 const PLATFORM_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -45,7 +47,7 @@ const PLATFORM_META: Record<string, { label: string; color: string; icon: React.
   },
 }
 
-export function SessionList({ currentSessionId, onSelectSession, searchQuery = '' }: Props) {
+export function SessionList({ currentSessionId, onSelectSession, searchQuery = '', mode }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const deleteSession = useChatStore((s) => s.deleteSession)
   const [sessionBranches, setSessionBranches] = useState<Record<string, Branch[]>>({})
@@ -53,6 +55,7 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
 
   const query = searchQuery.toLowerCase().trim()
   const sortedSessions = [...sessions]
+    .filter((s) => !mode || (s.mode ?? 'chat') === mode)
     .filter((s) => !query || s.title.toLowerCase().includes(query))
     .sort((a, b) => b.updatedAt - a.updatedAt)
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useChatStore } from '../stores/chatStore'
+import { useStageStore } from '../stores/stageStore'
 import type { FileAttachment } from '../../shared/types'
 
 interface Props {
@@ -38,6 +39,10 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
+  const viewMode = useStageStore((s) => s.viewMode)
+  // Stage 模式下侧边栏不存在，输入栏不预留其宽度
+  const effectiveSidebarOpen = viewMode === 'stage' ? false : sidebarOpen
+  const effectiveRightOpen = viewMode === 'stage' ? false : rightSidebarOpen
 
   const voice = useVoiceInput((text) => {
     setHasVoice(true)
@@ -103,8 +108,8 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
         paddingLeft: '11px',
         paddingRight: '11px',
         bottom: '14px',
-        marginLeft: sidebarOpen ? `${sidebarWidth + 8}px` : '4px',
-        marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
+        marginLeft: effectiveSidebarOpen ? `${sidebarWidth + 8}px` : '4px',
+        marginRight: effectiveRightOpen ? `${rightSidebarWidth + 8}px` : '4px',
         transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
       }}
     >

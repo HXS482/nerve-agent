@@ -188,6 +188,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
         <SessionList
           currentSessionId={currentSessionId}
           onSelectSession={handleSelectSession}
+          mode="chat"
         />
       </div>
 
