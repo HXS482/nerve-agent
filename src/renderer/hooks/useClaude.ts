@@ -1,9 +1,11 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
+import { useStageStore } from '../stores/stageStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
 import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment, ToolApprovalRequest, ToolApprovalResponse } from '../../shared/types'
 
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
+type Workspace = 'chat' | 'stage'
 
 declare global {
   interface Window {
@@ -88,6 +90,13 @@ export function useClaude() {
   const pendingThinking = useRef('')
   // Capture temp session ID at send() time for DONE handler
   const pendingTempSessionId = useRef<string | null>(null)
+  const pendingWorkspace = useRef<Workspace>('chat')
+
+  const getWorkspaceSessionId = useCallback((workspace: Workspace) => (
+    workspace === 'stage'
+      ? useStageStore.getState().stageSessionId
+      : useChatStore.getState().currentSessionId
+  ), [])
 
   // Flush pending text to store
   const flushPendingText = useCallback(() => {
@@ -96,7 +105,7 @@ export function useClaude() {
     pendingText.current = ''
     pendingThinking.current = ''
     if (!text && !thinking) return
-    const sid = useChatStore.getState().currentSessionId || undefined
+    const sid = getWorkspaceSessionId(pendingWorkspace.current) || undefined
     updateLastMessage((msg) => {
       const content = [...msg.content]
       if (thinking) {
@@ -138,8 +147,14 @@ export function useClaude() {
         console.warn('[Nerve] gatewaySessions failed, sessions will have no platform info:', err)
       }
 
-      const store = useChatStore.getState()
-      const tempSessions = store.sessions.filter((s) => s.id.startsWith('session-'))
+      // 同步请求期间，临时 session 可能已被替换为真实 ID；写回前读取最新状态，
+      // 不能让旧快照中的 undefined mode 覆盖刚写入的 stage 标记。
+      const currentSessions = useChatStore.getState().sessions
+      const tempSessions = currentSessions.filter((s) => s.id.startsWith('session-'))
+      const modeMap: Record<string, 'chat' | 'stage'> = {}
+      for (const s of currentSessions) {
+        if (s.mode) modeMap[s.id] = s.mode
+      }
 
       const remoteMapped: Session[] = remoteSessions.map((rs) => ({
         id: rs.sessionId,
@@ -148,6 +163,7 @@ export function useClaude() {
         createdAt: rs.createdAt || rs.lastModified,
         updatedAt: rs.lastModified,
         platform: platformMap[rs.sessionId],
+        mode: modeMap[rs.sessionId],
       }))
 
       const remoteIds = new Set(remoteMapped.map((s) => s.id))
@@ -160,73 +176,56 @@ export function useClaude() {
     }
   }, [])
 
-  const loadSessionMessages = useCallback(async (sessionId: string) => {
-    setSessionId(sessionId)
+  const loadSessionMessages = useCallback(async (sessionId: string, workspace: Workspace = 'chat') => {
+    if (workspace === 'stage') useStageStore.getState().setStageSessionId(sessionId)
+    else setSessionId(sessionId)
     useChatStore.getState().setSessionUsage(null)
 
-    // Check if messages already in store (but don't return early — still clear others)
     const store = useChatStore.getState()
-    const existing = store.messages.filter((m) => m.sessionId === sessionId)
+    if (!store.messages.some((m) => m.sessionId === sessionId)) {
+      try {
+        const raw = await window.claude.getSessionMessages(sessionId)
+        console.log('[Nerve] getSessionMessages raw:', sessionId, Array.isArray(raw) ? raw.length + ' entries' : raw)
+        if (!Array.isArray(raw)) return
 
-    // Clear all messages before loading to prevent cross-session contamination
-    if (existing.length > 0) {
-      useChatStore.setState({ messages: existing })
-      return
-    }
+        const loaded: ChatMessage[] = raw
+          .filter((m: any) => m.type === 'user' || m.type === 'assistant')
+          .map((m: any) => ({
+            id: m.uuid || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            role: m.type as 'user' | 'assistant',
+            content: (() => {
+              const raw = m.message?.content
+              if (typeof raw === 'string') return [{ type: 'text' as const, text: raw }]
+              if (!Array.isArray(raw)) return []
+              return raw.map((c: any) => {
+                if (c.type === 'text') return { type: 'text' as const, text: c.text }
+                if (c.type === 'thinking') return { type: 'thinking' as const, thinking: c.thinking }
+                if (c.type === 'tool_use') return { type: 'tool_use' as const, id: c.id, name: c.name, input: c.input }
+                if (c.type === 'tool_result') return { type: 'tool_result' as const, toolCallId: c.toolCallId || c.tool_use_id, content: typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? c.content.map((b: any) => b.text || JSON.stringify(b)).join('') : String(c.content ?? ''), is_error: c.is_error }
+                if (c.type === 'image') return { type: 'image' as const, src: c.src, mimeType: c.mimeType, fileName: c.fileName, fileSize: c.fileSize }
+                if (c.type === 'file') return { type: 'file' as const, fileName: c.fileName, fileSize: c.fileSize, mimeType: c.mimeType, fileContent: c.fileContent }
+                return { type: 'text' as const, text: JSON.stringify(c) }
+              })
+            })(),
+            timestamp: new Date(m.timestamp).getTime(),
+            sessionId,
+          }))
 
-    // No existing messages for this session — clear and load fresh
-    useChatStore.setState({ messages: [] })
-
-    // Load from SDK
-    try {
-      const raw = await window.claude.getSessionMessages(sessionId)
-      console.log('[Nerve] getSessionMessages raw:', sessionId, Array.isArray(raw) ? raw.length + ' entries' : raw)
-      if (!Array.isArray(raw)) return
-
-      const loaded: ChatMessage[] = raw
-        .filter((m: any) => m.type === 'user' || m.type === 'assistant')
-        .map((m: any) => ({
-          id: m.uuid || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          role: m.type as 'user' | 'assistant',
-          content: (() => {
-            const raw = m.message?.content
-            if (typeof raw === 'string') return [{ type: 'text' as const, text: raw }]
-            if (!Array.isArray(raw)) return []
-            return raw.map((c: any) => {
-              if (c.type === 'text') return { type: 'text' as const, text: c.text }
-              if (c.type === 'thinking') return { type: 'thinking' as const, thinking: c.thinking }
-              if (c.type === 'tool_use') return { type: 'tool_use' as const, id: c.id, name: c.name, input: c.input }
-              if (c.type === 'tool_result') return {
-            type: 'tool_result' as const,
-            toolCallId: c.toolCallId || c.tool_use_id,
-            content: typeof c.content === 'string' ? c.content
-              : Array.isArray(c.content) ? c.content.map((b: any) => b.text || JSON.stringify(b)).join('')
-              : String(c.content ?? ''),
-            is_error: c.is_error,
-          }
-              if (c.type === 'image') return { type: 'image' as const, src: c.src, mimeType: c.mimeType, fileName: c.fileName, fileSize: c.fileSize }
-              if (c.type === 'file') return { type: 'file' as const, fileName: c.fileName, fileSize: c.fileSize, mimeType: c.mimeType, fileContent: c.fileContent }
-              return { type: 'text' as const, text: JSON.stringify(c) }
-            })
-          })(),
-          timestamp: new Date(m.timestamp).getTime(),
-          sessionId,
-        }))
-
-      console.log('[Nerve] loaded messages:', loaded.length)
-      if (loaded.length > 0) {
         const latest = useChatStore.getState()
-        latest.setMessages([...latest.messages, ...loaded])
+        const messageIds = new Set(latest.messages.map((m) => m.id))
+        latest.setMessages([...latest.messages, ...loaded.filter((m) => !messageIds.has(m.id))])
+      } catch (err) {
+        console.error('[Nerve] loadSessionMessages error:', err)
       }
-
-      // Load session usage
-      window.claude.getSessionUsage(sessionId).then((usage) => {
-        useChatStore.getState().setSessionUsage(usage)
-      }).catch(() => {})
-    } catch (err) {
-      console.error('[Nerve] loadSessionMessages error:', err)
     }
+
+    window.claude.getSessionUsage(sessionId).then((usage) => {
+      useChatStore.getState().setSessionUsage(usage)
+    }).catch(() => {})
   }, [setSessionId])
+
+  const loadStageSession = useCallback((sessionId: string) => loadSessionMessages(sessionId, 'stage'), [loadSessionMessages])
+  const clearStageSession = useCallback(() => useStageStore.getState().setStageSessionId(null), [])
 
   useEffect(() => {
     // Load config from backend
@@ -348,8 +347,9 @@ export function useClaude() {
         }
 
         // For tool-only blocks, find last assistant message in session to append to
+        const sessionId = getWorkspaceSessionId(pendingWorkspace.current)
         if (hasToolBlocks && !hasNewText) {
-          const sessionMsgs = store.messages.filter((m) => m.sessionId === store.currentSessionId)
+          const sessionMsgs = store.messages.filter((m) => m.sessionId === sessionId)
           const lastAssistant = [...sessionMsgs].reverse().find((m) => m.role === 'assistant')
           if (lastAssistant) {
             const idx = store.messages.findIndex((m) => m.id === lastAssistant.id)
@@ -360,7 +360,7 @@ export function useClaude() {
           }
         }
 
-        const sid = store.currentSessionId || undefined
+        const sid = sessionId || undefined
         const sessionMsgs = store.messages.filter((m) => m.sessionId === sid)
         const last = sessionMsgs[sessionMsgs.length - 1]
         if (last?.role === 'assistant' && !hasNewText) {
@@ -373,7 +373,7 @@ export function useClaude() {
             role: 'assistant',
             content: blocks,
             timestamp: Date.now(),
-            sessionId: store.currentSessionId || undefined,
+            sessionId: sessionId || undefined,
           })
         }
       }
@@ -432,6 +432,8 @@ export function useClaude() {
           : ''
 
         // Remove old temp session from list, add with real ID
+        // 保留 temp session 的 mode 标记（stage 开始的会话继续归 stage，不泄漏到 chat）
+        const tempSession = store.sessions.find((s) => s.id === tempSessionId)
         const sessions = store.sessions.filter((s) => s.id !== tempSessionId)
         sessions.push({
           id: backendSessionId,
@@ -439,13 +441,17 @@ export function useClaude() {
           preview,
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          mode: tempSession?.mode,
         })
 
         useChatStore.setState({
           messages: msgs,
           sessions,
-          currentSessionId: backendSessionId,
+          ...(pendingWorkspace.current === 'chat' ? { currentSessionId: backendSessionId } : {}),
         })
+        if (pendingWorkspace.current === 'stage') {
+          useStageStore.getState().setStageSessionId(backendSessionId)
+        }
 
         pendingTempSessionId.current = null
 
@@ -467,7 +473,8 @@ export function useClaude() {
     // Handle stream clear on retry — reset current assistant message
     const unsubStreamClear = window.claude.onStreamClear(() => {
       const store = useChatStore.getState()
-      const sessionMsgs = store.messages.filter((m) => m.sessionId === store.currentSessionId)
+      const sessionId = getWorkspaceSessionId(pendingWorkspace.current)
+      const sessionMsgs = store.messages.filter((m) => m.sessionId === sessionId)
       const lastAssistant = [...sessionMsgs].reverse().find((m) => m.role === 'assistant')
       if (lastAssistant) {
         const idx = store.messages.findIndex((m) => m.id === lastAssistant.id)
@@ -486,6 +493,23 @@ export function useClaude() {
         content: data.content,
         meta: data.meta,
       })
+      // 产物图片实时注入消息流：chat/stage 两种模式共用同一数据源
+      if (data.type === 'image') {
+        const store = useChatStore.getState()
+        const src = data.meta?.localPath || data.content
+        const sessionId = getWorkspaceSessionId(pendingWorkspace.current)
+        const sessionMsgs = store.messages.filter((m) => m.sessionId === sessionId)
+        const lastAssistant = [...sessionMsgs].reverse().find((m) => m.role === 'assistant')
+        if (lastAssistant && !lastAssistant.content.some((b) => b.type === 'image' && b.src === src)) {
+          const idx = store.messages.findIndex((m) => m.id === lastAssistant.id)
+          const msgs = [...store.messages]
+          msgs[idx] = {
+            ...lastAssistant,
+            content: [...lastAssistant.content, { type: 'image' as const, src }],
+          }
+          useChatStore.setState({ messages: msgs })
+        }
+      }
     })
 
     // Tool approval requests from main process
@@ -506,17 +530,19 @@ export function useClaude() {
       unsubFlowItem()
       unsubApproval()
     }
-  }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions])
+  }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId])
 
   const send = useCallback(
     async (prompt: string, files?: FileAttachment[]) => {
       if (!prompt.trim() || isLoading) return
 
+      const workspace = useStageStore.getState().viewMode
       const store = useChatStore.getState()
-      let sid = store.currentSessionId
+      let sid = getWorkspaceSessionId(workspace)
       let isRealSession = !!sid
+      pendingWorkspace.current = workspace
 
-      // Create a temp session if none exists (first message of new chat)
+      // Create a temp session if none exists (first message of the active workspace)
       if (!sid) {
         sid = `session-${Date.now()}`
         addSession({
@@ -525,8 +551,10 @@ export function useClaude() {
           preview: '',
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          mode: workspace,
         })
-        setSessionId(sid)
+        if (workspace === 'stage') useStageStore.getState().setStageSessionId(sid)
+        else setSessionId(sid)
         pendingTempSessionId.current = sid
       } else {
         pendingTempSessionId.current = null
@@ -560,6 +588,9 @@ export function useClaude() {
         timestamp: Date.now(),
         sessionId: sid,
       })
+
+      // 发新消息 → Stage 回看选中立即回最新轮（空轮还没进 rounds，等回复流入自动跳正）
+      useStageStore.getState().setSelectedRoundId(null)
 
       addMessage({
         id: `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -645,6 +676,8 @@ export function useClaude() {
     pickDirectory,
     syncSessions,
     loadSessionMessages,
+    loadStageSession,
+    clearStageSession,
     listBranches,
     switchBranch,
     branchSession,

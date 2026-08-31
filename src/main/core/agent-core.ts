@@ -308,7 +308,7 @@ export class AgentCore {
         )
 
         // 处理结果
-        await this.handleResult(result, sessionId, payload, channel, ctx)
+        await this.handleResult(result, sessionId, payload, channel, ctx, sentImages)
       } finally {
         pluginSnapshot.unref()
       }
@@ -650,7 +650,8 @@ export class AgentCore {
     sessionId: string,
     payload: SendMessagePayload,
     channel: OutputChannel,
-    ctx: SessionContext
+    ctx: SessionContext,
+    sentImages?: Set<string>
   ) {
     const store = await this.ensureSessionStore()
     const { usage, textDeltas, fullThinkingParts, allToolCalls, allToolResults } = result
@@ -678,6 +679,10 @@ export class AgentCore {
     }
     for (const tr of allToolResults) {
       content.push({ type: 'tool_result', tool_use_id: tr.toolCallId, content: tr.content, is_error: tr.is_error })
+    }
+    // 产物图片写入消息内容：消息流是唯一真相源，chat/stage 两种模式都从这里渲染
+    if (sentImages) {
+      for (const p of sentImages) content.push({ type: 'image', src: p })
     }
 
     await store.append({ sessionId }, [{

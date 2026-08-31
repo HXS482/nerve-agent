@@ -433,6 +433,813 @@ button, a, input, textarea, select {
   100% { filter: hue-rotate(0deg); }
 }
 
+/* ===== Stage 产物空间 ===== */
+.stage-root {
+  flex: 1;
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+
+/* Stage 雨幕背景（仅本模式） */
+.stage-rain {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  --c: #09f;
+  background-color: #000;
+  background-image: radial-gradient(4px 100px at 0px 235px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 235px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 117.5px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 252px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 252px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 126px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 150px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 150px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 75px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 253px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 253px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 126.5px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 204px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 204px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 102px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 134px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 134px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 67px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 179px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 179px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 89.5px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 299px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 299px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 149.5px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 215px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 215px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 107.5px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 281px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 281px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 140.5px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 158px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 158px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 79px, var(--c) 100%, #0000 150%),
+    radial-gradient(4px 100px at 0px 210px, var(--c), #0000),
+    radial-gradient(4px 100px at 300px 210px, var(--c), #0000),
+    radial-gradient(1.5px 1.5px at 150px 105px, var(--c) 100%, #0000 150%);
+  background-size:
+    300px 235px, 300px 235px, 300px 235px,
+    300px 252px, 300px 252px, 300px 252px,
+    300px 150px, 300px 150px, 300px 150px,
+    300px 253px, 300px 253px, 300px 253px,
+    300px 204px, 300px 204px, 300px 204px,
+    300px 134px, 300px 134px, 300px 134px,
+    300px 179px, 300px 179px, 300px 179px,
+    300px 299px, 300px 299px, 300px 299px,
+    300px 215px, 300px 215px, 300px 215px,
+    300px 281px, 300px 281px, 300px 281px,
+    300px 158px, 300px 158px, 300px 158px,
+    300px 210px, 300px 210px, 300px 210px;
+  animation: stage-rain-fall 150s linear infinite;
+}
+.stage-rain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  backdrop-filter: blur(1em) brightness(6);
+  -webkit-backdrop-filter: blur(1em) brightness(6);
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    #0000 0,
+    #0000 2px,
+    hsl(0 0 4%) 2px
+  );
+  background-size: 8px 8px;
+}
+@keyframes stage-rain-fall {
+  0% {
+    background-position:
+      0px 220px, 3px 220px, 151.5px 337.5px,
+      25px 24px, 28px 24px, 176.5px 150px,
+      50px 16px, 53px 16px, 201.5px 91px,
+      75px 224px, 78px 224px, 226.5px 350.5px,
+      100px 19px, 103px 19px, 251.5px 121px,
+      125px 120px, 128px 120px, 276.5px 187px,
+      150px 31px, 153px 31px, 301.5px 120.5px,
+      175px 235px, 178px 235px, 326.5px 384.5px,
+      200px 121px, 203px 121px, 351.5px 228.5px,
+      225px 224px, 228px 224px, 376.5px 364.5px,
+      250px 26px, 253px 26px, 401.5px 105px,
+      275px 75px, 278px 75px, 426.5px 180px;
+  }
+  to {
+    background-position:
+      0px 6800px, 3px 6800px, 151.5px 6917.5px,
+      25px 13632px, 28px 13632px, 176.5px 13758px,
+      50px 5416px, 53px 5416px, 201.5px 5491px,
+      75px 17175px, 78px 17175px, 226.5px 17301.5px,
+      100px 5119px, 103px 5119px, 251.5px 5221px,
+      125px 8428px, 128px 8428px, 276.5px 8495px,
+      150px 9876px, 153px 9876px, 301.5px 9965.5px,
+      175px 13391px, 178px 13391px, 326.5px 13540.5px,
+      200px 14741px, 203px 14741px, 351.5px 14848.5px,
+      225px 18770px, 228px 18770px, 376.5px 18910.5px,
+      250px 5082px, 253px 5082px, 401.5px 5161px,
+      275px 6375px, 278px 6375px, 426.5px 6480px;
+  }
+}
+/* 内容层压在雨幕上 */
+.stage-canvas {
+  position: relative;
+  z-index: 1;
+}
+.stage-canvas {
+  padding: 64px 20px 90px;
+}
+.stage-masonry {
+  columns: 2;
+  column-gap: 12px;
+}
+@media (min-width: 1200px) {
+  .stage-masonry {
+    columns: 3;
+  }
+}
+.stage-card-slot {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+.stage-card-draggable {
+  cursor: grab;
+  position: relative;
+}
+/* 图片卡的拖拽容器收缩到图片宽度，缩放柄才能贴在图片右下角 */
+.stage-card-draggable.is-image {
+  display: inline-block;
+}
+/* 禁掉图片原生 HTML5 拖拽残影，避免和 motion 拖拽打架 */
+.stage-card img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.stage-card-draggable:active {
+  cursor: grabbing;
+}
+.stage-card {
+  position: relative;
+  background: var(--bg-surface-container);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.stage-card:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+/* 图片卡：裸图无嵌套框，尺寸收敛；--img-w 由缩放柄驱动 */
+.stage-card[data-kind="image"] {
+  background: transparent;
+  border: none;
+  padding: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  width: var(--img-w, 300px);
+  max-width: none;
+  overflow: visible;
+}
+.stage-card[data-kind="image"]:hover {
+  box-shadow: none;
+}
+.stage-card[data-kind="image"] .my-3 {
+  margin: 0;
+}
+.stage-card[data-kind="image"] img {
+  border: none !important;
+  border-radius: var(--radius-md);
+  width: 100%;
+  height: auto;
+  max-height: none;
+  display: block;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+/* 批注层在裸图上依然悬浮可读 */
+.stage-card[data-kind="image"] .danmaku-layer {
+  top: 8px;
+  left: 8px;
+}
+
+/* 图片卡操作：hover 时浮现在右侧角落 */
+.stage-card-close {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(10, 14, 20, 0.62);
+  color: rgba(255, 255, 255, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, transform 0.15s;
+  z-index: 11;
+  pointer-events: auto;
+}
+.stage-card-draggable:hover .stage-card-close,
+.stage-card-close:focus-visible {
+  opacity: 1;
+}
+.stage-card-close:hover {
+  background: rgba(10, 14, 20, 0.88);
+  transform: scale(1.08);
+}
+
+.stage-resize-handle {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(10, 14, 20, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+  pointer-events: auto;
+}
+.stage-card-draggable:hover .stage-resize-handle {
+  opacity: 1;
+}
+.stage-resize-handle:hover {
+  background: rgba(10, 14, 20, 0.85);
+}
+
+/* 文件卡 */
+.stage-card-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-on-surface-variant);
+}
+.stage-card-file-name {
+  color: var(--text-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-card-file-size {
+  color: var(--text-outline-variant);
+  flex-shrink: 0;
+}
+
+/* 旁白层：逐行渐现 + 规整正文排版，长回复内部滚动 */
+.narration-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 15;
+  padding: 56px 0 72px;
+}
+.narration-scroll {
+  width: 100%;
+  max-width: 620px;
+  overflow-y: auto;
+  pointer-events: auto;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 48px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 48px), transparent 100%);
+}
+.narration-scroll::-webkit-scrollbar {
+  display: none;
+}
+.narration-content {
+  padding: 24px 28px;
+}
+.narration-line {
+  font-size: 14px;
+  line-height: 1.85;
+  font-weight: 450;
+  letter-spacing: 0.01em;
+  color: var(--text-on-surface);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+  margin: 0 0 0.5em;
+  text-align: left;
+}
+.narration-line:last-child {
+  margin-bottom: 0;
+}
+
+/* 弹幕批注：产物卡上沿的半透明小条 */
+.danmaku-layer {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  z-index: 5;
+  pointer-events: none;
+}
+.danmaku-chip {
+  max-width: 100%;
+  background: rgba(10, 14, 20, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: danmaku-in 0.5s cubic-bezier(0.22, 1.4, 0.36, 1) backwards;
+}
+@keyframes danmaku-in {
+  0% { opacity: 0; transform: translateX(60px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* ===== StageShell：Stage 模式独立界面 ===== */
+.stage-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  margin: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--app-shell-radius);
+}
+.stage-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: transparent;
+  z-index: 30;
+  flex-shrink: 0;
+}
+.stage-topbar-left,
+.stage-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 小球按钮化（chat 进 / stage 出） */
+.task-orb-btn {
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.task-orb-btn:hover .task-loader {
+  filter: brightness(1.2);
+}
+.stage-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.stage-icon-btn:hover {
+  background: var(--bg-surface-container-high);
+  color: var(--text-on-surface);
+}
+.stage-main {
+  flex: 1;
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+/* 会话入口：与底部输入栏保持同一水平线的悬浮按钮 */
+.stage-sessions-fab {
+  position: absolute;
+  left: 12px;
+  bottom: 14px;
+  z-index: 55;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--dynamic-island-bg);
+  backdrop-filter: var(--dynamic-island-blur);
+  -webkit-backdrop-filter: var(--dynamic-island-blur);
+  border: 1px solid var(--border-strong);
+  color: var(--text-on-surface-variant);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.stage-sessions-fab:hover {
+  color: var(--text-on-surface);
+  filter: brightness(1.12);
+}
+
+/* 会话抽屉 */
+.stage-drawer-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 39;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: fade-in-simple 0.15s ease-out;
+}
+.stage-drawer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(380px, calc(100% - 48px));
+  height: min(460px, calc(100% - 96px));
+  z-index: 40;
+  overflow: hidden;
+  background: var(--dynamic-island-bg);
+  backdrop-filter: var(--dynamic-island-blur);
+  -webkit-backdrop-filter: var(--dynamic-island-blur);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48), 0 2px 10px rgba(0, 0, 0, 0.22);
+  animation: stage-drawer-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes stage-drawer-in {
+  from { transform: translate(-50%, -46%) scale(0.96); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+/* Stage 会话列表 */
+.stage-sessions {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px 10px;
+}
+.stage-sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 10px;
+}
+.stage-sessions-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-outline-variant);
+}
+.stage-sessions-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px dashed var(--border-default);
+  background: transparent;
+  color: var(--text-on-surface-variant);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.stage-sessions-new:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.stage-sessions-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stage-sessions-empty {
+  font-size: 11px;
+  color: var(--text-outline-variant);
+  text-align: center;
+  padding: 24px 0;
+}
+.stage-session-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.stage-session-item:hover {
+  background: var(--bg-surface-container);
+}
+.stage-session-item.is-active {
+  background: var(--bg-surface-container);
+  border-color: var(--border-default);
+}
+.stage-session-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.stage-session-title {
+  font-size: 12px;
+  color: var(--text-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-session-time {
+  font-size: 10px;
+  color: var(--text-outline-variant);
+}
+.stage-session-del {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-outline);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.stage-session-item:hover .stage-session-del {
+  opacity: 1;
+}
+.stage-session-del:hover {
+  color: var(--error);
+}
+
+/* ===== 用户消息悬浮列表（右下角，无外框，点击回看该轮） ===== */
+.user-log-list {
+  position: absolute;
+  right: 16px;
+  bottom: 64px;
+  width: 300px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  /* 顶部渐隐示意可滚动（沿用 narration-scroll 的手法） */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
+}
+.user-log-list::-webkit-scrollbar { width: 3px; }
+.user-log-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
+.user-log-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: left;
+  color: var(--text-on-surface);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.user-log-row:hover {
+  opacity: 0.9;
+}
+.user-log-row.is-active {
+  opacity: 1;
+}
+.user-log-row.is-active::before {
+  content: '';
+  width: 2px;
+  align-self: stretch;
+  border-radius: 1px;
+  background: var(--accent-primary);
+  flex-shrink: 0;
+}
+.user-log-time {
+  color: var(--text-outline-variant);
+  flex-shrink: 0;
+}
+.user-log-prompt {
+  color: #4880ff;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.user-log-row.is-active .user-log-prompt {
+  color: var(--accent-primary);
+}
+.user-log-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 全局思考点（Stage 形态）：顶栏 loader 正下方，悬浮展开思考内容 */
+.think-spot {
+  position: absolute;
+  top: 46px;
+  left: 20px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.think-spot .think-toggle {
+  pointer-events: auto;
+}
+/* 思考中的蓝色状态气泡：从笔记本右上方冒出 */
+.think-bubble {
+  position: absolute;
+  top: -6px;
+  left: calc(100% - 14px);
+  padding: 4px 10px;
+  border-radius: 12px 12px 12px 3px;
+  background: linear-gradient(135deg, #3b82f6 0%, #0066ff 100%);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 102, 255, 0.4);
+  pointer-events: none;
+  transform-origin: bottom left;
+  animation: think-bubble-pop 0.35s cubic-bezier(0.22, 1.6, 0.36, 1), think-bubble-bob 2.4s ease-in-out 0.35s infinite;
+}
+@keyframes think-bubble-pop {
+  0% { opacity: 0; transform: scale(0.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes think-bubble-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.think-spot-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 380px;
+  max-height: 300px;
+  overflow-y: auto;
+  pointer-events: auto;
+  background: var(--dynamic-island-bg);
+  backdrop-filter: var(--dynamic-island-blur);
+  -webkit-backdrop-filter: var(--dynamic-island-blur);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+/* 全局工具点（Stage 形态）：左侧边缘垂直 dock，顶部胶囊总图标 + 每个工具调用一枚圆形图标 */
+.tool-spot {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 25;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-spot-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 48vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+.tool-spot-dock::-webkit-scrollbar {
+  display: none;
+}
+.tool-spot-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--dynamic-island-bg);
+  backdrop-filter: var(--dynamic-island-blur);
+  -webkit-backdrop-filter: var(--dynamic-island-blur);
+  border: 1px solid var(--border-strong);
+  color: var(--text-on-surface-variant);
+  transition: color 0.15s, filter 0.15s, border-color 0.15s;
+}
+button.tool-spot-icon {
+  cursor: pointer;
+}
+button.tool-spot-icon:hover {
+  color: var(--text-on-surface);
+  filter: brightness(1.12);
+}
+/* 胶囊总图标：无圆圈底，纯 SVG 蓝色，位置相对挂数量角标 */
+.tool-spot-all {
+  position: relative;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: #17abe3;
+}
+button.tool-spot-all:hover {
+  color: #17abe3;
+  opacity: 0.75;
+  filter: none;
+}
+.tool-spot-all[data-status="error"] {
+  color: var(--error);
+}
+.tool-spot-count {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(10, 14, 20, 0.7);
+  color: #17abe3;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  pointer-events: none;
+}
+.tool-spot-dock .tool-spot-icon[data-status="running"] {
+  color: #17abe3;
+  border-color: rgba(23, 171, 227, 0.45);
+}
+.tool-spot-dock .tool-spot-icon[data-status="running"] svg {
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+.tool-spot-dock .tool-spot-icon[data-status="pending"] {
+  color: #dfa88f;
+  border-color: rgba(223, 168, 143, 0.45);
+}
+.tool-spot-dock .tool-spot-icon[data-status="error"] {
+  color: var(--error);
+  border-color: rgba(207, 45, 86, 0.5);
+}
+/* 总图标仅在运行时脉冲 */
+.tool-spot-all[data-status="running"] svg {
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+.tool-spot-panel {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 380px;
+  max-height: 300px;
+  overflow-y: auto;
+  pointer-events: auto;
+  background: var(--dynamic-island-bg);
+  backdrop-filter: var(--dynamic-island-blur);
+  -webkit-backdrop-filter: var(--dynamic-island-blur);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
 /* ===== Chat scroll: 顶部渐隐（多段缓动，避免线性渐变的生硬感） ===== */
 [data-chat-scroll] {
   -webkit-mask-image: linear-gradient(to bottom,
@@ -1168,7 +1975,7 @@ pre.hljs {
   transform: rotate(90deg);
 }
 
-/* 思考块（与工具块分离）：纯 SVG 图标，无胶囊 */
+/* 思考块（chat 模式）：纯 SVG 图标，无胶囊 */
 .think-toggle {
   display: inline-flex;
   align-items: center;
@@ -1185,6 +1992,10 @@ pre.hljs {
 }
 .think-toggle[data-status="active"] svg {
   animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+/* Stage 模式的思考点用笔记本 loader（em 缩放：约 68×62px） */
+.think-spot .laptop-loader {
+  font-size: 2.6px;
 }
 
 /* 展开态容器 */
