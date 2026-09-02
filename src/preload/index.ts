@@ -25,6 +25,13 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.TOOL_APPROVAL_REQUEST, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.TOOL_APPROVAL_REQUEST, handler)
   },
+  respondAskUser: (response: import('../shared/types').AskUserResponse) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ASK_USER_RESPONSE, response),
+  onAskUserRequest: (callback: (data: import('../shared/types').AskUserRequest) => void) => {
+    const handler = (_event: any, data: import('../shared/types').AskUserRequest) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.ASK_USER_REQUEST, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ASK_USER_REQUEST, handler)
+  },
   pickDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.PICK_DIRECTORY),
   pickAndReadFiles: (): Promise<FileAttachment[]> => ipcRenderer.invoke(IPC_CHANNELS.PICK_AND_READ_FILES),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
@@ -107,6 +114,7 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.FETCH_MODELS, { baseURL, authToken }),
   getMcpServers: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MCP_SERVERS),
   saveMcpServers: (servers: any) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_MCP_SERVERS, servers),
+  getMcpStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MCP_STATUS),
   // Skills
   getSkills: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SKILLS),
   toggleSkill: (id: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_SKILL, id, enabled),

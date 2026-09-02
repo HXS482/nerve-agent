@@ -96,9 +96,19 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
   const focused = (selectedRoundId && liveRounds.find((r) => r.id === selectedRoundId)) || null
   const focusRound = focused ?? liveRounds[liveRounds.length - 1]
 
+  // 新一轮刚发出（用户消息已开轮、回复尚未产出任何内容）且未手动选轮：
+  // 立即清空上一轮旁白，而不是等本轮思考完成、新文字流入后才替换
+  const lastRound = allRounds[allRounds.length - 1]
+  const awaitingReply =
+    !focused &&
+    !!lastRound &&
+    lastRound.fromUser &&
+    lastRound.artifactCards.length === 0 &&
+    lastRound.textSegments.length === 0
+
   const focusHasArtifact = (focusRound?.artifactCards.length ?? 0) > 0
   // 纯文字轮 → 旁白；混合轮 → 批注
-  const narrationText = focusRound && !focusHasArtifact ? focusRound.textSegments.join('\n') : ''
+  const narrationText = !awaitingReply && focusRound && !focusHasArtifact ? focusRound.textSegments.join('\n') : ''
   const focusAnnotations = focusRound && focusHasArtifact ? focusRound.textSegments : []
 
   const cards: StageCardEntry[] = []

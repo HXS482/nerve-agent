@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { ChatMessage, ClaudeConfig, Theme, ModelInfo, SessionUsage, ProviderInfo, ToolApprovalRequest } from '../../shared/types'
+import { ChatMessage, ClaudeConfig, Theme, ModelInfo, SessionUsage, ProviderInfo, ToolApprovalRequest, AskUserRequest } from '../../shared/types'
 
 const MAX_FLOW_ITEMS = 30
 
@@ -71,6 +71,10 @@ interface ChatState {
   pendingApprovals: ToolApprovalRequest[]
   addApproval: (req: ToolApprovalRequest) => void
   removeApproval: (approvalId: string) => void
+  // AskUser 提问队列（agent 结构化提问，卡片逐个作答）
+  pendingAsks: AskUserRequest[]
+  addAsk: (req: AskUserRequest) => void
+  removeAsk: (askId: string) => void
 
   // Chat actions
   addMessage: (msg: ChatMessage) => void
@@ -177,6 +181,9 @@ export const useChatStore = create<ChatState>()(
       pendingApprovals: [],
       addApproval: (req) => set((s) => ({ pendingApprovals: [...s.pendingApprovals, req] })),
       removeApproval: (approvalId) => set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.approvalId !== approvalId) })),
+      pendingAsks: [],
+      addAsk: (req) => set((s) => ({ pendingAsks: [...s.pendingAsks, req] })),
+      removeAsk: (askId) => set((s) => ({ pendingAsks: s.pendingAsks.filter((a) => a.askId !== askId) })),
 
       // Chat actions
       addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),

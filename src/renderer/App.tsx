@@ -11,6 +11,8 @@ import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import { ApprovalBar } from './components/ApprovalBar'
+import { SelectionActions } from './components/SelectionActions'
+import { AskUserCard } from './components/AskUserCard'
 import { ResizeBorder } from './components/ResizeBorder'
 import Grainient from './components/Grainient'
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -129,9 +131,9 @@ export default function App() {
       <main
         className="flex-1 flex flex-col overflow-hidden relative"
         style={{
-          margin: '4px',
-          marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '4px',
-          marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '4px',
+          margin: '2px',
+          marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '2px',
+          marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '2px',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--app-shell-radius)',
@@ -247,6 +249,9 @@ export default function App() {
         </>
       )}
 
+      {/* 选中文字的上下文 AI 操作条（仅 chat 模式） */}
+      {viewMode === 'chat' && <SelectionActions onAction={claude.send} />}
+
       {/* InputBar outside main so backdrop-filter blurs through the page background */}
       <InputBar
         onSend={claude.send}
@@ -269,6 +274,9 @@ export default function App() {
 
       {/* Right Sidebar（仅 chat 模式） */}
       {viewMode === 'chat' && <RightSidebar />}
+
+      {/* AskUser 问答卡片（agent 结构化提问，stage/chat 通用，必须始终可回应） */}
+      <AskUserCard />
 
       {/* Resize handles — invisible border layer for frameless window drag-resize */}
       <ResizeBorder />

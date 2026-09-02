@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ChatMessage } from '../../../shared/types'
 import { useStageStore } from '../../stores/stageStore'
+import { useChatStore } from '../../stores/chatStore'
 import { buildStageView } from '../../adapters/stageAdapter'
 import { StageCard, type StageCardData } from './StageCard'
 import { NarrationLayer } from './NarrationLayer'
@@ -124,6 +125,7 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   const selectedRoundId = useStageStore((s) => s.selectedRoundId)
   const hiddenCardIds = useStageStore((s) => s.hiddenCardIds)
   const hideCard = useStageStore((s) => s.hideCard)
+  const isLoading = useChatStore((s) => s.isLoading)
   const filtered = useMemo(
     () => (currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : []),
     [messages, currentSessionId],
@@ -161,7 +163,8 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
     previousCardCountRef.current = allCards.length
   }, [allCards.length])
 
-  if (allCards.length === 0 && !narrationText) {
+  // 生成中（等回复期间）不走空态：否则旁白清空后壁纸会随 .stage-bg 一起消失
+  if (allCards.length === 0 && !narrationText && !isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center" style={{ paddingInline: 'var(--sp-md)' }}>
         <div className="flex flex-col items-center justify-center py-20 gap-3" style={{ position: 'relative', width: '100%', height: '300px' }}>
@@ -173,8 +176,6 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
 
   return (
     <div className="stage-root">
-      {/* 雨幕背景（仅 Stage 模式） */}
-      <div className="stage-rain" />
       <div ref={canvasRef} className="stage-canvas flex-1 overflow-y-auto w-full" data-chat-scroll>
         <div className="stage-masonry">
           {allCards.map(({ card, annotations }) => (

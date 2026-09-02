@@ -198,4 +198,9 @@ export class ClaudeService {
   togglePlugin(pluginId: string, enabled: boolean) { return this.core.togglePlugin(pluginId, enabled) }
   reloadPlugin(pluginId: string) { return this.core.reloadPlugin(pluginId) }
   rollbackMcp(serverId: string) { return this.core.rollbackMcp(serverId) }
+  reloadMcpServers() { return this.core.reloadMcpServers() }
+  getMcpStatus() { return this.core.getMcpStatus() }
+  handleAskUserResponse(response: { askId: string; answers: import('../shared/types').AskUserAnswers }) {
+    this.core.handleAskUserResponse(response.askId, response.answers)
+  }
 }

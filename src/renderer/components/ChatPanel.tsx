@@ -78,7 +78,7 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
             const prev = i > 0 ? filteredMessages[i - 1] : undefined
             return (
               <Fragment key={msg.id}>
-                <MessageBubble message={msg} prevRole={prev?.role} onRetry={msg.role === 'assistant' ? onRetryMessage : undefined} />
+                <MessageBubble message={msg} prevRole={prev?.role} onRetry={msg.role === 'assistant' ? onRetryMessage : undefined} isStreaming={msg.role === 'assistant' && isLoading && i === filteredMessages.length - 1} />
               </Fragment>
             )
           })}

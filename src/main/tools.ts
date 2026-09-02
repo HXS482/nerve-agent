@@ -82,7 +82,7 @@ function matchGlob(pattern: string, filePath: string): boolean {
   return regex.test(filePath)
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers> }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
@@ -556,6 +556,32 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
               content: prompt,
               tokens: promptTokens,
             }
+          },
+        },
+      }
+    })() : {}),
+
+    // AskUser — 结构化提问收集需求（用户通过屏幕上的选项卡片作答）
+    ...(hooks?.askUser ? (() => {
+      const askUserSchema = z.object({
+        questions: z.array(z.object({
+          q: z.string().describe('The question to ask'),
+          type: z.enum(['radio', 'check']).describe('radio = single choice, check = multi-select'),
+          options: z.array(z.string()).describe('2-4 options for the user to pick from'),
+        })).describe('1-3 focused questions'),
+      })
+      return {
+        AskUser: {
+          description: 'Ask the user structured questions to collect requirements before producing artifacts — e.g. clarifying what image to generate, which plan/style/format to pick. The user answers via an on-screen option card; their selections and custom text are returned. Use this instead of guessing when the requirement has a few discrete choices. Do NOT use for open-ended discussion.',
+          input_schema: zodToInputSchema(askUserSchema),
+          execute: async ({ questions }: { questions: import('../shared/types').AskUserQuestion[] }) => {
+            const answers = await hooks.askUser!(questions)
+            return questions.map((q, i) => {
+              const a = answers[i]
+              const parts = [...(a?.selected ?? [])]
+              if (a?.custom?.trim()) parts.push(`补充: ${a.custom.trim()}`)
+              return `${q.q} → ${parts.length > 0 ? parts.join('、') : '(跳过)'}`
+            }).join('\n')
           },
         },
       }

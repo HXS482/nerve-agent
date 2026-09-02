@@ -41,6 +41,7 @@ export const IPC_CHANNELS = {
   FETCH_MODELS: 'nerve:fetch-models',
   GET_MCP_SERVERS: 'nerve:get-mcp-servers',
   SAVE_MCP_SERVERS: 'nerve:save-mcp-servers',
+  GET_MCP_STATUS: 'nerve:get-mcp-status',
   // Skills
   GET_SKILLS: 'nerve:get-skills',
   TOGGLE_SKILL: 'nerve:toggle-skill',
@@ -75,6 +76,8 @@ export const IPC_CHANNELS = {
   // Tool approval
   TOOL_APPROVAL_REQUEST: 'nerve:tool-approval-request',
   TOOL_APPROVAL_RESPONSE: 'nerve:tool-approval-response',
+  ASK_USER_REQUEST: 'nerve:ask-user-request',
+  ASK_USER_RESPONSE: 'nerve:ask-user-response',
   // Flow
   FLOW_ITEM: 'nerve:flow-item',
   OPEN_IN_BROWSER: 'nerve:open-in-browser',
@@ -444,6 +447,25 @@ export interface ToolApprovalRequest {
 export interface ToolApprovalResponse {
   approvalId: string
   approved: boolean
+}
+
+// AskUser：agent 向用户发起结构化提问（选项卡片），挂起等待回答
+export interface AskUserQuestion {
+  q: string
+  type: 'radio' | 'check'
+  options: string[]
+}
+
+export interface AskUserRequest {
+  askId: string
+  questions: AskUserQuestion[]
+}
+
+export type AskUserAnswers = Record<number, { selected: string[]; custom: string }>
+
+export interface AskUserResponse {
+  askId: string
+  answers: AskUserAnswers
 }
 
 // Gateway types

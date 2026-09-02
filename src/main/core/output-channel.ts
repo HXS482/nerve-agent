@@ -4,6 +4,8 @@
  * 解耦 Agent 核心与具体输出目标（Electron IPC / WebSocket / IM 适配器）
  * 所有 Agent 输出都通过此接口，不直接依赖 BrowserWindow
  */
+import type { AskUserQuestion } from '../../shared/types'
+
 export interface OutputChannel {
   /** 发送流式文本增量 */
   sendStreamDelta(text: string): void
@@ -47,6 +49,9 @@ export interface ElectronOutputChannel extends OutputChannel {
 
   /** 发送工具审批请求 */
   sendToolApprovalRequest(approvalId: string, toolName: string, toolInput: unknown): void
+
+  /** 发送 AskUser 结构化提问请求（渲染端弹卡片收集回答） */
+  sendAskUserRequest(askId: string, questions: AskUserQuestion[]): void
 }
 
 /**

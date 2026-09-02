@@ -75,6 +75,8 @@ export class AgentCore {
   private settings: ClaudeSettings
   private registry: ProviderRegistry
   private mcpPool: McpPool
+  /** AskUser 挂起中的提问：askId → resolve */
+  private pendingAsks = new Map<string, { resolve: (answers: import('../../shared/types').AskUserAnswers) => void }>()
   private flowContentHashes = new Set<string>()
   private memoryCore: MemoryTdaiCore | null = null
   private offloadBridge: OffloadBridge | null = null
@@ -505,11 +507,20 @@ export class AgentCore {
     })
 
     // Build tools
+    // AskUser 卡片只有 Electron 渲染端能展示回应，其他通道（gateway/IM）不注册该工具，
+    // 否则工具 promise 永远等不到回答
+    const askChannel = isElectronChannel(channel) ? channel : undefined
     const builtinTools = getBuiltinTools(this.projectDir, {
       refresh: () => {
         if (isElectronChannel(channel)) channel.sendGitRefresh()
       },
-    }, this.sourceDir, this.skillRegistry)
+    }, this.sourceDir, this.skillRegistry, askChannel ? {
+      askUser: (questions) => new Promise((resolve) => {
+        const askId = `ask-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        this.pendingAsks.set(askId, { resolve })
+        askChannel.sendAskUserRequest(askId, questions)
+      }),
+    } : undefined)
 
     // Plugin tools via snapshot (pinned for this conversation)
     const pluginSnapshot = this.pluginBus.getSnapshot()
@@ -950,5 +961,25 @@ export class AgentCore {
   async rollbackMcp(serverId: string) {
     const result = await this.mcpPool.rollbackServer(serverId)
     return { success: result }
+  }
+
+  /** 设置面板保存 MCP 配置后热同步连接池 */
+  async reloadMcpServers() {
+    await this.mcpPool.syncWithConfig()
+    return { success: true }
+  }
+
+  /** MCP 服务器连接状态（设置面板状态指示） */
+  getMcpStatus() {
+    return this.mcpPool.getStatus()
+  }
+
+  /** AskUser 挂起中的提问：askId → resolve */
+  handleAskUserResponse(askId: string, answers: import('../../shared/types').AskUserAnswers) {
+    const pending = this.pendingAsks.get(askId)
+    if (pending) {
+      pending.resolve(answers)
+      this.pendingAsks.delete(askId)
+    }
   }
 }

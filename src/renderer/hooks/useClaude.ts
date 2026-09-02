@@ -20,6 +20,8 @@ declare global {
       setPermissionMode: (mode: string) => Promise<void>
       respondToolApproval: (response: ToolApprovalResponse) => Promise<void>
       onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => () => void
+      respondAskUser: (response: import('../../shared/types').AskUserResponse) => Promise<void>
+      onAskUserRequest: (callback: (data: import('../../shared/types').AskUserRequest) => void) => () => void
       pickDirectory: () => Promise<string | null>
       pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
@@ -54,6 +56,7 @@ declare global {
       fetchModels: (baseURL: string, authToken: string) => Promise<{ ok: boolean; models?: string[]; error?: string }>
       getMcpServers: () => Promise<Record<string, any>>
       saveMcpServers: (servers: Record<string, any>) => Promise<void>
+      getMcpStatus: () => Promise<Record<string, { status: 'connected' | 'connecting' | 'failed'; toolCount: number; error?: string }>>
       getSkills: () => Promise<any[]>
       toggleSkill: (id: string, enabled: boolean) => Promise<void>
       transcribeAudio: (audioData: Uint8Array, mimeType: string) => Promise<{ ok: boolean; text?: string; error?: string }>
@@ -517,6 +520,11 @@ export function useClaude() {
       useChatStore.getState().addApproval(req)
     })
 
+    // AskUser 提问请求（agent 结构化提问）
+    const unsubAskUser = window.claude.onAskUserRequest((req) => {
+      useChatStore.getState().addAsk(req)
+    })
+
     return () => {
       if (flushTimer.current) {
         clearTimeout(flushTimer.current)
@@ -529,6 +537,7 @@ export function useClaude() {
       unsubStreamClear()
       unsubFlowItem()
       unsubApproval()
+      unsubAskUser()
     }
   }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId])
 

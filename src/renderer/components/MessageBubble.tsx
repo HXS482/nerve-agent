@@ -11,6 +11,8 @@ interface Props {
   message: ChatMessage
   prevRole?: MessageRole
   onRetry?: (message: ChatMessage) => void
+  /** 该消息是否正在流式输出（用于思考块自动展开/收缩） */
+  isStreaming?: boolean
 }
 
 // ─── URL handling ───────────────────────────────────────
@@ -163,7 +165,7 @@ function UserCopyButton({ text }: { text: string }) {
   )
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, prevRole, onRetry }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, prevRole, onRetry, isStreaming }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const sameRole = prevRole === message.role
@@ -255,7 +257,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     const groups = groupBlocks(message.content)
     return groups.map((group, idx) => {
       if (group.kind === 'toolflow') {
-        return <ToolflowUnit key={`tf-${idx}`} blocks={group.blocks} />
+        return <ToolflowUnit key={`tf-${idx}`} blocks={group.blocks} isStreaming={isStreaming} />
       }
       return <ContentBlockView key={`in-${idx}`} block={group.block} />
     })

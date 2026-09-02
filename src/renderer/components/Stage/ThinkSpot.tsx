@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChatMessage } from '../../../shared/types'
 import { useChatStore } from '../../stores/chatStore'
 import { useStageStore } from '../../stores/stageStore'
 import { LaptopLoader } from './LaptopLoader'
+import { ThinkTraceContent } from '../ThinkTrace'
 
 // 全局思考点：Stage 形态下唯一的思考指示，与消息流解耦。
-// 展示当前会话最新一段 thinking；点击展开/收起内容。
+// 展示当前会话最新一段 thinking；思考开始自动展开、结束自动收缩（手动操作锁定），均带 grid 高度动画。
 export function ThinkSpot({ messages }: { messages: ChatMessage[] }) {
   const currentSessionId = useStageStore((s) => s.stageSessionId)
   const isLoading = useChatStore((s) => s.isLoading)
-  const [expanded, setExpanded] = useState(false)
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null)
 
   // 最新一段思考文本（当前会话最后一个含 thinking 的 assistant 消息）
   const thinking = useMemo(() => {
@@ -25,6 +26,12 @@ export function ThinkSpot({ messages }: { messages: ChatMessage[] }) {
     return ''
   }, [messages, currentSessionId])
 
+  // 每轮思考结束/开始都重置手动锁定，恢复自动展开/收缩
+  useEffect(() => setManualExpanded(null), [isLoading])
+
+  const autoExpanded = isLoading && !!thinking
+  const expanded = manualExpanded ?? autoExpanded
+
   // 没有思考内容且不在生成中 → 不渲染
   if (!thinking && !isLoading) return null
 
@@ -33,17 +40,17 @@ export function ThinkSpot({ messages }: { messages: ChatMessage[] }) {
       <button
         className="think-toggle"
         data-status={isLoading ? 'active' : 'done'}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setManualExpanded(!expanded)}
         title="思考"
       >
         <LaptopLoader />
       </button>
       {isLoading && <div className="think-bubble">思考中…</div>}
-      {expanded && thinking && (
-        <div className="toolflow-expanded think-spot-panel" data-kind="think">
-          <div className="toolflow-reasoning">{thinking}</div>
+      <div className="think-trace-body think-spot-panel" data-open={expanded && !!thinking}>
+        <div className="think-trace-clip">
+          <ThinkTraceContent text={thinking} working={isLoading} />
         </div>
-      )}
+      </div>
     </div>
   )
 }

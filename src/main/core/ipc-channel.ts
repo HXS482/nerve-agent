@@ -90,6 +90,10 @@ export class IPCChannel implements OutputChannel {
     })
   }
 
+  sendAskUserRequest(askId: string, questions: unknown): void {
+    this.send(IPC_CHANNELS.ASK_USER_REQUEST, { askId, questions })
+  }
+
   /** 更新主窗口引用（窗口重建时） */
   setMainWindow(window: BrowserWindow) {
     this.mainWindow = window

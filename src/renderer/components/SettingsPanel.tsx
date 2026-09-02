@@ -1172,8 +1172,21 @@ interface McpServerConfig {
   env?: Record<string, string>
 }
 
+interface McpServerStatus {
+  status: 'connected' | 'connecting' | 'failed'
+  toolCount: number
+  error?: string
+}
+
+const MCP_STATUS_META: Record<McpServerStatus['status'], { color: string; label: string }> = {
+  connected: { color: '#27c93f', label: '已连接' },
+  connecting: { color: '#ffbd2e', label: '连接中' },
+  failed: { color: '#ff5f56', label: '连接失败' },
+}
+
 function McpTab() {
   const [servers, setServers] = useState<Record<string, McpServerConfig>>({})
+  const [statusMap, setStatusMap] = useState<Record<string, McpServerStatus>>({})
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [newCommand, setNewCommand] = useState('')
@@ -1185,10 +1198,20 @@ function McpTab() {
     window.claude.getMcpServers().then((s: Record<string, McpServerConfig>) => {
       setServers(s || {})
     }).catch(() => {})
+    // 真实连接状态：挂载拉一次 + 5s 轮询（连接是异步的）
+    let alive = true
+    const pull = () => window.claude.getMcpStatus().then((s) => { if (alive) setStatusMap(s || {}) }).catch(() => {})
+    pull()
+    const timer = setInterval(pull, 5000)
+    return () => { alive = false; clearInterval(timer) }
   }, [])
 
   const handleSave = async () => {
     await window.claude.saveMcpServers(servers)
+    // 主进程保存后已触发热重载，稍等连接结果再刷新状态
+    setTimeout(() => {
+      window.claude.getMcpStatus().then((s) => setStatusMap(s || {})).catch(() => {})
+    }, 1000)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -1247,12 +1270,15 @@ function McpTab() {
                     width: 7,
                     height: 7,
                     borderRadius: '50%',
-                    background: '#27c93f',
+                    background: MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].color,
                     flexShrink: 0,
                   }}
                 />
                 <span className="text-[12px] font-medium flex-1" style={{ color: 'var(--text-on-surface)' }}>
                   {name}
+                </span>
+                <span className="text-[10px]" style={{ color: MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].color, flexShrink: 0 }}>
+                  {MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].label}
                 </span>
                 <span className="text-[10px] truncate" style={{ color: 'var(--text-outline)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', maxWidth: 200 }}>
                   {cfg.command}
@@ -1293,6 +1319,14 @@ function McpTab() {
                 >
                   <div><span style={{ color: 'var(--text-outline)' }}>type:</span> {cfg.type}</div>
                   <div><span style={{ color: 'var(--text-outline)' }}>command:</span> {cfg.command}</div>
+                  {statusMap[name]?.status === 'connected' && (
+                    <div><span style={{ color: 'var(--text-outline)' }}>tools:</span> {statusMap[name].toolCount} 个可用</div>
+                  )}
+                  {statusMap[name]?.status === 'failed' && (
+                    <div style={{ color: '#ff5f56', wordBreak: 'break-all' }}>
+                      <span style={{ color: 'var(--text-outline)' }}>error:</span> {statusMap[name].error}
+                    </div>
+                  )}
                   {cfg.env && Object.keys(cfg.env).length > 0 && (
                     <div>
                       <span style={{ color: 'var(--text-outline)' }}>env:</span>

@@ -51,6 +51,10 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     claude.handleToolApprovalResponse(response)
   })
 
+  ipcMain.handle(IPC_CHANNELS.ASK_USER_RESPONSE, (_event, response: { askId: string; answers: import('../shared/types').AskUserAnswers }) => {
+    claude.handleAskUserResponse(response)
+  })
+
   ipcMain.handle(IPC_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory'],
@@ -229,6 +233,12 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       if (c.env !== undefined && (typeof c.env !== 'object' || Array.isArray(c.env))) return
     }
     await saveMcpServers(servers)
+    // 保存即热生效：连接池同步（连新增/关删除/变更重连）
+    await claude.reloadMcpServers()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GET_MCP_STATUS, () => {
+    return claude.getMcpStatus()
   })
 
   // Skills

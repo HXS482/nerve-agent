@@ -7,10 +7,13 @@ import {
   type ToolPair,
 } from './toolflow-utils'
 import { ToolflowRow, type RowStatus } from './ToolflowRow'
+import { ThinkTraceContent } from './ThinkTrace'
 import { useChatStore } from '../stores/chatStore'
 
 interface Props {
   blocks: ContentBlock[]
+  /** 所在消息是否正在流式输出（纯 thinking 单元据此判断思考仍在进行） */
+  isStreaming?: boolean
 }
 
 // 通用折叠单元：autoMode latch —— 状态变化时自动展开/收起，用户手动操作后锁定
@@ -53,18 +56,34 @@ function Pill({ kind, status, label, expanded, onClick }: {
 
 function ThinkUnit({ text, status }: { text: string; status: UnitStatus }) {
   const { expanded, toggle } = useAutoExpanded(status === 'active')
+  const working = status === 'active'
   return (
-    <div>
-      <button className="think-toggle" data-status={status} onClick={toggle} title="思考">
-        <svg width="18" height="18" viewBox="0 0 1024 1024" fill="currentColor">
-          <path d="M42.666667 469.333333c0-144.099556 123.448889-213.333333 217.201777-213.333333 139.946667 0 210.716444 95.345778 285.127112 186.311111C625.777778 541.013333 671.345778 597.333333 764.131556 597.333333c61.383111 0 131.868444-44.544 131.868444-128S825.457778 341.333333 764.131556 341.333333c-58.254222 0-104.96 43.747556-125.383112 63.715556a42.666667 42.666667 0 1 1-59.562666-61.041778c18.432-18.033778 88.064-88.007111 184.888889-88.007111 93.809778 0 217.258667 69.233778 217.258666 213.333333S857.884444 682.666667 764.131556 682.666667c-139.946667 0-210.716444-95.345778-285.127112-186.311111C398.222222 397.653333 352.654222 341.333333 259.868444 341.333333 198.542222 341.333333 128 385.877333 128 469.333333s70.542222 128 131.868444 128c59.164444 0 87.153778-26.339556 125.326223-63.715555a42.666667 42.666667 0 1 1 59.619555 61.041778C405.447111 633.173333 355.84 682.666667 259.982222 682.666667 166.115556 682.666667 42.666667 613.432889 42.666667 469.333333z" />
+    <div className="think-trace">
+      <button
+        type="button"
+        className="think-trace-header"
+        data-open={expanded}
+        onClick={toggle}
+        aria-expanded={expanded}
+        title="思考"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill={working ? 'var(--text-on-surface-variant)' : 'var(--text-outline-variant)'}>
+          <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z" />
+        </svg>
+        {working ? (
+          <span className="think-trace-status is-working" role="status">思考中</span>
+        ) : (
+          <span className="think-trace-status" role="status">思考完成</span>
+        )}
+        <svg className="think-trace-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      {expanded && (
-        <div className="toolflow-expanded" data-kind="think">
-          <div className="toolflow-reasoning">{text}</div>
+      <div className="think-trace-body" data-open={expanded}>
+        <div className="think-trace-clip">
+          <ThinkTraceContent text={text} working={working} />
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -121,14 +140,18 @@ function ToolsUnit({ tools, status }: { tools: ToolPair[]; status: UnitStatus })
   )
 }
 
-export const ToolflowUnit = memo(function ToolflowUnit({ blocks }: Props) {
+export const ToolflowUnit = memo(function ToolflowUnit({ blocks, isStreaming }: Props) {
   const unitStatus: UnitStatus = useMemo(() => deriveUnitStatus(blocks), [blocks])
   const { reasoningText, tools } = useMemo(() => pairTools(blocks), [blocks])
 
   const hasReasoning = !!reasoningText.trim()
-  // 思考是否仍在流式输出：整体 active 且最后一块是 thinking
+  // 思考进行中：最后一块是 thinking，且（单元内有工具未完结 | 消息仍在流式输出）。
+  // 注意 deriveUnitStatus 把纯 thinking 单元判为 done，所以流式信号要由外部传入。
   const lastIsThinking = blocks[blocks.length - 1]?.type === 'thinking'
-  const thinkStatus: UnitStatus = unitStatus === 'active' && lastIsThinking ? 'active' : 'done'
+  const thinkStatus: UnitStatus =
+    unitStatus !== 'error' && lastIsThinking && (unitStatus === 'active' || isStreaming)
+      ? 'active'
+      : 'done'
 
   return (
     <div>

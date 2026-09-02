@@ -8,6 +8,7 @@ import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
 import { ModelIsland } from '../ModelIsland'
 import { ApprovalBar } from '../ApprovalBar'
+import { SelectionActions } from '../SelectionActions'
 
 interface Props {
   claude: ReturnType<typeof useClaude>
@@ -22,6 +23,8 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
+      {/* 静态壁纸背景：进入 Stage 模式即固定铺满内框，不随任何状态变化 */}
+      <div className="stage-bg" />
       {/* 顶栏 */}
       <div className="stage-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="stage-topbar-left" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -106,19 +109,24 @@ export function StageShell({ claude, onOpenSettings }: Props) {
         <ToolSpot messages={claude.messages} />
         <UserLogTerminal messages={claude.messages} />
         <ApprovalBar />
-        {/* 会话入口：左下角悬浮按钮 */}
-        <button
-          className="stage-icon-btn stage-sessions-fab"
-          onClick={() => setSessionsOpen((v) => !v)}
-          title="会话"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
       </div>
+
+      {/* 选中文字的上下文 AI 操作条（stage：旁白/卡片文字划选） */}
+      <SelectionActions onAction={claude.send} />
+
+      {/* 会话入口：左下角悬浮按钮（挂在 stage-shell 而非 stage-main：
+          stage-main 的 z-index 层叠上下文会把 z-55 压在全宽 InputBar(z-50) 之下） */}
+      <button
+        className="stage-icon-btn stage-sessions-fab"
+        onClick={() => setSessionsOpen((v) => !v)}
+        title="会话"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
     </div>
   )
 }

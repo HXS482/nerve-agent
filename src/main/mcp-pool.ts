@@ -10,11 +10,20 @@ interface PooledClient {
   lastHealthCheck: number
   drainMode: boolean
   inflightCalls: number
+  /** 连接时配置指纹，热重载时判断是否变更 */
+  configJson: string
 }
 
 const HEALTH_CHECK_INTERVAL = 60_000
 const MAX_RECONNECT_DELAY = 30_000
 const CONNECT_TIMEOUT = 5_000
+const FAILED_RETRY_INTERVAL = 60_000
+
+export interface McpServerStatus {
+  status: 'connected' | 'connecting' | 'failed'
+  toolCount: number
+  error?: string
+}
 
 const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'USER', 'SHELL', 'TERM', 'TEMP', 'TMP', 'SystemRoot', 'windir']
 
@@ -31,13 +40,19 @@ export class McpPool {
   private healthTimer: ReturnType<typeof setInterval> | null = null
   private connectPromise: Promise<void> | null = null
   private closed = false
+  /** 连接失败的服务器：name → 错误信息（用于状态展示与节流重试） */
+  private failed = new Map<string, string>()
+  /** 正在连接中的服务器 */
+  private connecting = new Set<string>()
+  private lastFailRetry = 0
 
   async ensureConnected(): Promise<Record<string, unknown>> {
-    // Already have tools? Return them
-    if (this.pool.size > 0) return this.getAllTools()
+    // 有失败服务器且距上次重试超过间隔 → 后台重连（connectAll 跳过已连接的）
+    const shouldRetryFailed = this.failed.size > 0 && Date.now() - this.lastFailRetry > FAILED_RETRY_INTERVAL
+    if (this.pool.size > 0 && !shouldRetryFailed) return this.getAllTools()
 
-    // First call: fire off background connect, return empty immediately
     if (!this.connectPromise) {
+      if (shouldRetryFailed) this.lastFailRetry = Date.now()
       this.connectPromise = this.connectAll().finally(() => { this.connectPromise = null })
     }
 
@@ -61,6 +76,7 @@ export class McpPool {
   private async connectWithTimeout(name: string, config: McpServerConfig): Promise<void> {
     if (this.pool.has(name)) return
 
+    this.connecting.add(name)
     try {
       const client = await Promise.race([
         this.connectServer(name, config),
@@ -83,9 +99,14 @@ export class McpPool {
         lastHealthCheck: Date.now(),
         drainMode: false,
         inflightCalls: 0,
+        configJson: JSON.stringify(config),
       })
-    } catch {
-      // Failed servers are skipped silently — lazy connect means they'll be retried next call
+      this.failed.delete(name)
+    } catch (err) {
+      // 失败的服务器跳过工具注入，但记录状态供 UI 展示与后续节流重试
+      this.failed.set(name, err instanceof Error ? err.message : String(err))
+    } finally {
+      this.connecting.delete(name)
     }
   }
 
@@ -162,7 +183,9 @@ export class McpPool {
         lastHealthCheck: Date.now(),
         drainMode: false,
         inflightCalls: 0,
+        configJson: JSON.stringify(config),
       })
+      this.failed.delete(name)
     } catch (err) {
       // Close client if it was created but tools() failed
       if (client) {
@@ -173,6 +196,8 @@ export class McpPool {
         await new Promise((r) => setTimeout(r, delay))
         await this.reconnect(name, attempt + 1)
       } else {
+        const msg = err instanceof Error ? err.message : String(err)
+        this.failed.set(name, `reconnect failed: ${msg}`)
         console.error(`[McpPool] "${name}" reconnect failed after ${attempt + 1} attempts`)
       }
     }
@@ -238,6 +263,7 @@ export class McpPool {
       lastHealthCheck: Date.now(),
       drainMode: false,
       inflightCalls: 0,
+      configJson: JSON.stringify(newConfig),
     }
 
     this.pool.set(name, newEntry)
@@ -269,6 +295,48 @@ export class McpPool {
       try { await entry.client.close() } catch { /* ignore */ }
       this.pool.delete(name)
     }
+  }
+
+  /** 保存配置后热同步：连新增的、关已删的、配置变更的重连 */
+  async syncWithConfig(): Promise<void> {
+    if (this.closed) return
+    const configs = await loadMcpServerConfigs()
+    const wanted = Object.entries(configs).filter(([, c]) => c.type === 'stdio')
+    const wantedNames = new Set(wanted.map(([n]) => n))
+
+    // 已删除的服务器：断开并清状态
+    for (const name of [...this.pool.keys()]) {
+      if (!wantedNames.has(name)) await this.closeServer(name)
+    }
+    for (const name of [...this.failed.keys()]) {
+      if (!wantedNames.has(name)) this.failed.delete(name)
+    }
+
+    await Promise.allSettled(wanted.map(async ([name, config]) => {
+      const configJson = JSON.stringify(config)
+      const existing = this.pool.get(name)
+      if (existing && existing.configJson === configJson) return // 没变，不动
+      if (existing) await this.closeServer(name) // 配置变了，重连
+      this.failed.delete(name)
+      await this.connectWithTimeout(name, config)
+    }))
+  }
+
+  /** 设置面板状态指示：已连接/连接中/失败 + 错误信息 */
+  async getStatus(): Promise<Record<string, McpServerStatus>> {
+    const configs = await loadMcpServerConfigs()
+    const result: Record<string, McpServerStatus> = {}
+    for (const name of Object.keys(configs)) {
+      const entry = this.pool.get(name)
+      if (entry) {
+        result[name] = { status: 'connected', toolCount: Object.keys(entry.tools).length }
+      } else if (this.connecting.has(name)) {
+        result[name] = { status: 'connecting', toolCount: 0 }
+      } else {
+        result[name] = { status: 'failed', toolCount: 0, error: this.failed.get(name) ?? 'not connected' }
+      }
+    }
+    return result
   }
 
   async callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<string> {
