@@ -13,7 +13,6 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
   const availableModels = useChatStore((s) => s.availableModels)
   const providerModels = useChatStore((s) => s.providerModels)
   const config = useChatStore((s) => s.config)
-  const theme = useChatStore((s) => s.theme)
   const storeDefaultProvider = useChatStore((s) => s.defaultProvider)
 
   const [open, setOpen] = useState(false)
@@ -68,17 +67,14 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
       {/* Single pill: provider ▾ */}
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 transition-colors cursor-pointer ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+        className="flex items-center gap-1.5 transition-colors cursor-pointer glass-dock"
         style={{
           padding: '3px 8px',
           height: 24,
           borderRadius: 9,
           fontSize: 10,
           fontWeight: 500,
-          background: theme === 'aurora' ? undefined : 'var(--bg-surface-container)',
           color: 'var(--text-on-surface-variant)',
-          border: theme === 'aurora' ? '1px solid var(--glass-border)' : '1px solid var(--border-default)',
-          boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
         }}
       >
         {!sidebarOpen && onToggleSidebar && (
@@ -109,10 +105,10 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
             position: 'absolute', top: '100%', left: 0, marginTop: 4,
             minWidth: 220, zIndex: 100, padding: 4,
             borderRadius: 12,
-            background: 'var(--dynamic-island-bg)',
-            backdropFilter: 'var(--dynamic-island-blur)',
-            WebkitBackdropFilter: 'var(--dynamic-island-blur)',
-            border: '1px solid var(--dynamic-island-border)',
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           }}
         >

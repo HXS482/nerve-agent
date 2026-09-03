@@ -349,7 +349,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     GenerateImage: {
-      description: 'Generate an image from a text prompt using SiliconFlow API (Kwai-Kolors). Saves to .nerve/gallery/. Requires SILICONFLOW_API_KEY in settings.',
+      description: 'Generate an image from a text prompt using SiliconFlow API (Kwai-Kolors). Saves to .nerve/gallery/. Requires SILICONFLOW_API_KEY in settings. Call this tool exactly once per image the user asked for — if the user asks for one image, generate exactly one. Do NOT produce multiple variations of the same request unless the user explicitly asks for several images.',
       input_schema: zodToInputSchema(generateImageSchema),
       execute: async ({ prompt, size = '1024x1024' }: { prompt: string; size?: string; quality?: string }) => {
         try {

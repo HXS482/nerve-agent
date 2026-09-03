@@ -6,7 +6,7 @@
  */
 
 import type { ChatMessage } from '../../shared/types'
-import { groupBlocks } from '../components/toolflow-utils'
+import { groupBlocks, pairTools } from '../components/toolflow-utils'
 import type { StageCardData } from '../components/Stage/StageCard'
 
 export interface StageRound {
@@ -101,9 +101,50 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
     }
     if (msg.role !== 'assistant') continue
     const r = current ?? newRound(`auto-${msg.id}`, msg.timestamp, '', false)
+    // GenerateImage 全生命周期：未出结果 → 生成中占位卡；出结果 → 同 id 换成真实图片卡。
+    // 消息级编号保证占位卡与图片卡 id 一致，React 不重挂载，图片在同一画框内浮现。
+    const genMeta = (input: Record<string, unknown> | undefined) => ({
+      prompt: typeof input?.prompt === 'string' ? input.prompt : undefined,
+      resolution: typeof input?.size === 'string' ? input.size.replace(/x/gi, ' × ') : undefined,
+    })
+    const completedGens: { n: number; input?: Record<string, unknown> }[] = []
+    let genIdx = 0
+    // 结果与图片块分两条 IPC 事件到达，中间空窗期占位卡必须保持生成中状态（不卸载），
+    // 图片块流入后同一张卡内完成动画→图片的浮现；只队尾消息可能有在途图片，历史消息不补。
+    const isLastMsg = msg === messages[messages.length - 1]
     groupBlocks(msg.content).forEach((g, gi) => {
-      // 工具调用/thinking 抽离到全局 ToolSpot / ThinkSpot，不落卡
-      if (g.kind === 'toolflow') return
+      // 工具调用/thinking 抽离到全局 ToolSpot / ThinkSpot，不落卡；
+      // 但 GenerateImage 未出结果时落一张「生成中」占位卡，结果到达后由真实图片卡替换
+      if (g.kind === 'toolflow') {
+        pairTools(g.blocks).tools.forEach((p, pi) => {
+          if (p.use.type !== 'tool_use') return
+          if (p.use.name === 'GenerateImage') {
+            const n = genIdx++
+            if (!p.result) {
+              r.artifactCards.push({ id: `${msg.id}:gen${n}`, kind: 'image', ...genMeta(p.use.input), timestamp: msg.timestamp })
+            } else if (!p.result.is_error) {
+              completedGens.push({ n, input: p.use.input })
+            }
+            return
+          }
+          // Write 生成 .html（可交互网页/小游戏）→ WebScreen 卡，写入完成后出现
+          if (p.use.name === 'Write' && p.result && !p.result.is_error) {
+            const input = p.use.input
+            const filePath = typeof input?.file_path === 'string' ? input.file_path : ''
+            const content = typeof input?.content === 'string' ? input.content : ''
+            if (/\.html?$/i.test(filePath) && content) {
+              r.artifactCards.push({
+                id: `${msg.id}:web${gi}-${pi}`,
+                kind: 'web',
+                html: content,
+                label: filePath.split(/[/\\]/).pop(),
+                timestamp: msg.timestamp,
+              })
+            }
+          }
+        })
+        return
+      }
       const b = g.block
       if (b.type === 'text' && b.text?.trim()) {
         // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注
@@ -113,9 +154,19 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
         )
         if (prose.trim()) r.textSegments.push(prose)
       }
-      else if (b.type === 'image' && b.src) r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
+      else if (b.type === 'image' && b.src) {
+        const gen = completedGens.shift()
+        if (gen) r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', block: b, ...genMeta(gen.input), timestamp: msg.timestamp })
+        else r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
+      }
       else if (b.type === 'file') r.artifactCards.push({ id: `${msg.id}:fl${gi}`, kind: 'file', block: b, timestamp: msg.timestamp })
     })
+    // 已出结果但图片块尚未流入（IPC 空窗）→ 占位卡保持生成中，等图片块到达后同 id 换图
+    if (isLastMsg) {
+      completedGens.forEach((gen) =>
+        r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', ...genMeta(gen.input), timestamp: msg.timestamp }),
+      )
+    }
   }
   return rounds
 }

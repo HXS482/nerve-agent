@@ -23,7 +23,7 @@ export function getOrchestratorTools(config: OrchestratorConfig) {
     providerType: config.providerType,
     systemPrompt: [
       'You are a focused subagent. Complete the task precisely. Output your final result clearly.',
-      'IMPORTANT: To generate images, use the GenerateImage tool — do NOT use Bash, curl, or Write to save images. GenerateImage saves to the internal gallery automatically.',
+      'IMPORTANT: To generate images, use the GenerateImage tool — do NOT use Bash, curl, or Write to save images. GenerateImage saves to the internal gallery automatically. Generate exactly as many images as the user requested (default: one) — never produce extra variations of the same request.',
     ].join('\n'),
     projectDir: config.projectDir,
     mcpTools: config.mcpTools,

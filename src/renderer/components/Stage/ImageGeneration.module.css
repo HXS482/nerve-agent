@@ -1,0 +1,124 @@
+.igWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* 样式参照 InputBar 附件缩略图：1px 边框 + rounded-xl，内容贴满无边距 */
+.igCanvas {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  background: var(--bg-surface-container);
+  overflow: hidden;
+}
+/* 点阵：斜向漂移 + 呼吸，模拟像素逐步成形 */
+.igDots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--accent-primary) 1px, transparent 1.6px);
+  background-size: 16px 16px;
+  opacity: 0.12;
+  animation: igDotsDrift 6s linear infinite, igDotsBreathe 2.4s ease-in-out infinite;
+}
+
+/* 光斑：扫过画布的发光团 */
+.igGlow {
+  position: absolute;
+  top: -30%;
+  left: -30%;
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-primary) 0%, transparent 70%);
+  opacity: 0.28;
+  filter: blur(28px);
+  animation: igGlowSweep 3.2s ease-in-out infinite;
+}
+
+/* 完成态：图片在同一个画框内浮现，贴满画框（同 InputBar 缩略图） */
+.igWrap .igCanvas .igImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
+  animation: igImgReveal 0.55s ease-out both;
+}
+
+.igRes {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(10, 14, 20, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.igMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.igLabel {
+  flex-shrink: 0;
+  color: var(--text-on-surface-variant);
+  animation: igLabelPulse 1.6s ease-in-out infinite;
+}
+
+.igDone .igLabel {
+  animation: none;
+}
+
+.igPrompt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+  color: var(--text-outline);
+}
+
+@keyframes igDotsDrift {
+  from { background-position: 0 0; }
+  to { background-position: 32px 16px; }
+}
+
+@keyframes igDotsBreathe {
+  0%, 100% { opacity: 0.08; }
+  50% { opacity: 0.18; }
+}
+
+@keyframes igGlowSweep {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(90%, 70%) scale(1.25); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes igImgReveal {
+  from { opacity: 0; transform: scale(1.05); filter: blur(6px); }
+  to { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+@keyframes igLabelPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .igDots, .igGlow, .igLabel, .igImg {
+    animation: none;
+  }
+}
