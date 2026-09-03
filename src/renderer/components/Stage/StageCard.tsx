@@ -2,8 +2,10 @@ import { memo } from 'react'
 import type { ContentBlock } from '../../../shared/types'
 import { ContentBlockView } from '../MessageBubble'
 import { StageCodeCard, StageCodeAnnotation } from './StageCodeCard'
+import { ImageGeneration } from './ImageGeneration'
+import { WebScreen } from './WebScreen'
 
-export type StageCardKind = 'text' | 'image' | 'file' | 'code'
+export type StageCardKind = 'text' | 'image' | 'file' | 'code' | 'web'
 
 export interface StageCardData {
   id: string
@@ -12,14 +14,24 @@ export interface StageCardData {
   /** kind = 'code'：代码块内容与高亮语言 */
   code?: string
   language?: string
+  /** kind = 'image' 且来自 GenerateImage：提示词与分辨率（无 block = 仍在生成中） */
+  prompt?: string
+  resolution?: string
+  /** kind = 'web'：Write 生成的可交互网页（HTML 全文与文件名） */
+  html?: string
+  label?: string
   timestamp: number
 }
 
 // 单卡：统一外壳，内容按 kind 分发；annotations = 弹幕批注（产物卡的说明文字）
 export const StageCard = memo(function StageCard({ card, annotations }: { card: StageCardData; annotations?: string[] }) {
+  const isGenImage = card.kind === 'image' && (card.prompt != null || !card.block)
+  // 生成中的占位卡不贴弹幕：画框本身是动画，弹幕会糊在点阵上；图片到达后恢复
+  // web 卡与 code 卡一样走右缘批注图标（StageCodeAnnotation），不用内嵌弹幕层
+  const showDanmaku = annotations && annotations.length > 0 && card.kind !== 'code' && card.kind !== 'web' && !(isGenImage && !card.block)
   return (
-    <div className="stage-card" data-kind={card.kind}>
-      {annotations && annotations.length > 0 && card.kind !== 'code' && (
+    <div className="stage-card" data-kind={card.kind} {...(isGenImage ? { 'data-gen': '' } : {})}>
+      {showDanmaku && (
         <div className="danmaku-layer">
           {annotations.map((a, i) => (
             <div key={i} className="danmaku-chip" style={{ animationDelay: `${i * 0.15}s` }}>
@@ -28,8 +40,23 @@ export const StageCard = memo(function StageCard({ card, annotations }: { card: 
           ))}
         </div>
       )}
-      {(card.kind === 'text' || card.kind === 'image') && card.block && (
+      {card.kind === 'text' && card.block && (
         <ContentBlockView block={card.block} />
+      )}
+      {card.kind === 'image' && isGenImage && (
+        <ImageGeneration prompt={card.prompt} resolution={card.resolution} src={card.block?.src} />
+      )}
+      {card.kind === 'image' && !isGenImage && card.block && (
+        <ContentBlockView block={card.block} />
+      )}
+      {card.kind === 'web' && card.html != null && (
+        <>
+          <WebScreen title={card.label} html={card.html} />
+          {/* 与代码卡一致：批注图标贴卡片右缘 */}
+          {annotations && annotations.length > 0 && (
+            <StageCodeAnnotation annotations={annotations} />
+          )}
+        </>
       )}
       {card.kind === 'code' && card.code != null && (
         <>

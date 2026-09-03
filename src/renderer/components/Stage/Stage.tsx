@@ -6,6 +6,7 @@ import { useChatStore } from '../../stores/chatStore'
 import { buildStageView } from '../../adapters/stageAdapter'
 import { StageCard, type StageCardData } from './StageCard'
 import { NarrationLayer } from './NarrationLayer'
+import { CardCoverFlow } from './CardCoverFlow'
 import ASCIIText from '../ASCIIText'
 
 // ─── 可拖拽卡片（外层出生飞入，内层拖拽偏移） ───
@@ -161,6 +162,29 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   const narrationText = vm.narrationText
   const focusRoundId = vm.focusRoundId
 
+  // CoverFlow 数据源：会话内全部已出图的图片卡（不随选轮/隐藏变化——常驻收容所）
+  const coverFlowImages = useMemo(
+    () =>
+      buildStageView(filtered, null)
+        .cards.filter(({ card }) => card.kind === 'image' && card.block?.src)
+        .map(({ card }) => ({
+          id: card.id,
+          src: card.block!.src!,
+          title: card.prompt ?? card.block!.src!.split(/[/\\]/).pop() ?? 'image',
+        })),
+    [filtered],
+  )
+
+  // 图片卡被 X 关闭 → 从画布撤下并收进 CoverFlow，聚焦到该图
+  const [coverFlowFocus, setCoverFlowFocus] = useState<{ index: number } | null>(null)
+  const closeCard = (card: StageCardData) => {
+    if (card.kind === 'image') {
+      const idx = coverFlowImages.findIndex((img) => img.id === card.id)
+      if (idx >= 0) setCoverFlowFocus({ index: idx })
+    }
+    hideCard(card.id)
+  }
+
   // 出生动画只播给「新增」卡片：首帧已存在的全部标记 seen
   const seenRef = useRef<Set<string>>(new Set())
   const [ready, setReady] = useState(false)
@@ -190,36 +214,43 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   }, [allCards.length])
 
   // 生成中（等回复期间）不走空态：否则旁白清空后壁纸会随 .stage-bg 一起消失
-  if (allCards.length === 0 && !narrationText && !isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center" style={{ paddingInline: 'var(--sp-md)' }}>
-        <div className="flex flex-col items-center justify-center py-20 gap-3" style={{ position: 'relative', width: '100%', height: '300px' }}>
-          <ASCIIText text="Hey!" enableWaves asciiFontSize={4} />
-        </div>
-      </div>
-    )
-  }
+  const showEmptyState = allCards.length === 0 && !narrationText && !isLoading
 
   return (
     <div className="stage-root">
-      <div ref={canvasRef} className="stage-canvas flex-1 overflow-y-auto w-full" data-chat-scroll>
-        <div className="stage-masonry">
-          {allCards.map(({ card, annotations }) => (
-            <DraggableCard
-              key={card.id}
-              card={card}
-              annotations={annotations}
-              isNew={ready && !seenRef.current.has(card.id)}
-              onClose={() => hideCard(card.id)}
-            />
-          ))}
+      {showEmptyState ? (
+        <div className="flex-1 flex items-center justify-center" style={{ paddingInline: 'var(--sp-md)' }}>
+          <div className="flex flex-col items-center justify-center py-20 gap-3" style={{ position: 'relative', width: '100%', height: '300px' }}>
+            <ASCIIText text="Hey!" enableWaves asciiFontSize={4} />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div ref={canvasRef} className="stage-canvas flex-1 overflow-y-auto w-full" data-chat-scroll>
+          <div className="stage-masonry">
+            {allCards.map(({ card, annotations }) => (
+              <DraggableCard
+                key={card.id}
+                card={card}
+                annotations={annotations}
+                isNew={ready && !seenRef.current.has(card.id)}
+                onClose={() => closeCard(card)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {narrationText && focusRoundId && (
           <NarrationLayer key={focusRoundId} text={narrationText} />
         )}
       </AnimatePresence>
+      {/* 左下角 CoverFlow 图片浏览（会话真实图片，X 关闭的图片收进这里）：
+          会话内第一次有图生成后常驻，不随卡片关闭/选轮切换消失 */}
+      {coverFlowImages.length > 0 && (
+        <div className="stage-coverflow">
+          <CardCoverFlow images={coverFlowImages} focusRequest={coverFlowFocus} />
+        </div>
+      )}
     </div>
   )
 }
