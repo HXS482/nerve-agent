@@ -26,7 +26,7 @@ export function ThinkTraceContent({ text, working }: { text: string; working: bo
             <div
               key={i}
               className="think-trace-row"
-              style={{ animation: `fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${Math.min(i, 8) * 120}ms both` }}
+              style={{ animation: `think-row-in 300ms ease-out ${Math.min(i, 8) * 120}ms both` }}
             >
               {isActiveRow ? (
                 <span className="think-trace-spinner" />

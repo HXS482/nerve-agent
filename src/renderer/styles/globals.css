@@ -1040,11 +1040,13 @@ button, a, input, textarea, select {
   margin-top: 6px;
 }
 .think-spot-panel .think-trace-content {
-  max-height: min(220px, 34vh);
+  /* 限高：收窄到不压到下方工具 dock（内容超长走内部滚动） */
+  max-height: min(170px, 26vh);
 }
-/* stage 思考面板字号略小于 chat（浮层场景更紧凑） */
+/* stage 思考面板字号：8px 过小且行距失衡导致排版重叠，放宽到可读字号并统一行距 */
 .think-spot-panel .think-trace-row-text {
-  font-size: 8px;
+  font-size: 11px;
+  line-height: 1.55;
 }
 /* 收起时不挡壁纸交互 */
 .think-spot-panel[data-open="false"] {
@@ -1055,7 +1057,7 @@ button, a, input, textarea, select {
 .tool-spot {
   position: absolute;
   left: 12px;
-  top: 50%;
+  top: 56%;
   transform: translateY(-50%);
   z-index: 25;
   pointer-events: none;
@@ -2019,6 +2021,9 @@ pre.hljs {
   min-height: 28px;
   padding: 2px 2px;
   border-radius: 6px;
+  /* 关键是:容器带 max-height + overflow 自动滚动时，flex 子项默认 flex-shrink:1
+     会把每行压到自然高度以下，文本溢出叠到下一行（叠影/重叠）。禁止收缩，改为容器内滚动。 */
+  flex-shrink: 0;
 }
 .think-trace-check {
   flex-shrink: 0;
@@ -2049,6 +2054,12 @@ pre.hljs {
 @keyframes fade-up {
   0% { opacity: 0; transform: translateY(6px); }
   100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Stage 思考行：纯淡入（无位移），长段落多行展开时避免行与行瞬时叠压 */
+@keyframes think-row-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 /* Stage 模式的思考点用笔记本 loader（em 缩放：约 68×62px） */
 .think-spot .laptop-loader {
