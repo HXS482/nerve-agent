@@ -45,6 +45,32 @@ export interface StageViewModel {
   rounds: StageRoundSummary[]
 }
 
+// ─── 代码块抽取 ───
+// 从 assistant 文本里抽出 ``` 围栏代码块作为产物卡，剩余文字仍走旁白/批注。
+// 只认「开栅栏后换行」的块级围栏；行内单反引号、未闭合围栏保持原样。
+
+export interface ExtractedCodeBlock {
+  language: string
+  code: string
+}
+
+export function extractCodeBlocks(text: string): { prose: string; codeBlocks: ExtractedCodeBlock[] } {
+  const codeBlocks: ExtractedCodeBlock[] = []
+  const parts: string[] = []
+  const FENCE = /```([A-Za-z0-9+#.-]*)\s*\n([\s\S]*?)```/g
+  let m: RegExpExecArray | null
+  let last = 0
+  while ((m = FENCE.exec(text)) !== null) {
+    parts.push(text.slice(last, m.index))
+    last = m.index + m[0].length
+    const code = m[2].replace(/\n+$/, '')
+    if (!code.trim()) continue
+    codeBlocks.push({ language: m[1], code })
+  }
+  parts.push(text.slice(last))
+  return { prose: parts.join('').replace(/\n{3,}/g, '\n\n').trim(), codeBlocks }
+}
+
 // ─── 轮次状态机 ───
 // 一轮 = 一条用户消息 → agent 完成回复。
 // 纯文字轮：文字走旁白（不落地）；混合轮：产物卡 + 弹幕批注。
@@ -79,7 +105,14 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
       // 工具调用/thinking 抽离到全局 ToolSpot / ThinkSpot，不落卡
       if (g.kind === 'toolflow') return
       const b = g.block
-      if (b.type === 'text' && b.text?.trim()) r.textSegments.push(b.text)
+      if (b.type === 'text' && b.text?.trim()) {
+        // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注
+        const { prose, codeBlocks } = extractCodeBlocks(b.text)
+        codeBlocks.forEach((cb, ci) =>
+          r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, timestamp: msg.timestamp }),
+        )
+        if (prose.trim()) r.textSegments.push(prose)
+      }
       else if (b.type === 'image' && b.src) r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
       else if (b.type === 'file') r.artifactCards.push({ id: `${msg.id}:fl${gi}`, kind: 'file', block: b, timestamp: msg.timestamp })
     })

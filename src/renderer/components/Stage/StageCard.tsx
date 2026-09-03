@@ -1,13 +1,17 @@
 import { memo } from 'react'
 import type { ContentBlock } from '../../../shared/types'
 import { ContentBlockView } from '../MessageBubble'
+import { StageCodeCard, StageCodeAnnotation } from './StageCodeCard'
 
-export type StageCardKind = 'text' | 'image' | 'file'
+export type StageCardKind = 'text' | 'image' | 'file' | 'code'
 
 export interface StageCardData {
   id: string
   kind: StageCardKind
   block?: ContentBlock
+  /** kind = 'code'：代码块内容与高亮语言 */
+  code?: string
+  language?: string
   timestamp: number
 }
 
@@ -15,7 +19,7 @@ export interface StageCardData {
 export const StageCard = memo(function StageCard({ card, annotations }: { card: StageCardData; annotations?: string[] }) {
   return (
     <div className="stage-card" data-kind={card.kind}>
-      {annotations && annotations.length > 0 && (
+      {annotations && annotations.length > 0 && card.kind !== 'code' && (
         <div className="danmaku-layer">
           {annotations.map((a, i) => (
             <div key={i} className="danmaku-chip" style={{ animationDelay: `${i * 0.15}s` }}>
@@ -26,6 +30,15 @@ export const StageCard = memo(function StageCard({ card, annotations }: { card: 
       )}
       {(card.kind === 'text' || card.kind === 'image') && card.block && (
         <ContentBlockView block={card.block} />
+      )}
+      {card.kind === 'code' && card.code != null && (
+        <>
+          <StageCodeCard language={card.language} code={card.code} />
+          {/* 批注弹幕图标贴在卡片右缘跟随（卡片可被缩放柄改宽，须随卡而非随栏） */}
+          {annotations && annotations.length > 0 && (
+            <StageCodeAnnotation annotations={annotations} />
+          )}
+        </>
       )}
       {card.kind === 'file' && card.block && (
         <div className="stage-card-file">

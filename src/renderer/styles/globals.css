@@ -483,6 +483,10 @@ button, a, input, textarea, select {
 .stage-card-draggable.is-image {
   display: inline-block;
 }
+/* 代码卡的拖拽容器跟随 --code-w（缩放柄驱动），默认撑满栏宽 */
+.stage-card-draggable.is-code {
+  width: var(--code-w, 100%);
+}
 /* 禁掉图片原生 HTML5 拖拽残影，避免和 motion 拖拽打架 */
 .stage-card img {
   -webkit-user-drag: none;
@@ -610,6 +614,198 @@ button, a, input, textarea, select {
 .stage-card-file-size {
   color: var(--text-outline-variant);
   flex-shrink: 0;
+}
+
+/* 代码卡：卡面零内边距由 StageCodeCard 自带头栏/正文（参照 CodeBlock 组件结构）；
+   高斯模糊加重 + 玻璃底色更透（弱化遮罩感），圆角加大 */
+.stage-card[data-kind="code"] {
+  --code-glass-bg: rgba(19, 19, 19, 0.42);
+  padding: 0;
+  overflow: visible; /* 右侧批注图标要探出卡片边界 */
+  border-radius: 18px;
+  background: var(--code-glass-bg);
+  backdrop-filter: blur(25px) saturate(160%);
+  -webkit-backdrop-filter: blur(25px) saturate(160%);
+}
+[data-theme="light"] .stage-card[data-kind="code"] {
+  --code-glass-bg: rgba(255, 255, 255, 0.32);
+}
+.stage-code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  /* 语法着色 token（暗色默认，对应 stage 深色壁纸） */
+  --sc-ink: #e6ecf2;
+  --sc-ink2: #c2cddb;
+  --sc-ink3: rgba(230, 236, 242, 0.55);
+  --sc-accent: #82aaff;
+  --sc-orange: #f78c6c;
+}
+[data-theme="light"] .stage-code {
+  --sc-ink: #1a1a1a;
+  --sc-ink2: #3a4149;
+  --sc-ink3: rgba(26, 26, 26, 0.5);
+  --sc-accent: #2563eb;
+  --sc-orange: #ea580c;
+}
+.stage-code-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+.stage-code-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-outline-variant);
+}
+.stage-code-filename {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1;
+  color: var(--text-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-code-copy {
+  margin-left: auto;
+  margin-right: -4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-outline-variant);
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.stage-code-copy:hover {
+  background: var(--bg-surface-container);
+  color: var(--text-on-surface);
+}
+.stage-code-copy[data-copied="true"] {
+  color: #34d399;
+}
+.stage-code-body {
+  position: relative;
+  padding: 12px 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--sc-ink2);
+  /* 纵向缩放：--code-h 由右下角缩放柄驱动，限高后内部滚动 */
+  max-height: var(--code-h, none);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.stage-code-body::-webkit-scrollbar {
+  display: none;
+}
+/* 行号槽 20px，竖线压在槽右缘 */
+.stage-code-gutter-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 20px;
+  width: 1px;
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+.stage-code-line {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+}
+.stage-code-num {
+  user-select: none;
+  text-align: center;
+  font-size: 11px;
+  color: var(--sc-ink3);
+}
+.stage-code-text {
+  padding: 0 12px 0 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 代码卡批注：右侧跟随弹幕图标 + 点击弹出的无边框批注卡 */
+.code-annotation {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+}
+/* 弹幕图标：裸 SVG 无圆圈底（对齐 tool-spot 总图标的处理） */
+.code-annotation-toggle {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-on-surface-variant);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: color 0.15s, filter 0.15s, opacity 0.15s;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45));
+}
+.code-annotation-toggle:hover {
+  color: var(--text-on-surface);
+  opacity: 1;
+}
+.code-annotation-toggle[data-open="true"] {
+  color: #17abe3;
+  opacity: 1;
+}
+/* 无边框批注卡：毛玻璃底 + 阴影，无 border */
+.code-annotation-pop {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 240px;
+  max-width: 40vw;
+  max-height: 40vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  background: var(--dynamic-island-bg);
+  backdrop-filter: var(--dynamic-island-blur);
+  -webkit-backdrop-filter: var(--dynamic-island-blur);
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-on-surface);
+  animation: fade-in 0.15s ease-out;
+}
+.code-annotation-pop::-webkit-scrollbar {
+  display: none;
+}
+.code-annotation-pop p {
+  margin: 0 0 6px;
+}
+.code-annotation-pop p:last-child {
+  margin-bottom: 0;
 }
 
 /* 旁白层：逐行渐现 + 规整正文排版，长回复内部滚动 */

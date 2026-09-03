@@ -12,6 +12,8 @@ interface StageState {
   cardOffsets: Record<string, { x: number; y: number }>
   // 图片卡的自由缩放宽度（内存态）
   cardSizes: Record<string, number>
+  // 代码卡的自由缩放高度（内存态，作用于代码区限高滚动）
+  cardHeights: Record<string, number>
   // 从当前画布关闭的卡片（内存态，不删除会话内容）
   hiddenCardIds: Record<string, true>
   setViewMode: (mode: ViewMode) => void
@@ -19,6 +21,7 @@ interface StageState {
   setSelectedRoundId: (roundId: string | null) => void
   setCardOffset: (cardId: string, offset: { x: number; y: number }) => void
   setCardSize: (cardId: string, width: number) => void
+  setCardHeight: (cardId: string, height: number) => void
   hideCard: (cardId: string) => void
   resetLayout: () => void
 }
@@ -31,6 +34,7 @@ export const useStageStore = create<StageState>()(
       selectedRoundId: null,
       cardOffsets: {},
       cardSizes: {},
+      cardHeights: {},
       hiddenCardIds: {},
       setViewMode: (viewMode) => set({ viewMode }),
       // 切会话清掉回看选中，避免残留高亮
@@ -40,9 +44,11 @@ export const useStageStore = create<StageState>()(
         set((s) => ({ cardOffsets: { ...s.cardOffsets, [cardId]: offset } })),
       setCardSize: (cardId, width) =>
         set((s) => ({ cardSizes: { ...s.cardSizes, [cardId]: width } })),
+      setCardHeight: (cardId, height) =>
+        set((s) => ({ cardHeights: { ...s.cardHeights, [cardId]: height } })),
       hideCard: (cardId) =>
         set((s) => ({ hiddenCardIds: { ...s.hiddenCardIds, [cardId]: true } })),
-      resetLayout: () => set({ cardOffsets: {}, cardSizes: {}, hiddenCardIds: {} }),
+      resetLayout: () => set({ cardOffsets: {}, cardSizes: {}, cardHeights: {}, hiddenCardIds: {} }),
     }),
     {
       name: 'nerve-stage',

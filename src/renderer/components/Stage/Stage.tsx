@@ -15,6 +15,8 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
   const setCardOffset = useStageStore((s) => s.setCardOffset)
   const imgWidth = useStageStore((s) => s.cardSizes[card.id])
   const setCardSize = useStageStore((s) => s.setCardSize)
+  const cardHeight = useStageStore((s) => s.cardHeights[card.id])
+  const setCardHeight = useStageStore((s) => s.setCardHeight)
   const slotRef = useRef<HTMLDivElement>(null)
   const [origin, setOrigin] = useState<{ dx: number; dy: number } | null>(null)
 
@@ -29,10 +31,13 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 图片卡：右下角缩放柄（原生监听 pointerdown —— React 合成事件拦不住 motion 的原生 drag 监听）
+  // 图片卡/代码卡：右下角缩放柄（原生监听 pointerdown —— React 合成事件拦不住 motion 的原生 drag 监听）
+  const resizable = card.kind === 'image' || card.kind === 'code'
   const handleRef = useRef<HTMLDivElement>(null)
   const imgWidthRef = useRef(imgWidth)
   imgWidthRef.current = imgWidth
+  const cardHeightRef = useRef(cardHeight)
+  cardHeightRef.current = cardHeight
   useEffect(() => {
     const el = handleRef.current
     if (!el) return
@@ -40,10 +45,21 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
       e.preventDefault()
       e.stopPropagation()
       const startX = e.clientX
-      const startW = imgWidthRef.current ?? 300
+      const startY = e.clientY
+      // 无存储宽度时量实际卡宽（代码卡默认 100% 栏宽，不能按图片的 300 兜底，否则首次拖拽跳变）
+      const startW = imgWidthRef.current ?? Math.round(el.parentElement?.getBoundingClientRect().width ?? 300)
+      // 高度同理：量代码正文区当前高度
+      const bodyEl = el.parentElement?.querySelector('.stage-code-body') as HTMLElement | null
+      const startH = cardHeightRef.current ?? Math.round(bodyEl?.getBoundingClientRect().height ?? 200)
+      const minW = card.kind === 'code' ? 220 : 120
       const onMove = (ev: PointerEvent) => {
-        const next = Math.min(720, Math.max(120, Math.round(startW + (ev.clientX - startX))))
-        setCardSize(card.id, next)
+        const nextW = Math.min(720, Math.max(minW, Math.round(startW + (ev.clientX - startX))))
+        setCardSize(card.id, nextW)
+        // 代码卡支持纵向：正文区限高 + 内部滚动；图片卡保持等比（只跟随宽度）
+        if (card.kind === 'code') {
+          const nextH = Math.min(800, Math.max(120, Math.round(startH + (ev.clientY - startY))))
+          setCardHeight(card.id, nextH)
+        }
       }
       const onUp = () => {
         window.removeEventListener('pointermove', onMove)
@@ -54,12 +70,22 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
     }
     el.addEventListener('pointerdown', onDown)
     return () => el.removeEventListener('pointerdown', onDown)
+    // origin：新卡首帧是隐身测量槽（无缩放柄），origin 落定后真实 handle 才渲染，需重跑绑定
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card.id])
+  }, [card.id, origin])
 
-  const sizeStyle = card.kind === 'image' && imgWidth
-    ? ({ ['--img-w' as string]: `${imgWidth}px` } as React.CSSProperties)
-    : undefined
+  const sizeStyle = (() => {
+    if (card.kind === 'code') {
+      const s: Record<string, string> = {}
+      if (imgWidth) s['--code-w'] = `${imgWidth}px`
+      if (cardHeight) s['--code-h'] = `${cardHeight}px`
+      return Object.keys(s).length ? (s as React.CSSProperties) : undefined
+    }
+    if (card.kind === 'image' && imgWidth) {
+      return { ['--img-w' as string]: `${imgWidth}px` } as React.CSSProperties
+    }
+    return undefined
+  })()
 
   if (isNew && !origin) {
     return (
@@ -79,7 +105,7 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
       transition={{ type: 'spring', stiffness: 240, damping: 26 }}
     >
       <motion.div
-        className={`stage-card-draggable${card.kind === 'image' ? ' is-image' : ''}`}
+        className={`stage-card-draggable${card.kind === 'image' ? ' is-image' : ''}${card.kind === 'code' ? ' is-code' : ''}`}
         drag
         dragMomentum={false}
         whileDrag={{ scale: 1.02, zIndex: 40 }}
@@ -103,7 +129,7 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
             </svg>
           </button>
         )}
-        {card.kind === 'image' && (
+        {resizable && (
           <div className="stage-resize-handle" ref={handleRef} title="拖拽缩放">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v6h-6" />
