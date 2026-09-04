@@ -208,20 +208,38 @@ export class AgentCore {
               is_error: c.is_error,
             }))
 
-          const parts = content
-            .filter((c: any) => c.type === 'text' || c.type === 'tool_use' || c.type === 'thinking')
-            .map((c: any) => {
-              if (c.type === 'text') return { type: 'text' as const, text: c.text }
-              if (c.type === 'thinking') return { type: 'thinking' as const, thinking: c.thinking }
-              if (c.type === 'tool_use') return { type: 'tool_use' as const, id: c.id, name: c.name, input: c.input }
-              return c
-            })
-          if (parts.length > 0) {
-            messages.push({ role: 'assistant', content: parts })
-          }
-          // tool_result 必须放在紧跟 assistant 的 user 消息中
-          if (toolResults.length > 0) {
-            messages.push({ role: 'user', content: toolResults })
+          const thinkingParts = content
+            .filter((c: any) => c.type === 'thinking')
+            .map((c: any) => ({ type: 'thinking' as const, thinking: c.thinking }))
+          const toolUses = content
+            .filter((c: any) => c.type === 'tool_use')
+            .map((c: any) => ({ type: 'tool_use' as const, id: c.id, name: c.name, input: c.input }))
+          const texts = content
+            .filter((c: any) => c.type === 'text' && c.text)
+            .map((c: any) => ({ type: 'text' as const, text: c.text }))
+          // 图片块回放为文本标记：让模型知道已生成过什么，避免核对无据而重复生成
+          const imageMarkers = content
+            .filter((c: any) => c.type === 'image' && c.src)
+            .map((c: any) => ({ type: 'text' as const, text: `[已生成图片: ${String(c.src).split(/[/\\]/).pop()}]` }))
+
+          if (toolUses.length > 0) {
+            // 回放必须还原真实的因果顺序：工具调用在前，收尾总结文本在工具结果之后。
+            // 存储层是把多 step 拍平成一条 entry（text 在 tool_use 前），若原样回放，
+            // 模型会学到"先宣布完成、再调工具"的错误模式，并在工具结果回来后翻找历史里的旧需求继续执行。
+            messages.push({ role: 'assistant', content: [...thinkingParts, ...toolUses] })
+            // tool_result 必须放在紧跟 assistant 的 user 消息中
+            if (toolResults.length > 0) {
+              messages.push({ role: 'user', content: toolResults })
+            }
+            const tail = [...texts, ...imageMarkers]
+            if (tail.length > 0) {
+              messages.push({ role: 'assistant', content: tail })
+            }
+          } else {
+            const parts = [...thinkingParts, ...texts, ...imageMarkers]
+            if (parts.length > 0) {
+              messages.push({ role: 'assistant', content: parts })
+            }
           }
         }
       }
