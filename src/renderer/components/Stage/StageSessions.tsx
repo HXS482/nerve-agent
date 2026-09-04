@@ -55,6 +55,20 @@ export function StageSessions({ onSelectSession, onNewSession }: Props) {
               <span className="stage-session-title">{s.title || 'Untitled'}</span>
               <span className="stage-session-time">{formatSessionTime(s.updatedAt)}</span>
             </div>
+            {/* 防误移：可从 stage 挪回 chat */}
+            <button
+              className="stage-session-del"
+              title="移至聊天"
+              onClick={(e) => {
+                e.stopPropagation()
+                useChatStore.getState().markSessionMode(s.id, 'chat')
+                useChatStore.getState().updateSession(s.id, { mode: 'chat' })
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M11 6l-6 6 6 6" />
+              </svg>
+            </button>
             <button
               className="stage-session-del"
               title="删除会话"

@@ -50,6 +50,8 @@ const PLATFORM_META: Record<string, { label: string; color: string; icon: React.
 export function SessionList({ currentSessionId, onSelectSession, searchQuery = '', mode }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const deleteSession = useChatStore((s) => s.deleteSession)
+  const markSessionMode = useChatStore((s) => s.markSessionMode)
+  const updateSession = useChatStore((s) => s.updateSession)
   const [sessionBranches, setSessionBranches] = useState<Record<string, Branch[]>>({})
   const [expandedSession, setExpandedSession] = useState<string | null>(null)
 
@@ -215,6 +217,29 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
               >
                 {formatSessionTime(session.updatedAt || session.createdAt)}
               </span>
+              {/* 历史 modeless 会话（mechanism 生效前丢失标记）手动归位到 Stage */}
+              {!session.mode && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    markSessionMode(session.id, 'stage')
+                    updateSession(session.id, { mode: 'stage' })
+                  }}
+                  className="shrink-0 flex items-center justify-center rounded transition-all"
+                  style={{
+                    width: 16, height: 16,
+                    color: 'var(--text-outline-variant)',
+                    opacity: 0,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
+                  title="移至 Stage"
+                >
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation()

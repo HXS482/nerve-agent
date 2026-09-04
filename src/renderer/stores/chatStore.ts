@@ -21,6 +21,8 @@ export interface FlowItem {
   content: string
   timestamp: number
   meta?: Record<string, any>
+  /** 产生该产物的工作区；旧数据无此字段 → 归 chat */
+  workspace?: 'chat' | 'stage'
 }
 
 interface ChatState {
@@ -37,6 +39,9 @@ interface ChatState {
 
   // Sessions
   sessions: Session[]
+  /** 会话归属工作区的权威记录（sessionId → chat/stage），独立持久化，
+      不受 sessions 列表同步/合并覆盖影响 */
+  sessionModes: Record<string, 'chat' | 'stage'>
 
   // Available models from Nerve config
   availableModels: ModelInfo[]
@@ -95,6 +100,8 @@ interface ChatState {
   addSession: (session: Session) => void
   updateSession: (id: string, partial: Partial<Session>) => void
   deleteSession: (id: string) => void
+  /** 记录会话的工作区归属（权威源，见 sessionModes） */
+  markSessionMode: (id: string, mode: 'chat' | 'stage') => void
 
   // Model actions
   setAvailableModels: (models: ModelInfo[]) => void
@@ -147,6 +154,7 @@ export const useChatStore = create<ChatState>()(
 
       // Sessions state
       sessions: [],
+      sessionModes: {},
 
       // Available models
       availableModels: [],
@@ -225,7 +233,10 @@ export const useChatStore = create<ChatState>()(
 
       // Session actions
       addSession: (session) =>
-        set((s) => ({ sessions: [session, ...s.sessions] })),
+        set((s) => ({
+          sessions: [session, ...s.sessions],
+          ...(session.mode ? { sessionModes: { ...s.sessionModes, [session.id]: session.mode } } : {}),
+        })),
       updateSession: (id, partial) =>
         set((s) => ({
           sessions: s.sessions.map((sess) =>
@@ -233,7 +244,13 @@ export const useChatStore = create<ChatState>()(
           ),
         })),
       deleteSession: (id) =>
-        set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) })),
+        set((s) => {
+          const sessionModes = { ...s.sessionModes }
+          delete sessionModes[id]
+          return { sessions: s.sessions.filter((sess) => sess.id !== id), sessionModes }
+        }),
+      markSessionMode: (id, mode) =>
+        set((s) => ({ sessionModes: { ...s.sessionModes, [id]: mode } })),
 
       // Model actions
       setAvailableModels: (models) => set({ availableModels: models }),
@@ -289,6 +306,7 @@ export const useChatStore = create<ChatState>()(
       partialize: (state) => ({
         theme: state.theme,
         sessions: state.sessions,
+        sessionModes: state.sessionModes,
         config: state.config,
         sidebarOpen: state.sidebarOpen,
         currentSessionId: state.currentSessionId,

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { useClaude } from '../../hooks/useClaude'
 import { useStageStore } from '../../stores/stageStore'
+import { useChatStore } from '../../stores/chatStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
 import { ThinkSpot } from './ThinkSpot'
@@ -20,6 +21,17 @@ interface Props {
 export function StageShell({ claude, onOpenSettings }: Props) {
   const setViewMode = useStageStore((s) => s.setViewMode)
   const [sessionsOpen, setSessionsOpen] = useState(false)
+
+  // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
+  useEffect(() => {
+    const sid = useStageStore.getState().stageSessionId
+    if (!sid) return
+    const store = useChatStore.getState()
+    if (store.sessionModes[sid] !== 'stage') {
+      store.markSessionMode(sid, 'stage')
+      store.updateSession(sid, { mode: 'stage' })
+    }
+  }, [])
 
   return (
     <div className="stage-shell">

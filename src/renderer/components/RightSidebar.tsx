@@ -185,6 +185,8 @@ function FlowView() {
   const flowItems = useChatStore((s) => s.flowItems)
   const clearFlow = useChatStore((s) => s.clearFlow)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // chat 侧 flow 面板只显示 chat 工作区的产物（stage 产物不泄漏；旧数据无 workspace 归 chat）
+  const chatItems = flowItems.filter((item) => item.workspace !== 'stage')
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -194,10 +196,10 @@ function FlowView() {
 
   return (
     <div className="flex flex-col h-full">
-      {flowItems.length > 0 && (
+      {chatItems.length > 0 && (
         <div className="flex items-center justify-between px-3 py-2 shrink-0">
           <div className="text-[11px] text-[var(--text-outline-variant)]">
-            {flowItems.length} item{flowItems.length !== 1 ? 's' : ''}
+            {chatItems.length} item{chatItems.length !== 1 ? 's' : ''}
           </div>
           <button
             onClick={clearFlow}
@@ -208,7 +210,7 @@ function FlowView() {
         </div>
       )}
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide">
-        {flowItems.length === 0 ? (
+        {chatItems.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-[12px] text-[var(--text-outline-variant)] opacity-60">
               Flow content will appear here
@@ -217,7 +219,7 @@ function FlowView() {
         ) : (
           <div className="flex flex-col gap-2.5" style={{ padding: '12px 10px' }}>
             <AnimatePresence initial={false}>
-              {flowItems.slice(-MAX_FLOW_ITEMS).map((item) => (
+              {chatItems.slice(-MAX_FLOW_ITEMS).map((item) => (
                 <FlowCard key={item.id} item={item} />
               ))}
             </AnimatePresence>
