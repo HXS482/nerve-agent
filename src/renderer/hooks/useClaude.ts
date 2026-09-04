@@ -154,6 +154,8 @@ export function useClaude() {
       // 不能让旧快照中的 undefined mode 覆盖刚写入的 stage 标记。
       const currentSessions = useChatStore.getState().sessions
       const tempSessions = currentSessions.filter((s) => s.id.startsWith('session-'))
+      // sessionModes 是权威源（独立持久化），sessions 列表上的 mode 只是镜像
+      const sessionModes = useChatStore.getState().sessionModes
       const modeMap: Record<string, 'chat' | 'stage'> = {}
       for (const s of currentSessions) {
         if (s.mode) modeMap[s.id] = s.mode
@@ -166,7 +168,7 @@ export function useClaude() {
         createdAt: rs.createdAt || rs.lastModified,
         updatedAt: rs.lastModified,
         platform: platformMap[rs.sessionId],
-        mode: modeMap[rs.sessionId],
+        mode: sessionModes[rs.sessionId] ?? modeMap[rs.sessionId],
       }))
 
       const remoteIds = new Set(remoteMapped.map((s) => s.id))
@@ -180,7 +182,12 @@ export function useClaude() {
   }, [])
 
   const loadSessionMessages = useCallback(async (sessionId: string, workspace: Workspace = 'chat') => {
-    if (workspace === 'stage') useStageStore.getState().setStageSessionId(sessionId)
+    if (workspace === 'stage') {
+      useStageStore.getState().setStageSessionId(sessionId)
+      // 自愈：在 stage 空间打开的会话重新打上 stage 标记（修复历史上丢失 mode 的会话）
+      useChatStore.getState().markSessionMode(sessionId, 'stage')
+      useChatStore.getState().updateSession(sessionId, { mode: 'stage' })
+    }
     else setSessionId(sessionId)
     useChatStore.getState().setSessionUsage(null)
 
@@ -447,9 +454,19 @@ export function useClaude() {
           mode: tempSession?.mode,
         })
 
+        // 权威 mode 映射随 id 一起迁移
+        const sessionModes = { ...store.sessionModes }
+        if (sessionModes[tempSessionId]) {
+          sessionModes[backendSessionId] = sessionModes[tempSessionId]
+          delete sessionModes[tempSessionId]
+        } else if (tempSession?.mode) {
+          sessionModes[backendSessionId] = tempSession.mode
+        }
+
         useChatStore.setState({
           messages: msgs,
           sessions,
+          sessionModes,
           ...(pendingWorkspace.current === 'chat' ? { currentSessionId: backendSessionId } : {}),
         })
         if (pendingWorkspace.current === 'stage') {
@@ -495,6 +512,8 @@ export function useClaude() {
         type: data.type as any,
         content: data.content,
         meta: data.meta,
+        // 标记产物来源工作区，stage 产物不进 chat 的 flow 面板
+        workspace: pendingWorkspace.current,
       })
       // 产物图片实时注入消息流：chat/stage 两种模式共用同一数据源
       if (data.type === 'image') {
