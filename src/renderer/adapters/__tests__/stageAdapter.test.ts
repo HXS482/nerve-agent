@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildStageView, extractCodeBlocks } from '../stageAdapter'
+import { buildStageView, extractCodeBlocks, extractImageRefs, listSessionImageCards } from '../stageAdapter'
 import type { ChatMessage, ContentBlock } from '../../../shared/types'
 
 const text = (t: string): ContentBlock => ({ type: 'text', text: t })
@@ -207,6 +207,42 @@ describe('buildStageView — 图片生成卡全生命周期', () => {
   })
 })
 
+describe('buildStageView — 正文图片路径引用抽卡（skill/Bash 生图路径）', () => {
+  it('正文提及带目录的图片路径 → 落图片卡，路径从旁白剥离', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('生成一张服务器的图片')),
+      msg('a1', 'assistant', 1100, text('图片生成完毕 ✅\n\n已保存至画廊：`.nerve\\gallery\\server-rack-datacenter.png`\n\n极简黑白风格。')),
+    ])
+    expect(vm.cards).toHaveLength(1)
+    const { card } = vm.cards[0]
+    expect(card.kind).toBe('image')
+    expect(card.block?.src).toBe('.nerve\\gallery\\server-rack-datacenter.png')
+    // 有产物卡 → 文字走批注而非旁白，且批注里不含路径
+    expect(vm.narrationText).toBe('')
+    expect(vm.cards[0].annotations?.join('')).toContain('极简黑白风格')
+    expect(vm.cards[0].annotations?.join('')).not.toContain('.png')
+  })
+
+  it('裸文件名（无目录分隔符）不抽卡', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('说件事')),
+      msg('a1', 'assistant', 1100, text('文件 server-rack.png 已经在那了')),
+    ])
+    expect(vm.cards).toHaveLength(0)
+    expect(vm.narrationText).toContain('server-rack.png')
+  })
+
+  it('正文引用与图片块同 src 时不重复落卡', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('看图')),
+      msg('a1', 'assistant', 1100,
+        text('保存在 .nerve/gallery/a.png 里'),
+        { type: 'image', src: '.nerve/gallery/a.png' }),
+    ])
+    expect(vm.cards).toHaveLength(1)
+  })
+})
+
 describe('buildStageView — Write .html 网页产物卡', () => {
   const htmlUse: ContentBlock = {
     type: 'tool_use',
@@ -242,5 +278,49 @@ describe('buildStageView — Write .html 网页产物卡', () => {
         { type: 'tool_result', toolCallId: 'toolu_w2', content: '{}' }),
     ])
     expect(tsFile.cards).toHaveLength(0)
+  })
+})
+
+describe('buildStageView — 画布只展示焦点轮（新指令清空画布）', () => {
+  const CODE = '```ts\nconst a = 1\n```'
+  const twoRounds = [
+    msg('u1', 'user', 1000, text('第一个任务')),
+    msg('a1', 'assistant', 1100, text(CODE)),
+    msg('u2', 'user', 2000, text('第二个任务')),
+    msg('a2', 'assistant', 2100, text('```ts\nconst b = 2\n```')),
+  ]
+
+  it('默认只显示最新轮的产物卡，旧轮不堆积', () => {
+    const vm = buildStageView(twoRounds)
+    expect(vm.cards).toHaveLength(1)
+    expect(vm.cards[0].card.code).toContain('const b')
+  })
+
+  it('发出新指令等待回复时画布清空', () => {
+    const vm = buildStageView([
+      ...twoRounds,
+      msg('u3', 'user', 3000, text('第三个任务')),
+    ])
+    expect(vm.cards).toHaveLength(0)
+    expect(vm.narrationText).toBe('')
+  })
+
+  it('选中旧轮可回看该轮卡片', () => {
+    const vm = buildStageView(twoRounds, 'u1')
+    expect(vm.cards).toHaveLength(1)
+    expect(vm.cards[0].card.code).toContain('const a')
+  })
+
+  it('listSessionImageCards 不受画布清空影响，返回全量图片卡', () => {
+    const withImages = [
+      msg('u1', 'user', 1000, text('图一')),
+      msg('a1', 'assistant', 1100, { type: 'image', src: '/gallery/1.png' }),
+      msg('u2', 'user', 2000, text('图二')),
+      msg('a2', 'assistant', 2100, { type: 'image', src: '/gallery/2.png' }),
+      msg('u3', 'user', 3000, text('等待中')),
+    ]
+    const cards = listSessionImageCards(withImages)
+    expect(cards).toHaveLength(2)
+    expect(cards.map((c) => c.block?.src)).toEqual(['/gallery/1.png', '/gallery/2.png'])
   })
 })

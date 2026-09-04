@@ -71,6 +71,18 @@ export function extractCodeBlocks(text: string): { prose: string; codeBlocks: Ex
   return { prose: parts.join('').replace(/\n{3,}/g, '\n\n').trim(), codeBlocks }
 }
 
+// ─── 正文图片引用抽取 ───
+// 模型走 skill/Bash 等路径生图时图片块不进消息流，但正文会提及画廊路径。
+// 把正文里带目录的图片路径抽成图片卡（裸文件名无分隔符的不认，避免误伤），路径文本从旁白剥离。
+const IMAGE_REF_RE = /(?<!\w)[\w\\/:\-.]+[\\/][\w\\/:\-.]*\.(?:png|jpe?g|gif|webp|svg|bmp)\b/gi
+
+export function extractImageRefs(text: string): { prose: string; images: string[] } {
+  const cleaned = text.replace(/`([^`]+\.(?:png|jpe?g|gif|webp|svg|bmp))`/gi, '$1')
+  const images = [...new Set(cleaned.match(IMAGE_REF_RE) ?? [])]
+  const prose = cleaned.replace(IMAGE_REF_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return { prose, images }
+}
+
 // ─── 轮次状态机 ───
 // 一轮 = 一条用户消息 → agent 完成回复。
 // 纯文字轮：文字走旁白（不落地）；混合轮：产物卡 + 弹幕批注。
@@ -148,16 +160,25 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
       const b = g.block
       if (b.type === 'text' && b.text?.trim()) {
         // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注
-        const { prose, codeBlocks } = extractCodeBlocks(b.text)
+        const { prose: proseNoCode, codeBlocks } = extractCodeBlocks(b.text)
         codeBlocks.forEach((cb, ci) =>
           r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, timestamp: msg.timestamp }),
         )
+        // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡
+        const { prose, images } = extractImageRefs(proseNoCode)
+        images.forEach((src, ii) => {
+          if (r.artifactCards.some((c) => c.kind === 'image' && c.block?.src === src)) return
+          r.artifactCards.push({ id: `${msg.id}:imt${gi}-${ii}`, kind: 'image', block: { type: 'image', src }, timestamp: msg.timestamp })
+        })
         if (prose.trim()) r.textSegments.push(prose)
       }
       else if (b.type === 'image' && b.src) {
         const gen = completedGens.shift()
         if (gen) r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', block: b, ...genMeta(gen.input), timestamp: msg.timestamp })
-        else r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
+        // 正文引用已落卡的同图不重复落卡
+        else if (!r.artifactCards.some((c) => c.kind === 'image' && c.block?.src === b.src)) {
+          r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
+        }
       }
       else if (b.type === 'file') r.artifactCards.push({ id: `${msg.id}:fl${gi}`, kind: 'file', block: b, timestamp: msg.timestamp })
     })
@@ -196,8 +217,9 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
   const focusAnnotations = focusRound && focusHasArtifact ? focusRound.textSegments : []
 
   const cards: StageCardEntry[] = []
-  // 有效选中 → 画布只留该轮卡片；否则积累全部轮
-  const cardRounds = focused ? [focusRound] : liveRounds
+  // 画布只展示焦点轮（默认最新轮）的产物；发出新指令等待回复时清空画布等待当前交互。
+  // 旧轮产物不堆积——通过消息列表选中回看；CoverFlow 走 listSessionImageCards 全量数据源。
+  const cardRounds = awaitingReply || !focusRound ? [] : [focusRound]
   for (const r of cardRounds) {
     const ann = r === focusRound ? focusAnnotations : undefined
     // 批注停靠在该轮最后一张产物卡上沿
@@ -223,4 +245,11 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
     focusRoundId: focusRound?.id ?? null,
     rounds,
   }
+}
+
+/** 会话内全部已出图的图片卡（CoverFlow 数据源：不随焦点轮切换/画布清空变化） */
+export function listSessionImageCards(messages: ChatMessage[]): StageCardData[] {
+  return groupRounds(messages).flatMap((r) =>
+    r.artifactCards.filter((c) => c.kind === 'image' && c.block?.src),
+  )
 }
