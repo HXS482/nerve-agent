@@ -455,7 +455,7 @@ button, a, input, textarea, select {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: #0a0a0a url('/assets/stage-bg-sequoia.jpg') center / cover no-repeat;
+  background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
 }
 
 /* 内容层压在壁纸上 */
