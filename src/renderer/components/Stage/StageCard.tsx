@@ -26,9 +26,8 @@ export interface StageCardData {
 // 单卡：统一外壳，内容按 kind 分发；annotations = 弹幕批注（产物卡的说明文字）
 export const StageCard = memo(function StageCard({ card, annotations }: { card: StageCardData; annotations?: string[] }) {
   const isGenImage = card.kind === 'image' && (card.prompt != null || !card.block)
-  // 生成中的占位卡不贴弹幕：画框本身是动画，弹幕会糊在点阵上；图片到达后恢复
-  // web 卡与 code 卡一样走右缘批注图标（StageCodeAnnotation），不用内嵌弹幕层
-  const showDanmaku = annotations && annotations.length > 0 && card.kind !== 'code' && card.kind !== 'web' && !(isGenImage && !card.block)
+  // 弹幕层只给 text/file 卡；image/web/code 统一走右缘批注图标（StageCodeAnnotation），不压产物
+  const showDanmaku = annotations && annotations.length > 0 && (card.kind === 'text' || card.kind === 'file')
   return (
     <div className="stage-card" data-kind={card.kind} {...(isGenImage ? { 'data-gen': '' } : {})}>
       {showDanmaku && (
@@ -44,10 +43,21 @@ export const StageCard = memo(function StageCard({ card, annotations }: { card: 
         <ContentBlockView block={card.block} />
       )}
       {card.kind === 'image' && isGenImage && (
-        <ImageGeneration prompt={card.prompt} resolution={card.resolution} src={card.block?.src} />
+        <>
+          <ImageGeneration prompt={card.prompt} resolution={card.resolution} src={card.block?.src} />
+          {/* 图片到达后批注图标贴卡片右缘（生成中保持画框干净） */}
+          {card.block && annotations && annotations.length > 0 && (
+            <StageCodeAnnotation annotations={annotations} />
+          )}
+        </>
       )}
       {card.kind === 'image' && !isGenImage && card.block && (
-        <ContentBlockView block={card.block} />
+        <>
+          <ContentBlockView block={card.block} />
+          {annotations && annotations.length > 0 && (
+            <StageCodeAnnotation annotations={annotations} />
+          )}
+        </>
       )}
       {card.kind === 'web' && card.html != null && (
         <>

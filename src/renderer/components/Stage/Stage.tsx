@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { ChatMessage } from '../../../shared/types'
 import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
-import { buildStageView } from '../../adapters/stageAdapter'
+import { buildStageView, listSessionImageCards } from '../../adapters/stageAdapter'
 import { StageCard, type StageCardData } from './StageCard'
 import { NarrationLayer } from './NarrationLayer'
 import { CardCoverFlow } from './CardCoverFlow'
@@ -162,16 +162,14 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   const narrationText = vm.narrationText
   const focusRoundId = vm.focusRoundId
 
-  // CoverFlow 数据源：会话内全部已出图的图片卡（不随选轮/隐藏变化——常驻收容所）
+  // CoverFlow 数据源：会话内全部已出图的图片卡（不随选轮/隐藏/画布清空变化——常驻收容所）
   const coverFlowImages = useMemo(
     () =>
-      buildStageView(filtered, null)
-        .cards.filter(({ card }) => card.kind === 'image' && card.block?.src)
-        .map(({ card }) => ({
-          id: card.id,
-          src: card.block!.src!,
-          title: card.prompt ?? card.block!.src!.split(/[/\\]/).pop() ?? 'image',
-        })),
+      listSessionImageCards(filtered).map((card) => ({
+        id: card.id,
+        src: card.block!.src!,
+        title: card.prompt ?? card.block!.src!.split(/[/\\]/).pop() ?? 'image',
+      })),
     [filtered],
   )
 

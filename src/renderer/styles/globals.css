@@ -697,11 +697,6 @@ button, a, input, textarea, select {
   display: block;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
-/* 批注层在裸图上依然悬浮可读 */
-.stage-card[data-kind="image"] .danmaku-layer {
-  top: 8px;
-  left: 8px;
-}
 /* 生成卡（GenerateImage 全生命周期）：默认宽度收窄，缩放柄仍可调 */
 .stage-card[data-kind="image"][data-gen] {
   width: var(--img-w, 220px);
