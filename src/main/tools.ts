@@ -401,7 +401,8 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
           const arrayBuffer = await imgRes.arrayBuffer()
           const buffer = Buffer.from(arrayBuffer)
-          const filename = `gen-${Date.now()}.png`
+          // saveImage 内部会拼一次时间戳，这里给干净名字（否则 gen-<ts>-<ts>.png 会让模型误判结果重复）
+          const filename = `gen.png`
           const saved = saveImage(filename, buffer, prompt)
 
           return { path: saved.path, filename: saved.filename, prompt, savedTo: 'gallery' }
