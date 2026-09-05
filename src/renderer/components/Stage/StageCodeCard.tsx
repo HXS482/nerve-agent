@@ -41,7 +41,7 @@ function FileIcon() {
   )
 }
 
-export function StageCodeCard({ language, code }: { language?: string; code: string }) {
+export function StageCodeCard({ language, code, fileName, caption }: { language?: string; code: string; fileName?: string; caption?: string }) {
   const [copied, setCopied] = useState(false)
   const copy = useCallback(() => {
     navigator.clipboard.writeText(code).then(() => {
@@ -54,12 +54,14 @@ export function StageCodeCard({ language, code }: { language?: string; code: str
 
   return (
     <div className="stage-code">
-      {/* 头栏：文件图标 + 语言 · Copy */}
+      {/* 头栏：文件图标 + 文件名（Write 关联）或语言 · 行数 · Copy */}
       <div className="stage-code-header">
         <span className="stage-code-file">
           <FileIcon />
-          <span className="stage-code-filename">{language || 'code'}</span>
+          <span className="stage-code-filename">{fileName || language || 'code'}</span>
         </span>
+        {fileName && language && <span className="stage-code-meta">{language}</span>}
+        <span className="stage-code-meta">{lines.length} lines</span>
         <button
           type="button"
           className="stage-code-copy"
@@ -87,40 +89,10 @@ export function StageCodeCard({ language, code }: { language?: string; code: str
           </div>
         ))}
       </div>
+
+      {/* 底部说明栏：模型对这段代码的解释常驻显示，不用点批注图标 */}
+      {caption && <div className="stage-code-caption">{caption}</div>}
     </div>
   )
 }
 
-// 代码卡批注：右侧跟随的裸 SVG 弹幕图标（无圆圈底），点击弹出无边框卡片显示完整批注。
-// 挂在 .stage-card（position: relative，code 卡 overflow: visible）内，
-// 随卡片拖拽与缩放移动；pointerdown 阻断，避免触发卡片拖拽。
-export function StageCodeAnnotation({ annotations }: { annotations: string[] }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="code-annotation">
-      <button
-        type="button"
-        className="code-annotation-toggle"
-        data-open={open}
-        title="批注"
-        aria-expanded={open}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
-      >
-        {/* 弹幕：气泡 + 两行文字 */}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 4h18v11H10l-5 4.5V15H3z" />
-          <line x1="7" y1="8.5" x2="17" y2="8.5" />
-          <line x1="7" y1="11.5" x2="13" y2="11.5" />
-        </svg>
-      </button>
-      {open && (
-        <div className="code-annotation-pop" onPointerDown={(e) => e.stopPropagation()}>
-          {annotations.map((a, i) => (
-            <p key={i}>{a}</p>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}

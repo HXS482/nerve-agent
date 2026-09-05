@@ -52,7 +52,12 @@ export interface StageViewModel {
 export interface ExtractedCodeBlock {
   language: string
   code: string
+  /** 围栏前的引导短句（30 字内、冒号结尾，如"输出："）——绑定为该代码块的 caption */
+  caption?: string
 }
+
+/** Write 写入的代码文件扩展名（用于给围栏代码块卡关联真实文件名） */
+const CODE_FILE_RE = /\.(ts|tsx|js|jsx|mjs|cjs|py|java|go|rs|c|cpp|h|hpp|cs|rb|php|swift|kt|sh|sql|css|scss|less|json|yaml|yml|toml|vue|svelte)$/i
 
 export function extractCodeBlocks(text: string): { prose: string; codeBlocks: ExtractedCodeBlock[] } {
   const codeBlocks: ExtractedCodeBlock[] = []
@@ -61,11 +66,23 @@ export function extractCodeBlocks(text: string): { prose: string; codeBlocks: Ex
   let m: RegExpExecArray | null
   let last = 0
   while ((m = FENCE.exec(text)) !== null) {
-    parts.push(text.slice(last, m.index))
+    let before = text.slice(last, m.index)
     last = m.index + m[0].length
     const code = m[2].replace(/\n+$/, '')
-    if (!code.trim()) continue
-    codeBlocks.push({ language: m[1], code })
+    if (!code.trim()) {
+      parts.push(before)
+      continue
+    }
+    // 引导短句（围栏正上方一行、≤30 字、冒号结尾，如"输出："）归入该代码块的 caption，
+    // 不再流落为整轮的悬空批注
+    let caption: string | undefined
+    const leadMatch = before.match(/(?:^|\n)([^\n]{1,30}[:：])\s*$/)
+    if (leadMatch) {
+      caption = leadMatch[1].trim()
+      before = before.slice(0, before.length - leadMatch[0].length)
+    }
+    parts.push(before)
+    codeBlocks.push({ language: m[1], code, caption })
   }
   parts.push(text.slice(last))
   return { prose: parts.join('').replace(/\n{3,}/g, '\n\n').trim(), codeBlocks }
@@ -121,6 +138,8 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
     })
     const completedGens: { n: number; input?: Record<string, unknown> }[] = []
     let genIdx = 0
+    // Write 写入的代码文件：用于给同消息的代码块卡关联真实文件名（不单独落卡，避免与围栏代码块重复）
+    const writeFiles: { fileName: string; content: string }[] = []
     // 结果与图片块分两条 IPC 事件到达，中间空窗期占位卡必须保持生成中状态（不卸载），
     // 图片块流入后同一张卡内完成动画→图片的浮现；只队尾消息可能有在途图片，历史消息不补。
     const isLastMsg = msg === messages[messages.length - 1]
@@ -152,6 +171,9 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
                 label: filePath.split(/[/\\]/).pop(),
                 timestamp: msg.timestamp,
               })
+            } else if (content && CODE_FILE_RE.test(filePath)) {
+              const fileName = filePath.split(/[/\\]/).pop()
+              if (fileName) writeFiles.push({ fileName, content })
             }
           }
         })
@@ -159,11 +181,14 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
       }
       const b = g.block
       if (b.type === 'text' && b.text?.trim()) {
-        // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注
+        // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注；
+        // 围栏代码块与本消息 Write 写入的代码文件内容匹配时，头栏挂上真实文件名
         const { prose: proseNoCode, codeBlocks } = extractCodeBlocks(b.text)
-        codeBlocks.forEach((cb, ci) =>
-          r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, timestamp: msg.timestamp }),
-        )
+        codeBlocks.forEach((cb, ci) => {
+          const snippet = cb.code.trim().slice(0, 80)
+          const wf = snippet ? writeFiles.find((w) => w.content.includes(snippet)) : undefined
+          r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, label: wf?.fileName, caption: cb.caption, timestamp: msg.timestamp })
+        })
         // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡
         const { prose, images } = extractImageRefs(proseNoCode)
         images.forEach((src, ii) => {
@@ -214,7 +239,12 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
   const focusHasArtifact = (focusRound?.artifactCards.length ?? 0) > 0
   // 纯文字轮 → 旁白；混合轮 → 批注
   const narrationText = !awaitingReply && focusRound && !focusHasArtifact ? focusRound.textSegments.join('\n') : ''
-  const focusAnnotations = focusRound && focusHasArtifact ? focusRound.textSegments : []
+  // 批注 = 生成过程的文字摘要；若文字全被引导短句吸收成卡片 caption，用 caption 兜底，保证批注按钮不消失
+  const focusAnnotations = focusRound && focusHasArtifact
+    ? (focusRound.textSegments.length > 0
+        ? focusRound.textSegments
+        : focusRound.artifactCards.map((c) => c.caption).filter((c): c is string => !!c))
+    : []
 
   const cards: StageCardEntry[] = []
   // 画布只展示焦点轮（默认最新轮）的产物；发出新指令等待回复时清空画布等待当前交互。

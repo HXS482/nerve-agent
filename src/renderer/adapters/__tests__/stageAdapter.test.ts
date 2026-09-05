@@ -72,6 +72,18 @@ describe('extractCodeBlocks — 代码块抽取', () => {
     expect(codeBlocks).toEqual([])
     expect(prose).toBe(src)
   })
+
+  it('围栏前的引导短句（冒号结尾）绑定为该块的 caption，从正文剥离', () => {
+    const { prose, codeBlocks } = extractCodeBlocks('结果如下：\n\n输出：\n```text\nhello\n```\n')
+    expect(codeBlocks).toEqual([{ language: 'text', code: 'hello', caption: '输出：' }])
+    expect(prose).toBe('结果如下：')
+  })
+
+  it('围栏前是普通句子（句号结尾）时不抢作 caption', () => {
+    const { prose, codeBlocks } = extractCodeBlocks('这是一个回文函数。\n```python\ndef f():\n    pass\n```')
+    expect(codeBlocks[0].caption).toBeUndefined()
+    expect(prose).toBe('这是一个回文函数。')
+  })
 })
 
 describe('buildStageView — 代码块产物卡', () => {
@@ -97,7 +109,8 @@ describe('buildStageView — 代码块产物卡', () => {
     ])
     expect(vm.cards).toHaveLength(1)
     expect(vm.cards[0].card.kind).toBe('code')
-    expect(vm.cards[0].annotations?.join('')).toContain('实现如下')
+    // 引导短句"实现如下："绑定为卡片 caption，不再流落为批注
+    expect(vm.cards[0].card.caption).toBe('实现如下：')
     expect(vm.cards[0].annotations?.join('')).toContain('以上')
     expect(vm.narrationText).toBe('')
   })
@@ -322,5 +335,34 @@ describe('buildStageView — 画布只展示焦点轮（新指令清空画布）
     const cards = listSessionImageCards(withImages)
     expect(cards).toHaveLength(2)
     expect(cards.map((c) => c.block?.src)).toEqual(['/gallery/1.png', '/gallery/2.png'])
+  })
+})
+
+describe('buildStageView — 代码卡关联 Write 文件名', () => {
+  const CODE = 'def is_palindrome(s):\n    return s == s[::-1]'
+  const writePy: ContentBlock = {
+    type: 'tool_use',
+    id: 'toolu_f1',
+    name: 'Write',
+    input: { file_path: 'G:/work/palindrome.py', content: CODE },
+  }
+  const writeOk: ContentBlock = { type: 'tool_result', toolCallId: 'toolu_f1', content: '{"file_path":"G:\\work\\palindrome.py"}' }
+
+  it('围栏代码块与 Write 文件内容匹配时挂上真实文件名', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('写个回文函数')),
+      msg('a1', 'assistant', 1100, writePy, writeOk, text(`已写入：\n\n\`\`\`python\n${CODE}\n\`\`\``)),
+    ])
+    const codeCard = vm.cards.find(({ card }) => card.kind === 'code')
+    expect(codeCard?.card.label).toBe('palindrome.py')
+  })
+
+  it('无匹配 Write 文件时 label 为空', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('写个回文函数')),
+      msg('a1', 'assistant', 1100, text(`\`\`\`python\n${CODE}\n\`\`\``)),
+    ])
+    const codeCard = vm.cards.find(({ card }) => card.kind === 'code')
+    expect(codeCard?.card.label).toBeUndefined()
   })
 })

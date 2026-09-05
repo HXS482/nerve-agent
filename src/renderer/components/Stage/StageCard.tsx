@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import type { ContentBlock } from '../../../shared/types'
 import { ContentBlockView } from '../MessageBubble'
-import { StageCodeCard, StageCodeAnnotation } from './StageCodeCard'
+import { StageCodeCard } from './StageCodeCard'
 import { ImageGeneration } from './ImageGeneration'
 import { WebScreen } from './WebScreen'
 
@@ -14,6 +14,8 @@ export interface StageCardData {
   /** kind = 'code'：代码块内容与高亮语言 */
   code?: string
   language?: string
+  /** kind = 'code'：围栏前的引导短句（如"输出："），底部说明栏优先于整轮批注 */
+  caption?: string
   /** kind = 'image' 且来自 GenerateImage：提示词与分辨率（无 block = 仍在生成中） */
   prompt?: string
   resolution?: string
@@ -43,39 +45,16 @@ export const StageCard = memo(function StageCard({ card, annotations }: { card: 
         <ContentBlockView block={card.block} />
       )}
       {card.kind === 'image' && isGenImage && (
-        <>
-          <ImageGeneration prompt={card.prompt} resolution={card.resolution} src={card.block?.src} />
-          {/* 图片到达后批注图标贴卡片右缘（生成中保持画框干净） */}
-          {card.block && annotations && annotations.length > 0 && (
-            <StageCodeAnnotation annotations={annotations} />
-          )}
-        </>
+        <ImageGeneration prompt={card.prompt} resolution={card.resolution} src={card.block?.src} />
       )}
       {card.kind === 'image' && !isGenImage && card.block && (
-        <>
-          <ContentBlockView block={card.block} />
-          {annotations && annotations.length > 0 && (
-            <StageCodeAnnotation annotations={annotations} />
-          )}
-        </>
+        <ContentBlockView block={card.block} />
       )}
       {card.kind === 'web' && card.html != null && (
-        <>
-          <WebScreen title={card.label} html={card.html} />
-          {/* 与代码卡一致：批注图标贴卡片右缘 */}
-          {annotations && annotations.length > 0 && (
-            <StageCodeAnnotation annotations={annotations} />
-          )}
-        </>
+        <WebScreen title={card.label} html={card.html} />
       )}
       {card.kind === 'code' && card.code != null && (
-        <>
-          <StageCodeCard language={card.language} code={card.code} />
-          {/* 批注弹幕图标贴在卡片右缘跟随（卡片可被缩放柄改宽，须随卡而非随栏） */}
-          {annotations && annotations.length > 0 && (
-            <StageCodeAnnotation annotations={annotations} />
-          )}
-        </>
+        <StageCodeCard language={card.language} code={card.code} fileName={card.label} caption={card.caption ?? annotations?.join('\n')} />
       )}
       {card.kind === 'file' && card.block && (
         <div className="stage-card-file">
