@@ -777,18 +777,16 @@ button, a, input, textarea, select {
   flex-shrink: 0;
 }
 
-/* 代码卡：卡面零内边距由 StageCodeCard 自带头栏/正文（参照 CodeBlock 组件结构）；
-   glass-dock 毛玻璃 + 深色底（大面积卡片 white/5 压不住亮壁纸，需底色保证代码可读） */
+/* 代码卡：不透明终端风（实色深底，不依赖毛玻璃），圆角加大 */
 .stage-card[data-kind="code"] {
   padding: 0;
   overflow: visible; /* 右侧批注图标要探出卡片边界 */
   border-radius: 18px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05)),
-    rgba(13, 17, 23, 0.42);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0c1017;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 .stage-code {
   display: flex;
@@ -866,8 +864,9 @@ button, a, input, textarea, select {
   font-size: 12.5px;
   line-height: 1.65;
   color: var(--sc-ink2);
-  /* 纵向缩放：--code-h 由右下角缩放柄驱动，限高后内部滚动 */
-  max-height: var(--code-h, none);
+  /* 纵向缩放：--code-h 由右下角缩放柄驱动，限高后内部滚动；
+     默认限高 28vh（上限 240px），防止长代码卡超出屏幕 */
+  max-height: var(--code-h, min(240px, 28vh));
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
@@ -902,70 +901,26 @@ button, a, input, textarea, select {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-
-/* 代码卡批注：右侧跟随弹幕图标 + 点击弹出的无边框批注卡 */
-.code-annotation {
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 30;
+/* 头栏元信息（语言/行数），copy 按钮自带 margin-left:auto 推到最右 */
+.stage-code-meta {
+  font-size: 10px;
+  color: var(--sc-ink3);
+  font-variant-numeric: tabular-nums;
 }
-/* 弹幕图标：裸 SVG 无圆圈底（对齐 tool-spot 总图标的处理） */
-.code-annotation-toggle {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--text-on-surface-variant);
-  cursor: pointer;
-  opacity: 0.85;
-  transition: color 0.15s, filter 0.15s, opacity 0.15s;
-  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45));
-}
-.code-annotation-toggle:hover {
-  color: var(--text-on-surface);
-  opacity: 1;
-}
-.code-annotation-toggle[data-open="true"] {
-  color: #17abe3;
-  opacity: 1;
-}
-/* 无边框批注卡：毛玻璃底 + 阴影，无 border */
-.code-annotation-pop {
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 240px;
-  max-width: 40vw;
-  max-height: 40vh;
-  overflow-y: auto;
-  scrollbar-width: none;
-  background: var(--dynamic-island-bg);
-  backdrop-filter: var(--dynamic-island-blur);
-  -webkit-backdrop-filter: var(--dynamic-island-blur);
-  border: none;
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  padding: 10px 12px;
+/* 底部说明栏：模型对代码的解释常驻显示（两行截断），不用再点批注图标 */
+.stage-code-caption {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 8px 14px;
+  font-family: var(--font-sans, inherit);
   font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--text-on-surface);
-  animation: fade-in 0.15s ease-out;
-}
-.code-annotation-pop::-webkit-scrollbar {
-  display: none;
-}
-.code-annotation-pop p {
-  margin: 0 0 6px;
-}
-.code-annotation-pop p:last-child {
-  margin-bottom: 0;
+  line-height: 1.55;
+  color: var(--sc-ink3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* 旁白层：逐行渐现 + 规整正文排版，长回复内部滚动 */
@@ -1064,7 +1019,7 @@ button, a, input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 3px 12px 8px;
   position: absolute;
   top: 0;
   left: 0;
@@ -1418,6 +1373,7 @@ button, a, input, textarea, select {
 .think-spot-panel .think-trace-row-text {
   font-size: 11px;
   line-height: 1.55;
+  color: #5c7cff;
 }
 /* 收起时不挡壁纸交互 */
 .think-spot-panel[data-open="false"] {
