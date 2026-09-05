@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore } from '../stores/chatStore'
 
@@ -608,6 +608,67 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
           <SecondaryButton onClick={onPickDirectory}>Change</SecondaryButton>
         </div>
       </Section>
+
+      <Section title="Stage 背景">
+        <StageBgPicker />
+      </Section>
+    </div>
+  )
+}
+
+// 选图 → canvas 压缩（限宽 1920，jpeg q82）→ data URL 持久化到 chatStore
+function StageBgPicker() {
+  const stageBg = useChatStore((s) => s.stageBg)
+  const setStageBg = useChatStore((s) => s.setStageBg)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const scale = Math.min(1, 1920 / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
+        setStageBg(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div>
+      <div
+        style={{
+          width: 240, aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
+          border: '1px solid var(--border-subtle)',
+          background: `#0a0a0a url("${stageBg ?? '/assets/stage-bg.jpg'}") center / cover no-repeat`,
+          marginBottom: 8,
+        }}
+      />
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片</SecondaryButton>
+        {stageBg && (
+          <SecondaryButton onClick={() => setStageBg(null)}>恢复默认</SecondaryButton>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) handleFile(f)
+            e.target.value = ''
+          }}
+        />
+      </div>
+      <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
+        即时生效并本地持久化；大图自动压缩到 1920 宽
+      </div>
     </div>
   )
 }

@@ -37,6 +37,9 @@ interface ChatState {
   // Theme
   theme: Theme
 
+  /** Stage 自定义壁纸（data URL，canvas 压缩后持久化）；null = 默认壁纸 */
+  stageBg: string | null
+
   // Sessions
   sessions: Session[]
   /** 会话归属工作区的权威记录（sessionId → chat/stage），独立持久化，
@@ -95,6 +98,8 @@ interface ChatState {
   // Theme actions
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
+  /** 设置/清除 Stage 自定义壁纸（data URL | null） */
+  setStageBg: (bg: string | null) => void
 
   // Session actions
   addSession: (session: Session) => void
@@ -151,6 +156,7 @@ export const useChatStore = create<ChatState>()(
 
       // Theme state
       theme: 'dark',
+      stageBg: null,
 
       // Sessions state
       sessions: [],
@@ -230,6 +236,7 @@ export const useChatStore = create<ChatState>()(
         document.documentElement.setAttribute('data-theme', theme)
         set({ theme })
       },
+      setStageBg: (bg) => set({ stageBg: bg }),
 
       // Session actions
       addSession: (session) =>
@@ -305,6 +312,7 @@ export const useChatStore = create<ChatState>()(
       name: 'nerve-state',
       partialize: (state) => ({
         theme: state.theme,
+        stageBg: state.stageBg,
         sessions: state.sessions,
         sessionModes: state.sessionModes,
         config: state.config,
