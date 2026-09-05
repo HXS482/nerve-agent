@@ -21,6 +21,7 @@ interface Props {
 export function StageShell({ claude, onOpenSettings }: Props) {
   const setViewMode = useStageStore((s) => s.setViewMode)
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const stageBg = useChatStore((s) => s.stageBg)
 
   // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
   useEffect(() => {
@@ -35,8 +36,8 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
-      {/* 静态壁纸背景：进入 Stage 模式即固定铺满内框，不随任何状态变化 */}
-      <div className="stage-bg" />
+      {/* 静态壁纸背景：进入 Stage 模式即固定铺满内框，不随任何状态变化；支持设置面板自定义 */}
+      <div className="stage-bg" style={stageBg ? { backgroundImage: `url("${stageBg}")` } : undefined} />
       {/* 顶栏 */}
       <div className="stage-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="stage-topbar-left" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
