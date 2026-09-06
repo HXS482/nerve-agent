@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'motion/react'
 import type { ContentBlock, ChatMessage } from '../../../shared/types'
 import { pairTools, getToolSummary } from '../toolflow-utils'
 import { ToolflowRow, type RowStatus } from '../ToolflowRow'
@@ -77,18 +78,29 @@ export function ToolSpot({ messages }: { messages: ChatMessage[] }) {
         <svg width="15" height="13" viewBox="0 0 1152 1024" fill="currentColor">
           <path d="M563.584 32a131.904 131.904 0 0 1 35.2 259.072V374.4l206.272 122.56v235.008l68.288 37.952c21.952-23.488 52.48-38.912 86.464-41.472l9.856-0.32a131.904 131.904 0 1 1-127.424 97.728l-72.832-40.512-202.88 107.84-199.872-109.632-74.368 39.424c1.6 6.72 2.624 13.696 3.2 20.736l0.32 9.856a131.904 131.904 0 1 1-33.088-87.424l72.192-38.208V497.28l199.872-122.496V292.672A131.968 131.968 0 0 1 432 173.76l-0.32-9.856C431.68 91.072 490.688 32 563.52 32z m406.08 760.192a67.904 67.904 0 1 0 0 135.808 67.904 67.904 0 0 0 0-135.808z m-805.76-6.464a67.904 67.904 0 1 0 0 135.808 67.904 67.904 0 0 0 0-135.808zM567.04 430.08L398.912 533.12v195.136l168.064 92.224 174.08-92.48v-194.56L566.976 430.08zM563.584 96a67.904 67.904 0 1 0 0 135.808 67.904 67.904 0 0 0 0-135.808z" />
         </svg>
-        <span className="tool-spot-count">{tools.length}</span>
+        <motion.span
+          key={tools.length}
+          className="tool-spot-count"
+          initial={{ scale: 1.7, opacity: 0.3 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 600, damping: 20 }}
+        >
+          {tools.length}
+        </motion.span>
       </button>
       <div className="tool-spot-dock" ref={dockRef}>
         {rows.map((row, i) => (
-          <div
+          <motion.div
             key={row.pair.use.id ?? i}
             className="tool-spot-icon"
             data-status={row.status}
             title={row.summary ? `${row.toolName} · ${row.summary}` : row.toolName}
+            initial={{ opacity: 0, y: -18, scale: 0.5 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 24, delay: Math.min(i, 8) * 0.06 }}
           >
             <ToolIcon name={row.toolName} />
-          </div>
+          </motion.div>
         ))}
       </div>
       {expanded && (

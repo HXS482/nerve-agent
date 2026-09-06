@@ -65,6 +65,7 @@ declare global {
       listBranches: (sessionId: string) => Promise<Array<{ name: string; head: string; active: boolean }>>
       getProviders: () => Promise<Array<{ id: string; type: string; baseURL: string }>>
       getSessionUsage: (sessionId: string) => Promise<{ inputTokens: number; outputTokens: number; totalTokens: number; compactionCount: number; maxContextTokens: number }>
+      saveStageBg: (buffer: ArrayBuffer, ext: string) => Promise<string>
       onFlowItem: (callback: (data: { type: string; content: string; meta?: Record<string, any> }) => void) => () => void
       pushFlowItem: (type: string, content: string, meta?: Record<string, any>) => void
     }

@@ -2,7 +2,8 @@ import './proxy-bootstrap' // 必须在最前面，全局代理 HTTP/HTTPS
 import { app, BrowserWindow, shell, ipcMain, screen, protocol, net, Menu } from 'electron'
 import { join, resolve } from 'path'
 import { homedir } from 'os'
-import { existsSync } from 'fs'
+import { existsSync, statSync, createReadStream } from 'fs'
+import { Readable } from 'stream'
 
 import { is } from '@electron-toolkit/utils'
 import chokidar from 'chokidar'
@@ -33,7 +34,7 @@ process.on('uncaughtException', (err) => {
 // Window control IPC — registered once, reference updated per window
 let currentMainWindow: BrowserWindow | null = null
 const MAIN_WINDOW_RADIUS = 19
-const MAIN_WINDOW_SHAPE_GUARD_RADIUS = 18
+const MAIN_WINDOW_SHAPE_GUARD_RADIUS = 19
 
 ipcMain.on('window:minimize', () => currentMainWindow?.minimize())
 ipcMain.on('window:maximize', () => {
@@ -51,8 +52,6 @@ ipcMain.on('window:set-bounds', (_event, bounds: Electron.Rectangle) => {
   }
 })
 
-const RESIZE_BORDER = 4 // px — must stay within WS_THICKFRAME's hit-test area
-
 function buildRoundedWindowShape(width: number, height: number, radius: number) {
   const rects: Electron.Rectangle[] = []
   const r = Math.min(radius, Math.floor(width / 2), Math.floor(height / 2))
@@ -62,10 +61,10 @@ function buildRoundedWindowShape(width: number, height: number, radius: number) 
 
     if (y < r) {
       const dy = r - y - 0.5
-      inset = Math.min(RESIZE_BORDER, Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy))))
+      inset = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)))
     } else if (y >= height - r) {
       const dy = y - (height - r) + 0.5
-      inset = Math.min(RESIZE_BORDER, Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy))))
+      inset = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)))
     }
 
     rects.push({ x: inset, y, width: Math.max(0, width - inset * 2), height: 1 })
@@ -320,7 +319,7 @@ protocol.registerSchemesAsPrivileged([
   },
   {
     scheme: 'nerve-file',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
   },
 ])
 
@@ -447,11 +446,31 @@ app.whenReady().then(async () => {
   })
 
   // Handle nerve-file:// protocol for sandbox-safe local file access
-  protocol.handle('nerve-file', (request) => {
+  protocol.handle('nerve-file', async (request) => {
     try {
       const url = new URL(request.url)
       const filePath = decodeURIComponent(url.pathname).replace(/^\//, '')
       const absPath = resolve(filePath)
+      // <video> 播放依赖 Range 请求，net.fetch(file://) 不支持，手动切 206。
+      // 流式返回：整段读进内存会导致大文件每次 seek/循环都卡顿
+      const range = request.headers.get('range')
+      if (range) {
+        const { size } = statSync(absPath)
+        const m = /bytes=(\d+)-(\d*)/.exec(range)
+        if (m) {
+          const start = Number(m[1])
+          const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1
+          const stream = Readable.toWeb(createReadStream(absPath, { start, end })) as unknown as ReadableStream
+          return new Response(stream, {
+            status: 206,
+            headers: {
+              'Content-Range': `bytes ${start}-${end}/${size}`,
+              'Accept-Ranges': 'bytes',
+              'Content-Length': String(end - start + 1),
+            },
+          })
+        }
+      }
       return net.fetch(`file://${absPath.replace(/\\/g, '/')}`)
     } catch (err: any) {
       console.warn('[nerve-file] Failed to serve:', request.url, err.message?.slice(0, 200))

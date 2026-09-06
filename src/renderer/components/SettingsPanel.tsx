@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore } from '../stores/chatStore'
+import { isVideoBg } from './Stage/StageBgMedia'
 
 interface Props {
   config: ClaudeConfig
@@ -616,13 +617,19 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
   )
 }
 
-// 选图 → canvas 压缩（限宽 1920，jpeg q82）→ data URL 持久化到 chatStore
+// 选图/视频：图片 canvas 压缩（限宽 1920，jpeg q82）存 data URL；视频落盘（~/.nerve/stage-bg）存 nerve-file URL
 function StageBgPicker() {
   const stageBg = useChatStore((s) => s.stageBg)
   const setStageBg = useChatStore((s) => s.setStageBg)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
+    if (file.type.startsWith('video/')) {
+      const ext = '.' + (file.name.split('.').pop() || 'mp4')
+      const url = await window.claude.saveStageBg(await file.arrayBuffer(), ext)
+      setStageBg(url)
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const img = new Image()
@@ -639,25 +646,39 @@ function StageBgPicker() {
     reader.readAsDataURL(file)
   }
 
+  const video = stageBg && isVideoBg(stageBg)
+
   return (
     <div>
       <div
         style={{
           width: 240, aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
           border: '1px solid var(--border-subtle)',
-          background: `#0a0a0a url("${stageBg ?? '/assets/stage-bg.jpg'}") center / cover no-repeat`,
+          background: video ? '#0a0a0a' : `#0a0a0a url("${stageBg ?? '/assets/stage-bg.jpg'}") center / cover no-repeat`,
           marginBottom: 8,
+          position: 'relative',
         }}
-      />
+      >
+        {video && (
+          <video
+            src={stageBg}
+            autoPlay
+            muted
+            loop
+            playsInline
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        )}
+      </div>
       <div className="flex items-center" style={{ gap: 8 }}>
-        <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片</SecondaryButton>
+        <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片/视频</SecondaryButton>
         {stageBg && (
           <SecondaryButton onClick={() => setStageBg(null)}>恢复默认</SecondaryButton>
         )}
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           style={{ display: 'none' }}
           onChange={(e) => {
             const f = e.target.files?.[0]
@@ -667,7 +688,7 @@ function StageBgPicker() {
         />
       </div>
       <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
-        即时生效并本地持久化；大图自动压缩到 1920 宽
+        支持图片（自动压缩到 1920 宽）和视频（mp4/webm，循环静音播放）；即时生效并本地持久化
       </div>
     </div>
   )

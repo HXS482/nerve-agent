@@ -4,6 +4,7 @@ import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
+import { BgVideo, isVideoBg } from './StageBgMedia'
 import { ThinkSpot } from './ThinkSpot'
 import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
@@ -36,8 +37,13 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
-      {/* 静态壁纸背景：进入 Stage 模式即固定铺满内框，不随任何状态变化；支持设置面板自定义 */}
-      <div className="stage-bg" style={stageBg ? { backgroundImage: `url("${stageBg}")` } : undefined} />
+      {/* 静态壁纸/视频背景：进入 Stage 模式即固定铺满内框；支持设置面板自定义（图片/视频） */}
+      <div
+        className="stage-bg"
+        style={stageBg ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : undefined}
+      >
+        {stageBg && isVideoBg(stageBg) && <BgVideo src={stageBg} />}
+      </div>
       {/* 顶栏 */}
       <div className="stage-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="stage-topbar-left" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>

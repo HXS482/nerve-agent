@@ -68,6 +68,8 @@ export const IPC_CHANNELS = {
   IMAGE_DELETE: 'nerve:image-delete',
   IMAGE_GET_PATH: 'nerve:image-get-path',
   IMAGE_LOAD: 'nerve:image-load',
+  // Stage 背景（视频等大文件落盘）
+  STAGE_BG_SAVE: 'nerve:stage-bg-save',
   // File upload
   PICK_AND_READ_FILES: 'nerve:pick-and-read-files',
   // Brain

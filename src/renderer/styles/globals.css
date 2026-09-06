@@ -457,6 +457,14 @@ button, a, input, textarea, select {
   pointer-events: none;
   background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
 }
+/* 视频背景（自定义 mp4/webm 等）：填满足位容器 */
+.stage-bg-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
 /* 内容层压在壁纸上 */
 .stage-canvas {
@@ -1004,9 +1012,34 @@ button, a, input, textarea, select {
   overflow: hidden;
   min-height: 0;
   margin: 2px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  /* 背景透明：壁纸由 .stage-bg 承担；shell 若有实色背景会从 1px 透明描边处漏出一条深色线 */
+  border: 1px solid transparent; /* 保留 1px 几何：fab 底部补偿依赖它 */
   border-radius: var(--app-shell-radius);
+}
+/* Stage 外框底图：锐利壁纸铺满窗口（含 shell 的 2px 缝隙），给毛玻璃环提供 backdrop */
+.stage-frame-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
+}
+/* Stage 外框毛玻璃环：与会话按钮同一质感（backdrop blur + 5% 白），
+   xor mask 抠掉中间只留窗口边缘一环；圆角由 border-radius + mask-clip 承担 */
+.stage-frame-frost {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  border-radius: var(--app-window-radius);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 5px; /* 环宽：盖住 1.5 描边 + 2 margin + 1 shell border */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 /* Stage 模式全局隐藏滚动条（壁纸悬浮美学，滚动功能保留） */
 .stage-shell * {
@@ -1067,6 +1100,9 @@ button, a, input, textarea, select {
   width: 32px;
   height: 32px;
   padding: 0;
+  position: relative;
+  top: 6px; /* 相对定位下移，不影响 flex 布局（margin 会把整行撑高） */
+  right: -4px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
@@ -2114,17 +2150,23 @@ pre.hljs {
 
 /* ===== Toolflow Unit ===== */
 .toolflow-row {
+  position: relative;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 5px 10px;
+  padding: 5px 10px 5px 14px;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--text-outline);
   line-height: 1.8;
+  color: var(--text-outline);
   cursor: default;
   border-radius: var(--radius-sm);
-  transition: background 0.12s;
+  transition: background 0.15s;
+  animation: toolflow-row-in 0.25s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes toolflow-row-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .toolflow-row[data-clickable="true"] {
   cursor: pointer;
@@ -2132,10 +2174,42 @@ pre.hljs {
 .toolflow-row[data-clickable="true"]:hover {
   background: var(--bg-surface-container);
 }
-.toolflow-row .toolflow-pfx {
-  color: var(--text-outline-variant);
-  opacity: 0.6;
-  flex-shrink: 0;
+/* 行首状态竖线 */
+.toolflow-rail {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--border-default);
+}
+.toolflow-row[data-status="running"] .toolflow-rail { background: var(--accent-thinking, #dfa88f); animation: toolflow-rail-pulse 1.4s ease-in-out infinite; }
+.toolflow-row[data-status="pending"] .toolflow-rail { background: #e0c878; }
+.toolflow-row[data-status="done"] .toolflow-rail { background: rgba(141, 184, 141, 0.55); }
+.toolflow-row[data-status="error"] .toolflow-rail { background: var(--accent-error, #cf2d56); }
+@keyframes toolflow-rail-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+/* 状态图标 */
+.toolflow-ic { width: 14px; height: 14px; flex-shrink: 0; }
+.toolflow-row[data-status="running"] .toolflow-ic { color: var(--accent-thinking, #dfa88f); }
+.toolflow-row[data-status="pending"] .toolflow-ic { color: #e0c878; }
+.toolflow-row[data-status="done"] .toolflow-ic { color: #8db88d; }
+.toolflow-row[data-status="error"] .toolflow-ic { color: var(--accent-error, #cf2d56); }
+.toolflow-ic.is-spin { animation: toolflow-spin 0.9s linear infinite; }
+@keyframes toolflow-spin { to { transform: rotate(360deg); } }
+/* running 行微光扫过（中性灰，明暗主题通用） */
+.toolflow-row[data-status="running"] {
+  background-image: linear-gradient(100deg, transparent 35%, rgba(128, 128, 128, 0.07) 50%, transparent 65%);
+  background-size: 220% 100%;
+  animation: toolflow-row-in 0.25s cubic-bezier(0.23, 1, 0.32, 1) both, toolflow-shimmer 2.4s linear infinite;
+}
+@keyframes toolflow-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -120% 0; }
 }
 .toolflow-row .toolflow-name {
   color: var(--text-on-surface-variant);
@@ -2150,20 +2224,29 @@ pre.hljs {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.toolflow-row .toolflow-status {
-  flex-shrink: 0;
+.toolflow-chevron {
   margin-left: auto;
+  flex-shrink: 0;
+  font-size: 9px;
+  opacity: 0.45;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.toolflow-status-ok { color: #8db88d; }
-.toolflow-status-run { color: var(--accent-thinking, #dfa88f); }
-.toolflow-status-err { color: var(--accent-error, #cf2d56); }
-.toolflow-status-pending { color: #e0c878; }
+.toolflow-chevron[data-open="true"] { transform: rotate(90deg); }
 
+/* 详情：grid rows 平滑展开（行内容常驻挂载，收起时 0fr 裁掉） */
+.toolflow-detail-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.toolflow-detail-wrap[data-open="true"] { grid-template-rows: 1fr; }
+.toolflow-detail-clip { overflow: hidden; min-height: 0; }
 .toolflow-detail {
-  margin: 2px 0 4px 24px;
-  padding: 8px 10px;
+  margin: 2px 0 4px 22px;
+  padding: 8px 10px 8px 12px;
   background: var(--bg-surface-container-lowest);
   border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--border-default);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -2173,43 +2256,39 @@ pre.hljs {
   color: var(--text-on-surface-variant);
   white-space: pre-wrap;
   word-break: break-word;
-  animation: toolflow-detail-in 0.15s ease-out;
-}
-@keyframes toolflow-detail-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 .toolflow-detail::-webkit-scrollbar { width: 3px; }
 .toolflow-detail::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
 
-/* 收起态胶囊 */
+/* 收起态胶囊：玻璃质感 */
 .toolflow-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 11px;
-  background: rgba(0,102,255,0.12);
-  border: 1px solid rgba(0,102,255,0.35);
+  padding: 4px 12px;
+  background: var(--bg-surface-container);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   font-size: 11.5px;
-  color: #4d94ff;
+  color: var(--text-on-surface-variant);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
   margin: 6px 0;
 }
 .toolflow-pill:hover {
-  background: rgba(0,102,255,0.2);
-  border-color: rgba(0,102,255,0.55);
+  background: var(--bg-surface-container-high);
+  border-color: var(--border-default);
 }
-.toolflow-pill[data-status="done"] {
-  background: rgba(0,102,255,0.1);
-  border-color: rgba(0,102,255,0.3);
-  color: #3d8bff;
+.toolflow-pill[data-status="active"] {
+  color: var(--text-on-surface);
+  border-color: color-mix(in srgb, var(--accent-thinking, #dfa88f) 35%, transparent);
 }
 .toolflow-pill[data-status="error"] {
-  background: rgba(207,45,86,0.08);
-  border-color: rgba(207,45,86,0.25);
+  background: color-mix(in srgb, var(--accent-error, #cf2d56) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent-error, #cf2d56) 25%, transparent);
   color: #d48898;
 }
 .toolflow-pill-dot {
@@ -2217,10 +2296,14 @@ pre.hljs {
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: currentColor;
+  background: #8db88d;
 }
 .toolflow-pill[data-status="active"] .toolflow-pill-dot {
+  background: var(--accent-thinking, #dfa88f);
   animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+.toolflow-pill[data-status="error"] .toolflow-pill-dot {
+  background: var(--accent-error, #cf2d56);
 }
 .toolflow-pill-chevron {
   opacity: 0.6;
@@ -2396,12 +2479,19 @@ pre.hljs {
 /* 展开态容器 */
 .toolflow-expanded {
   margin: 4px 0 8px;
-  padding: 10px 12px;
-  background: rgba(0,102,255,0.05);
-  border: 1px solid rgba(0,102,255,0.18);
+  padding: 8px 10px;
+  background: var(--bg-surface-container-lowest);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  animation: toolflow-detail-in 0.18s ease-out;
 }
+/* 展开/收起的 grid rows 过渡容器（盒子样式留在 .toolflow-expanded 上，0fr 时整体裁掉） */
+.toolflow-expand-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.toolflow-expand-grid[data-open="true"] { grid-template-rows: 1fr; }
+.toolflow-expand-clip { overflow: hidden; min-height: 0; }
 
 /* 展开态：分区标签 */
 .toolflow-section-label {
