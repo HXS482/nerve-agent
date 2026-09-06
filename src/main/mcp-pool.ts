@@ -25,6 +25,37 @@ export interface McpServerStatus {
   error?: string
 }
 
+/** 带 server 归属的 MCP 工具条目（冲突解决前的原始形态） */
+export interface McpToolEntry {
+  serverName: string
+  toolName: string
+  tool: { description?: string; parameters?: unknown }
+}
+
+/**
+ * MCP 工具名冲突解决：与保留名（内置工具）或其他 MCP 工具重名时，
+ * 暴露为 serverName__toolName（仍冲突则追加序号），避免静默覆盖。
+ */
+export function resolveMcpToolNames<T extends { serverName: string; toolName: string }>(
+  entries: T[],
+  reserved: ReadonlySet<string> = new Set(),
+  warn: (msg: string) => void = console.warn,
+): Array<T & { finalName: string }> {
+  const used = new Set(reserved)
+  return entries.map((entry) => {
+    let finalName = entry.toolName
+    if (used.has(finalName)) {
+      const base = `${entry.serverName}__${entry.toolName}`
+      finalName = base
+      let n = 2
+      while (used.has(finalName)) finalName = `${base}__${n++}`
+      warn(`[McpPool] MCP tool "${entry.toolName}" from server "${entry.serverName}" conflicts with an existing tool name; exposed as "${finalName}"`)
+    }
+    used.add(finalName)
+    return { ...entry, finalName }
+  })
+}
+
 const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'USER', 'SHELL', 'TERM', 'TEMP', 'TMP', 'SystemRoot', 'windir']
 
 function buildSafeEnv(): Record<string, string> {
@@ -46,10 +77,10 @@ export class McpPool {
   private connecting = new Set<string>()
   private lastFailRetry = 0
 
-  async ensureConnected(): Promise<Record<string, unknown>> {
+  async ensureConnected(): Promise<McpToolEntry[]> {
     // 有失败服务器且距上次重试超过间隔 → 后台重连（connectAll 跳过已连接的）
     const shouldRetryFailed = this.failed.size > 0 && Date.now() - this.lastFailRetry > FAILED_RETRY_INTERVAL
-    if (this.pool.size > 0 && !shouldRetryFailed) return this.getAllTools()
+    if (this.pool.size > 0 && !shouldRetryFailed) return this.getDetailedTools()
 
     if (!this.connectPromise) {
       if (shouldRetryFailed) this.lastFailRetry = Date.now()
@@ -58,7 +89,7 @@ export class McpPool {
 
     // Give it a brief window to grab fast servers, then return whatever we have
     await Promise.race([this.connectPromise, sleep(500)])
-    return this.getAllTools()
+    return this.getDetailedTools()
   }
 
   private async connectAll(): Promise<void> {
@@ -125,12 +156,14 @@ export class McpPool {
     return client
   }
 
-  getAllTools(): Record<string, unknown> {
-    const tools: Record<string, unknown> = {}
-    for (const entry of this.pool.values()) {
-      Object.assign(tools, entry.tools)
+  getDetailedTools(): McpToolEntry[] {
+    const out: McpToolEntry[] = []
+    for (const [serverName, entry] of this.pool) {
+      for (const [toolName, tool] of Object.entries(entry.tools)) {
+        out.push({ serverName, toolName, tool: tool as McpToolEntry['tool'] })
+      }
     }
-    return tools
+    return out
   }
 
   private startHealthCheck() {
@@ -347,13 +380,13 @@ export class McpPool {
     return content.filter(c => c.type === 'text').map(c => c.text).join('\n')
   }
 
-  getAllToolExecutors(): Map<string, (args: Record<string, unknown>) => Promise<string>> {
-    const executors = new Map<string, (args: Record<string, unknown>) => Promise<string>>()
+  getDetailedExecutors(): Array<{ serverName: string; toolName: string; execute: (args: Record<string, unknown>) => Promise<string> }> {
+    const out: Array<{ serverName: string; toolName: string; execute: (args: Record<string, unknown>) => Promise<string> }> = []
     for (const [serverName, entry] of this.pool) {
       for (const toolName of Object.keys(entry.tools)) {
-        executors.set(toolName, (args) => this.callTool(serverName, toolName, args))
+        out.push({ serverName, toolName, execute: (args) => this.callTool(serverName, toolName, args) })
       }
     }
-    return executors
+    return out
   }
 }

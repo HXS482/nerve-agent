@@ -15,7 +15,7 @@ import { getBuiltinTools } from '../tools'
 import { SkillRegistry } from '../skill-registry'
 import { PluginBus } from '../plugin-bus'
 import { ProviderRegistry } from '../provider-registry'
-import { McpPool } from '../mcp-pool'
+import { McpPool, McpToolEntry, resolveMcpToolNames } from '../mcp-pool'
 import { getOrchestratorTools } from '../orchestrator'
 import { runAgenticLoop } from '../agentic-loop'
 import { MemoryTdaiCore } from '../memory-tdai'
@@ -353,7 +353,7 @@ export class AgentCore {
    */
   private async prepareMessages(payload: SendMessagePayload, sessionId: string) {
     // 获取 MCP 工具
-    let mcpTools: Record<string, any> = {}
+    let mcpTools: McpToolEntry[] = []
     try {
       mcpTools = await this.mcpPool.ensureConnected()
     } catch (mcpErr) {
@@ -485,7 +485,7 @@ export class AgentCore {
     client: any,
     modelId: string,
     providerType: string,
-    mcpTools: Record<string, any>,
+    mcpTools: McpToolEntry[],
     channel: OutputChannel,
     pendingToolCalls: Map<string, { name: string; input: any }>,
     routeImages?: (toolName: string | undefined, resultContent: string) => void
@@ -493,12 +493,32 @@ export class AgentCore {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
 
+    // Build tools
+    // AskUser 卡片只有 Electron 渲染端能展示回应，其他通道（gateway/IM）不注册该工具，
+    // 否则工具 promise 永远等不到回答
+    const askChannel = isElectronChannel(channel) ? channel : undefined
+    const builtinTools = getBuiltinTools(this.projectDir, {
+      refresh: () => {
+        if (isElectronChannel(channel)) channel.sendGitRefresh()
+      },
+    }, this.sourceDir, this.skillRegistry, askChannel ? {
+      askUser: (questions) => new Promise((resolve) => {
+        const askId = `ask-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        this.pendingAsks.set(askId, { resolve })
+        askChannel.sendAskUserRequest(askId, questions)
+      }),
+    } : undefined)
+
+    // MCP 工具名冲突解决：与内置工具或其他 MCP 工具重名时加 serverName__ 前缀
+    const resolvedMcp = resolveMcpToolNames(mcpTools, new Set(Object.keys(builtinTools)))
+    const mcpToolsRecord = Object.fromEntries(resolvedMcp.map((r) => [r.finalName, r.tool]))
+
     const orchestratorTools = getOrchestratorTools({
       client,
       modelId,
       providerType,
       projectDir: this.projectDir,
-      mcpTools,
+      mcpTools: mcpToolsRecord,
       effort: this.config.effort,
       createClient: async () => {
         const fresh = this.registry.createFreshClient(this.resolveProvider())
@@ -524,21 +544,15 @@ export class AgentCore {
       },
     })
 
-    // Build tools
-    // AskUser 卡片只有 Electron 渲染端能展示回应，其他通道（gateway/IM）不注册该工具，
-    // 否则工具 promise 永远等不到回答
-    const askChannel = isElectronChannel(channel) ? channel : undefined
-    const builtinTools = getBuiltinTools(this.projectDir, {
-      refresh: () => {
-        if (isElectronChannel(channel)) channel.sendGitRefresh()
-      },
-    }, this.sourceDir, this.skillRegistry, askChannel ? {
-      askUser: (questions) => new Promise((resolve) => {
-        const askId = `ask-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-        this.pendingAsks.set(askId, { resolve })
-        askChannel.sendAskUserRequest(askId, questions)
-      }),
-    } : undefined)
+    // MCP 与 orchestrator 工具重名（极少见）：MCP 侧跳过，不覆盖 orchestrator
+    const orchestratorNames = new Set(Object.keys(orchestratorTools))
+    const keptMcp = resolvedMcp.filter((r) => {
+      if (orchestratorNames.has(r.finalName)) {
+        console.warn(`[AgentCore] MCP tool "${r.finalName}" (${r.serverName}) conflicts with an orchestrator tool; skipped`)
+        return false
+      }
+      return true
+    })
 
     // Plugin tools via snapshot (pinned for this conversation)
     const pluginSnapshot = this.pluginBus.getSnapshot()
@@ -550,8 +564,8 @@ export class AgentCore {
         description: tool.description,
         input_schema: tool.input_schema,
       })),
-      ...Object.entries(mcpTools).map(([name, tool]) => ({
-        name,
+      ...keptMcp.map(({ finalName, tool }) => ({
+        name: finalName,
         description: (tool as any).description || '',
         input_schema: (tool as any).input_schema || (tool as any).parameters || {},
       })),
@@ -570,8 +584,12 @@ export class AgentCore {
     for (const [name, tool] of Object.entries(orchestratorTools)) {
       allToolExecutors.set(name, (tool as any).execute)
     }
-    for (const [name, executor] of this.mcpPool.getAllToolExecutors()) {
-      allToolExecutors.set(name, executor)
+    const mcpExecByKey = new Map(
+      this.mcpPool.getDetailedExecutors().map((e) => [`${e.serverName}::${e.toolName}`, e.execute] as const)
+    )
+    for (const r of keptMcp) {
+      const exec = mcpExecByKey.get(`${r.serverName}::${r.toolName}`)
+      if (exec) allToolExecutors.set(r.finalName, exec)
     }
     for (const [name, executor] of pluginSnapshot.toolExecutors) {
       allToolExecutors.set(name, executor)
