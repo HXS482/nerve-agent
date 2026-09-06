@@ -1,7 +1,5 @@
 /**
  * 共享模型常量 — context window 大小 & 每 token 成本
- *
- * agent-core.ts 和 compactor.ts 共用，避免重复定义
  */
 
 export const CONTEXT_WINDOWS: Record<string, number> = {
