@@ -302,7 +302,6 @@ export interface SessionUsage {
   inputTokens: number
   outputTokens: number
   totalTokens: number
-  compactionCount: number
   maxContextTokens: number
 }
 

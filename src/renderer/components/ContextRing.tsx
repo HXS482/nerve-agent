@@ -28,7 +28,6 @@ export function ContextRing() {
 
   const totalTokens = usage?.totalTokens ?? 0
   const maxTokens = usage?.maxContextTokens ?? 150000
-  const compactionCount = usage?.compactionCount ?? 0
   const inputTokens = usage?.inputTokens ?? 0
   const outputTokens = usage?.outputTokens ?? 0
   const ratio = Math.min(totalTokens / maxTokens, 1)
@@ -129,19 +128,6 @@ export function ContextRing() {
                 </div>
               </div>
             </div>
-
-            {/* Compaction */}
-            {compactionCount > 0 && (
-              <div
-                className="flex items-center justify-between"
-                style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}
-              >
-                <span className="text-[11px]" style={{ color: 'var(--text-outline)' }}>Compactions</span>
-                <span className="text-[12px] font-semibold" style={{ color: 'var(--accent-primary)' }}>
-                  {compactionCount}x
-                </span>
-              </div>
-            )}
           </div>
         </div>
       )}

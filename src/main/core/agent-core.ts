@@ -919,16 +919,12 @@ export class AgentCore {
     const entries = await store.load({ sessionId })
     let inputTokens = 0
     let outputTokens = 0
-    let compactionCount = 0
 
     if (entries) {
       for (const e of entries as any[]) {
         if (e.type === 'assistant' && e.usage) {
           inputTokens += e.usage.inputTokens || 0
           outputTokens += e.usage.outputTokens || 0
-        }
-        if (e.type === 'summary') {
-          compactionCount++
         }
       }
     }
@@ -939,7 +935,6 @@ export class AgentCore {
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      compactionCount,
       maxContextTokens: CONTEXT_WINDOWS[modelId] || 200000,
     }
   }
