@@ -63,6 +63,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   })
 }
 
+const TOOL_RESULT_MAX_CHARS = 50_000
+
+function truncateToolResult(s: string): string {
+  if (s.length <= TOOL_RESULT_MAX_CHARS) return s
+  return s.slice(0, TOOL_RESULT_MAX_CHARS) + `\n[truncated: showing first ${TOOL_RESULT_MAX_CHARS} of ${s.length} chars]`
+}
+
 // --- Anthropic streaming + non-streaming fallback ---
 
 async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
@@ -205,8 +212,9 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
           }
         }
 
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: finalResultStr.slice(0, 50000), ...(isToolError ? { is_error: true } : {}) })
-        onToolResult?.(block.id, finalResultStr.slice(0, 50000), isToolError || undefined)
+        const capped = truncateToolResult(finalResultStr)
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: capped, ...(isToolError ? { is_error: true } : {}) })
+        onToolResult?.(block.id, capped, isToolError || undefined)
         onAfterToolCall?.(block.name, block.id, block.input, result)
       } catch (err: any) {
         const errMsg = err.message || 'Tool execution failed'
@@ -665,7 +673,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         }
 
         // OpenAI 的 role:'tool' 消息没有 is_error 字段，错误只能在内容里显式标注
-        const content = isToolError ? `Error: ${finalResultStr.slice(0, 50000)}` : finalResultStr.slice(0, 50000)
+        const content = isToolError ? `Error: ${truncateToolResult(finalResultStr)}` : truncateToolResult(finalResultStr)
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content })
         onToolResult?.(acc.id, content, isToolError || undefined)
         onAfterToolCall?.(acc.name, acc.id, input, result)
