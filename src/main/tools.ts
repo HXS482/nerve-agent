@@ -217,10 +217,14 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
           return { output, ...(err ? { error: err } : {}) }
         } catch (err: any) {
-          if (err.killed) return { error: 'Command timed out (120s)' }
-          const out = (err.stdout || '').replace(/\r\n/g, '\n')
-          const er = (err.stderr || err.message || '').replace(/\r\n/g, '\n')
-          const output = (out + (er ? '\n' : '') + er).slice(0, 10000)
+          const out = (err.stdout || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+          const er = (err.stderr || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+          if (err.killed) {
+            // 超时时 err.stdout/stderr 里仍有已产生的输出，附上让模型知道进度
+            const partial = (out + (er ? '\n' + er : '')).slice(0, 10000)
+            return { error: `Command timed out (120s)${partial ? `\nPartial output before timeout:\n${partial}` : ''}` }
+          }
+          const output = (out + (er || err.message ? '\n' : '') + (er || err.message || '')).slice(0, 10000)
           return { error: output || `Process exited with code ${err.code}` }
         }
       },
