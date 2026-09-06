@@ -1,6 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { readdirSync, statSync, readFileSync } from 'fs'
 import { join, relative, extname, basename, resolve } from 'path'
+import { homedir } from 'os'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
@@ -294,6 +295,20 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     } catch {
       return null
     }
+  })
+
+  // Stage 背景视频：落盘到 ~/.nerve/stage-bg/（单文件，新的替换旧的），返回 nerve-file URL
+  ipcMain.handle(IPC_CHANNELS.STAGE_BG_SAVE, async (_event, { buffer, ext }: { buffer: ArrayBuffer; ext: string }) => {
+    const { mkdir, writeFile, readdir, rm } = await import('fs/promises')
+    const dir = join(homedir(), '.nerve', 'stage-bg')
+    await mkdir(dir, { recursive: true })
+    const safeExt = ext.replace(/[^a-z0-9.]/gi, '').toLowerCase() || '.mp4'
+    for (const f of await readdir(dir)) await rm(join(dir, f), { force: true })
+    // 时间戳文件名：保证每次导入 URL 唯一，强制媒体元素重新加载（同名会因 URL 不变而继续播旧文件）
+    const absPath = join(dir, `bg-${Date.now()}${safeExt}`)
+    await writeFile(absPath, Buffer.from(buffer))
+    // standard scheme 的 URL 必须带 host（空 host 无法被 Chromium 解析），占位 host: local
+    return 'nerve-file://local/' + absPath.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/')
   })
 
   // Memory Browser (replaces Brain)

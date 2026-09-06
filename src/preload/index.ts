@@ -150,6 +150,9 @@ const api = {
   deleteImage: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_DELETE, filename),
   getImagePath: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_GET_PATH, filename),
   loadImage: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LOAD, path),
+  // Stage 背景（视频落盘，返回 nerve-file URL）
+  saveStageBg: (buffer: ArrayBuffer, ext: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.STAGE_BG_SAVE, { buffer, ext }),
   // Memory Browser (replaces Brain)
   brainScan: () => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_SCAN),
   brainReadFile: (type: string, id: string) => ipcRenderer.invoke(IPC_CHANNELS.BRAIN_READ_FILE, type, id),

@@ -5,6 +5,39 @@ import { useSubagentTracker } from '../stores/subagentTracker'
 
 export type RowStatus = 'running' | 'pending' | 'done' | 'error'
 
+function StatusIcon({ status }: { status: RowStatus }) {
+  switch (status) {
+    case 'running':
+      return (
+        <svg className="toolflow-ic is-spin" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
+          <path d="M14.5 8a6.5 6.5 0 0 0-6.5-6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'pending':
+      return (
+        <svg className="toolflow-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <circle cx="8" cy="8" r="6.5" />
+          <path d="M8 4.8V8l2.2 2.2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'done':
+      return (
+        <svg className="toolflow-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="8" cy="8" r="6.5" strokeOpacity="0.35" />
+          <path d="M5.2 8.2l1.9 1.9 3.7-3.9" />
+        </svg>
+      )
+    case 'error':
+      return (
+        <svg className="toolflow-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <circle cx="8" cy="8" r="6.5" strokeOpacity="0.35" />
+          <path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" />
+        </svg>
+      )
+  }
+}
+
 interface Props {
   pair: { use: ContentBlock; result?: ContentBlock }
   status: RowStatus
@@ -39,45 +72,35 @@ export const ToolflowRow = memo(function ToolflowRow({ pair, status, toolCallId 
   const hasSubagent = !!subagentTasks && subagentTasks.length > 0
   const clickable = !!detail || hasSubagent
 
-  const statusText = {
-    running: '● running',
-    pending: '◆ pending',
-    done: '✓ ok',
-    error: '✕ failed',
-  }[status]
-
-  const statusClass = {
-    running: 'toolflow-status-run',
-    pending: 'toolflow-status-pending',
-    done: 'toolflow-status-ok',
-    error: 'toolflow-status-err',
-  }[status]
-
   return (
     <div>
       <div
         className="toolflow-row"
+        data-status={status}
         data-clickable={clickable ? 'true' : 'false'}
         onClick={() => clickable && setDetailOpen((v) => !v)}
       >
-        <span className="toolflow-pfx">▸</span>
+        <span className="toolflow-rail" />
+        <StatusIcon status={status} />
         {name && <span className="toolflow-name">{name}</span>}
         {summary && <span className="toolflow-summary">{summary}</span>}
-        <span className={`toolflow-status ${statusClass}`}>{statusText}</span>
+        {clickable && <span className="toolflow-chevron" data-open={detailOpen}>▸</span>}
       </div>
-      {detailOpen && (detail || hasSubagent) && (
-        <div className="toolflow-detail">
-          {hasSubagent && subagentTasks!.map((t) => (
-            <div key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
-              <span style={{ color: t.status === 'completed' ? '#8db88d' : t.status === 'error' ? '#cf2d56' : '#dfa88f' }}>
-                {t.status === 'completed' ? '✓' : t.status === 'error' ? '✕' : '●'}
-              </span>
-              <span style={{ flex: 1 }}>{t.task}</span>
-            </div>
-          ))}
-          {detail && !hasSubagent && detail}
+      <div className="toolflow-detail-wrap" data-open={detailOpen && (detail || hasSubagent) ? 'true' : 'false'}>
+        <div className="toolflow-detail-clip">
+          <div className="toolflow-detail">
+            {hasSubagent && subagentTasks!.map((t) => (
+              <div key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
+                <span style={{ color: t.status === 'completed' ? '#8db88d' : t.status === 'error' ? '#cf2d56' : '#dfa88f' }}>
+                  {t.status === 'completed' ? '✓' : t.status === 'error' ? '✕' : '●'}
+                </span>
+                <span style={{ flex: 1 }}>{t.task}</span>
+              </div>
+            ))}
+            {detail && !hasSubagent && detail}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 })

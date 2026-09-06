@@ -4,6 +4,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { InputBar } from './components/InputBar'
 import { Sidebar } from './components/Sidebar'
 import { StageShell } from './components/Stage/StageShell'
+import { isVideoBg } from './components/Stage/StageBgMedia'
 import { useStageStore } from './stores/stageStore'
 import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -33,6 +34,7 @@ export default function App() {
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const toggleRightSidebar = useChatStore((s) => s.toggleRightSidebar)
   const theme = useChatStore((s) => s.theme)
+  const stageBg = useChatStore((s) => s.stageBg)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const resizing = useRef(false)
@@ -72,10 +74,12 @@ export default function App() {
     <div
       className="h-screen w-screen flex overflow-hidden"
       style={{
-        background: 'var(--bg-background)',
+        background: viewMode === 'stage' ? 'transparent' : 'var(--bg-background)',
         borderRadius: 'var(--app-window-radius)',
         clipPath: 'inset(0 round var(--app-window-radius))',
-        border: '1.5px solid var(--border-default)',
+        border: viewMode === 'stage'
+          ? '1.5px solid rgba(255, 255, 255, 0.10)'
+          : '1.5px solid var(--border-default)',
       }}
     >
       {/* Aurora theme background */}
@@ -110,7 +114,16 @@ export default function App() {
 
       {/* Stage 模式：整屏独立界面 */}
       {viewMode === 'stage' && (
-        <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
+        <>
+          {/* 外框底图（铺满窗口）+ 边缘毛玻璃环（会话按钮同款 backdrop blur）。
+              视频背景时底图用纯色：环的 blur 采样 shell 边缘的视频像素即可，避免双份视频解码卡顿 */}
+          <div
+            className="stage-frame-bg"
+            style={stageBg ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : undefined}
+          />
+          <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
+          <div className="stage-frame-frost" />
+        </>
       )}
 
       {/* Chat 模式：侧边栏 + 聊天区（不受影响） */}
