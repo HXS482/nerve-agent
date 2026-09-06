@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdtempSync, writeFileSync, rmSync } from 'fs'
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { getBuiltinTools } from '../tools'
@@ -94,5 +94,53 @@ describe('Grep truncation notice', () => {
   it('returns matches without truncated flag under the cap', async () => {
     const res: any = await tools.Grep.execute({ pattern: 'hello', path: dir })
     expect(res.truncated).toBeUndefined()
+  })
+})
+
+describe('Edit tool', () => {
+  it('edits a unique match and returns a diff receipt', async () => {
+    writeFileSync(join(dir, 'edit1.txt'), 'alpha\nbeta\ngamma')
+    const res: any = await tools.Edit.execute({ file_path: join(dir, 'edit1.txt'), old_string: 'beta', new_string: 'BETA' })
+    expect(res.success).toBe(true)
+    expect(res.replacements).toBe(1)
+    expect(res.firstChangedLine).toBe(2)
+    expect(res.diff).toContain('- beta')
+    expect(res.diff).toContain('+ BETA')
+    expect(readFileSync(join(dir, 'edit1.txt'), 'utf-8')).toBe('alpha\nBETA\ngamma')
+  })
+
+  it('rejects multiple occurrences without replace_all', async () => {
+    writeFileSync(join(dir, 'edit2.txt'), 'x\ny\nx')
+    const res: any = await tools.Edit.execute({ file_path: join(dir, 'edit2.txt'), old_string: 'x', new_string: 'z' })
+    expect(res.error).toMatch(/2 times/)
+    expect(readFileSync(join(dir, 'edit2.txt'), 'utf-8')).toBe('x\ny\nx')
+  })
+
+  it('replace_all replaces every occurrence', async () => {
+    writeFileSync(join(dir, 'edit3.txt'), 'x\ny\nx')
+    const res: any = await tools.Edit.execute({ file_path: join(dir, 'edit3.txt'), old_string: 'x', new_string: 'z', replace_all: true })
+    expect(res.replacements).toBe(2)
+    expect(readFileSync(join(dir, 'edit3.txt'), 'utf-8')).toBe('z\ny\nz')
+  })
+
+  it('edits CRLF files with LF old_string and preserves CRLF', async () => {
+    writeFileSync(join(dir, 'edit4.txt'), 'alpha\r\nbeta\r\ngamma\r\n')
+    const res: any = await tools.Edit.execute({ file_path: join(dir, 'edit4.txt'), old_string: 'beta', new_string: 'BETA' })
+    expect(res.success).toBe(true)
+    expect(readFileSync(join(dir, 'edit4.txt'), 'utf-8')).toBe('alpha\r\nBETA\r\ngamma\r\n')
+  })
+
+  it('supports deletion with empty new_string', async () => {
+    writeFileSync(join(dir, 'edit5.txt'), 'a\nb\nc')
+    const res: any = await tools.Edit.execute({ file_path: join(dir, 'edit5.txt'), old_string: 'b\n', new_string: '' })
+    expect(res.success).toBe(true)
+    expect(readFileSync(join(dir, 'edit5.txt'), 'utf-8')).toBe('a\nc')
+  })
+
+  it('not-found error carries a hint and the file path', async () => {
+    writeFileSync(join(dir, 'edit6.txt'), 'const a = 1')
+    const res: any = await tools.Edit.execute({ file_path: join(dir, 'edit6.txt'), old_string: 'const  a  = 1', new_string: 'x' })
+    expect(res.error).toMatch(/line 1/)
+    expect(res.error).toContain('edit6.txt')
   })
 })
