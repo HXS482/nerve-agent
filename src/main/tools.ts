@@ -303,24 +303,28 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         try {
           const dir = searchPath || cwd
           const files: string[] = []
+          let capped = false
 
           function scan(d: string) {
-            if (files.length >= 200) return
+            if (capped) return
             let entries: any[]
             try { entries = readdirSync(d, { withFileTypes: true }) } catch { return }
             for (const e of entries) {
-              if (files.length >= 200) return
+              if (capped) return
               const full = join(d, e.name)
               if (e.isDirectory()) {
                 if (!SKIP_DIRS.has(e.name)) scan(full)
               } else if (e.isFile()) {
                 const rel = full.slice(dir.length + 1).replace(/\\/g, '/')
-                if (matchGlob(pattern, rel)) files.push(full)
+                if (matchGlob(pattern, rel)) {
+                  if (files.length >= 200) { capped = true; return }
+                  files.push(full)
+                }
               }
             }
           }
           scan(dir)
-          if (files.length >= 200) {
+          if (capped) {
             return { files, truncated: true, note: 'Result capped at 200 files — narrow the search with a more specific pattern or path.' }
           }
           return { files }
@@ -337,13 +341,14 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
           const dir = searchPath || cwd
           const regex = new RegExp(pattern, 'i')
           const results: Array<{ file: string; line: number; text: string }> = []
+          let capped = false
 
           function scan(d: string) {
-            if (results.length >= 100) return
+            if (capped) return
             let entries: any[]
             try { entries = readdirSync(d, { withFileTypes: true }) } catch { return }
             for (const e of entries) {
-              if (results.length >= 100) return
+              if (capped) return
               const full = join(d, e.name)
               if (e.isDirectory()) {
                 if (SKIP_DIRS.has(e.name)) continue
@@ -356,8 +361,8 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
                   const lines = readFileSync(full, 'utf-8').split('\n')
                   for (let i = 0; i < lines.length; i++) {
                     if (regex.test(lines[i])) {
+                      if (results.length >= 100) { capped = true; break }
                       results.push({ file: full, line: i + 1, text: lines[i].length > 200 ? lines[i].slice(0, 200) + '…' : lines[i] })
-                      if (results.length >= 100) break
                     }
                   }
                 } catch { /* skip binary files */ }
@@ -365,7 +370,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             }
           }
           scan(dir)
-          if (results.length >= 100) {
+          if (capped) {
             return { results, truncated: true, note: 'Result capped at 100 matches — narrow the search with a more specific pattern, path, or glob.' }
           }
           return { results }

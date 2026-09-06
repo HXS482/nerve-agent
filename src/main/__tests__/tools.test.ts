@@ -50,6 +50,15 @@ describe('Glob truncation notice', () => {
     expect(res.note).toMatch(/200/)
     rmSync(many, { recursive: true, force: true })
   })
+
+  it('does not mark truncation when exactly 200 files match', async () => {
+    const exact = mkdtempSync(join(tmpdir(), 'nerve-glob-exact-'))
+    for (let i = 0; i < 200; i++) writeFileSync(join(exact, `f${i}.txt`), 'x')
+    const res: any = await tools.Glob.execute({ pattern: '*.txt', path: exact })
+    expect(res.files.length).toBe(200)
+    expect(res.truncated).toBeUndefined()
+    rmSync(exact, { recursive: true, force: true })
+  })
 })
 
 describe('Grep truncation notice', () => {
@@ -61,6 +70,16 @@ describe('Grep truncation notice', () => {
     expect(res.results.length).toBe(100)
     expect(res.truncated).toBe(true)
     rmSync(many, { recursive: true, force: true })
+  })
+
+  it('does not mark truncation when exactly 100 matches exist', async () => {
+    const exact = mkdtempSync(join(tmpdir(), 'nerve-grep-exact-'))
+    const lines = Array.from({ length: 100 }, (_, i) => `hit ${i}`).join('\n')
+    writeFileSync(join(exact, 'exact.txt'), lines)
+    const res: any = await tools.Grep.execute({ pattern: 'hit', path: exact })
+    expect(res.results.length).toBe(100)
+    expect(res.truncated).toBeUndefined()
+    rmSync(exact, { recursive: true, force: true })
   })
 
   it('marks long lines with ellipsis', async () => {
