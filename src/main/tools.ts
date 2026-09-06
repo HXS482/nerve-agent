@@ -263,7 +263,10 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         try {
           const fp = args.file_path || args.filePath || args.path
           const content = readFileSync(fp, 'utf-8')
-          return { content: content.slice(0, 50000) }
+          if (content.length > 50000) {
+            return { content: content.slice(0, 50000), truncated: true, totalChars: content.length, note: `File too large: showing first 50000 of ${content.length} chars. Read a smaller file, or use Grep to locate the relevant part.` }
+          }
+          return { content }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Read failed' }
         }
@@ -313,6 +316,9 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             }
           }
           scan(dir)
+          if (files.length >= 200) {
+            return { files, truncated: true, note: 'Result capped at 200 files — narrow the search with a more specific pattern or path.' }
+          }
           return { files }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Glob failed' }
@@ -346,7 +352,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
                   const lines = readFileSync(full, 'utf-8').split('\n')
                   for (let i = 0; i < lines.length; i++) {
                     if (regex.test(lines[i])) {
-                      results.push({ file: full, line: i + 1, text: lines[i].slice(0, 200) })
+                      results.push({ file: full, line: i + 1, text: lines[i].length > 200 ? lines[i].slice(0, 200) + '…' : lines[i] })
                       if (results.length >= 100) break
                     }
                   }
@@ -355,6 +361,9 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             }
           }
           scan(dir)
+          if (results.length >= 100) {
+            return { results, truncated: true, note: 'Result capped at 100 matches — narrow the search with a more specific pattern, path, or glob.' }
+          }
           return { results }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Grep failed' }
