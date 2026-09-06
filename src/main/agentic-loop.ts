@@ -612,7 +612,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       if (onToolApproval) {
         const approved = await onToolApproval(acc.id, acc.name, input)
         if (!approved) {
-          const denyContent = `Tool "${acc.name}" was denied by user`
+          const denyContent = `Error: Tool "${acc.name}" was denied by user`
           toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: denyContent })
           onToolResult?.(acc.id, denyContent, true)
           continue
@@ -620,7 +620,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       }
 
       if (!jsonOk) {
-        const errorContent = `Tool "${acc.name}" received malformed arguments from model (JSON parse failed)`
+        const errorContent = `Error: Tool "${acc.name}" received malformed arguments from model (JSON parse failed)`
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: errorContent })
         onToolResult?.(acc.id, errorContent, true)
         continue
@@ -628,7 +628,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
       const executor = toolExecutors.get(acc.name)
       if (!executor) {
-        const errorContent = `Tool "${acc.name}" not found`
+        const errorContent = `Error: Tool "${acc.name}" not found`
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: errorContent })
         onToolResult?.(acc.id, errorContent, true)
         continue
@@ -637,11 +637,13 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         const result = await withTimeout(executor(input), TOOL_TIMEOUT_MS, `tool:${acc.name}`)
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
         const isToolError = typeof result === 'object' && result !== null && 'error' in result
-        toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: resultStr.slice(0, 50000) })
-        onToolResult?.(acc.id, resultStr.slice(0, 50000), isToolError || undefined)
+        // OpenAI 的 role:'tool' 消息没有 is_error 字段，错误只能在内容里显式标注
+        const content = isToolError ? `Error: ${resultStr.slice(0, 50000)}` : resultStr.slice(0, 50000)
+        toolMessages.push({ role: 'tool', tool_call_id: acc.id, content })
+        onToolResult?.(acc.id, content, isToolError || undefined)
         onAfterToolCall?.(acc.name, acc.id, input, result)
       } catch (err: any) {
-        const errMsg = err.message || 'Tool execution failed'
+        const errMsg = `Error: ${err.message || 'Tool execution failed'}`
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: errMsg })
         onToolResult?.(acc.id, errMsg, true)
       }
