@@ -608,6 +608,21 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
       onToolCall?.(acc.id, acc.name, input)
 
+      // onToolCall hook — plugins can intercept（与 Anthropic 路径行为一致）
+      if (params.hookRegistry && params.sessionId) {
+        const hookResult = await params.hookRegistry.execute('onToolCall', {
+          toolCall: { id: acc.id, name: acc.name, input },
+        }, params.sessionId)
+        if (hookResult.handled) {
+          const hookContent = typeof hookResult.modified?.toolCall?.result === 'string'
+            ? hookResult.modified.toolCall.result
+            : 'intercepted by hook'
+          toolMessages.push({ role: 'tool', tool_call_id: acc.id, content: hookContent })
+          onToolResult?.(acc.id, hookContent, false)
+          continue
+        }
+      }
+
       // Approval gate
       if (onToolApproval) {
         const approved = await onToolApproval(acc.id, acc.name, input)
@@ -637,8 +652,20 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         const result = await withTimeout(executor(input), TOOL_TIMEOUT_MS, `tool:${acc.name}`)
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
         const isToolError = typeof result === 'object' && result !== null && 'error' in result
+
+        // onToolComplete hook — plugins can modify result（与 Anthropic 路径行为一致）
+        let finalResultStr = resultStr
+        if (params.hookRegistry && params.sessionId) {
+          const hookResult = await params.hookRegistry.execute('onToolComplete', {
+            toolCall: { id: acc.id, name: acc.name, input, result: resultStr, isError: isToolError },
+          }, params.sessionId)
+          if (hookResult.modified?.toolCall?.result !== undefined) {
+            finalResultStr = hookResult.modified.toolCall.result
+          }
+        }
+
         // OpenAI 的 role:'tool' 消息没有 is_error 字段，错误只能在内容里显式标注
-        const content = isToolError ? `Error: ${resultStr.slice(0, 50000)}` : resultStr.slice(0, 50000)
+        const content = isToolError ? `Error: ${finalResultStr.slice(0, 50000)}` : finalResultStr.slice(0, 50000)
         toolMessages.push({ role: 'tool', tool_call_id: acc.id, content })
         onToolResult?.(acc.id, content, isToolError || undefined)
         onAfterToolCall?.(acc.name, acc.id, input, result)
