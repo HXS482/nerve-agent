@@ -86,8 +86,16 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
+  // 工具名叫 Bash，模型默认生成 bash 语法：优先用 Git Bash 真跑 bash；
+  // 没有 Git Bash 才回退 PowerShell，并在描述里明确要求 PS 语法
+  const GIT_BASH = 'C:/Program Files/Git/bin/bash.exe'
+  const hasGitBash = existsSync(GIT_BASH)
+  const PS_EXE = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+
   const bashSchema = z.object({
-    command: z.string().describe('The bash command to execute'),
+    command: z.string().describe(hasGitBash
+      ? 'The bash command to execute (bash/sh syntax only, even though the OS is Windows)'
+      : 'The PowerShell command to execute (PowerShell syntax, NOT bash)'),
   })
   const writeSchema = z.object({
     file_path: z.string().describe('Absolute path to the file'),
@@ -122,11 +130,11 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
   return {
     Bash: {
-      description: 'Execute a bash command and return its output. Use this for running shell commands, creating directories, installing packages, etc. Image files (.png, .jpg, etc.) created in the working directory are automatically moved to the internal gallery.',
+      description: hasGitBash
+        ? 'Execute a bash command via Git Bash on Windows. ALWAYS use bash/sh syntax ($HOME, &&, ||, mkdir -p, /c/... or forward-slash paths) — never PowerShell or cmd syntax, even though the OS is Windows. Use this for running shell commands, creating directories, installing packages, etc. Image files (.png, .jpg, etc.) created in the working directory are automatically moved to the internal gallery.'
+        : 'Execute a Windows PowerShell command and return its output. Use PowerShell syntax (NOT bash/cmd syntax — e.g. use New-Item instead of mkdir -p, $env:USERPROFILE instead of $HOME). Image files (.png, .jpg, etc.) created in the working directory are automatically moved to the internal gallery.',
       input_schema: zodToInputSchema(bashSchema),
       execute: async ({ command }: { command: string }) => {
-        const psExe = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
-
         // Snapshot existing image/artifact files before execution
         const beforeImages = new Set<string>()
         const beforeArtifacts = new Set<string>()
@@ -138,7 +146,12 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         } catch { /* ignore */ }
 
         try {
-          const { stdout, stderr } = await execFileAsync(psExe, ['-NoProfile', '-Command', command], {
+          // PowerShell 5.1 默认按系统代码页（GBK）输出，execFile 按 UTF-8 解码会乱码；
+          // 前置设置 OutputEncoding 让错误消息可读（模型才能自我纠错）
+          const execArgs: [string, string[]] = hasGitBash
+            ? [GIT_BASH, ['-c', command]]
+            : [PS_EXE, ['-NoProfile', '-Command', `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}`]]
+          const { stdout, stderr } = await execFileAsync(execArgs[0], execArgs[1], {
             cwd: effectiveCwd,
             encoding: 'utf-8',
             timeout: 120000,
