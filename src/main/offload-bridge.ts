@@ -50,7 +50,7 @@ function extractText(content: unknown): string {
       if (typeof b === 'string') return b
       if (b.type === 'text') return b.text || ''
       if (b.type === 'tool_result') return typeof b.content === 'string' ? b.content : JSON.stringify(b.content || '')
-      if (b.type === 'tool_use') return `[${b.name}(${JSON.stringify(b.input || {}).slice(0, 100)})]`
+      if (b.type === 'tool_use') return `[${b.name}(${JSON.stringify(b.input || {})})]`
       return ''
     }).join('')
   }
