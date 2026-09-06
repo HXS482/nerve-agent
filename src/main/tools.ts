@@ -5,6 +5,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { z } from 'zod'
 import { zodToInputSchema } from './tool-schema'
+import { applyEdit, diffSnippet } from './edit-utils'
 import { estimateTokens } from './core/token-estimator'
 import { saveImage, getImagesDir } from './images'
 import simpleGit from 'simple-git'
@@ -106,8 +107,9 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
   })
   const editSchema = z.object({
     file_path: z.string().describe('Absolute path to the file'),
-    old_string: z.string().describe('Exact string to find and replace'),
-    new_string: z.string().describe('Replacement string'),
+    old_string: z.string().describe('Exact string to find and replace. Must match exactly ONE location in the file unless replace_all is true.'),
+    new_string: z.string().describe('Replacement string (may be empty to delete the matched text)'),
+    replace_all: z.boolean().optional().describe('Replace every occurrence of old_string (default false: multiple matches are rejected with an error)'),
   })
   const globSchema = z.object({
     pattern: z.string().describe('Glob pattern (e.g. "**/*.ts")'),
@@ -277,20 +279,33 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     Edit: {
-      description: 'Edit a file by replacing old_string with new_string.',
+      description: 'Edit a file by replacing old_string with new_string. old_string must be unique in the file unless replace_all is true. CRLF/LF differences are handled automatically; matches that differ only in trailing whitespace fall back to a tolerant match. Read the file first to get exact content.',
       input_schema: zodToInputSchema(editSchema),
       execute: async (args: any) => {
         try {
           const fp = args.file_path || args.filePath || args.path
-          const old_string = args.old_string || args.oldString
-          const new_string = args.new_string || args.newString
-          let content = readFileSync(fp, 'utf-8')
-          if (!content.includes(old_string)) {
-            return { error: `old_string not found in ${fp}` }
+          const oldString = String(args.old_string ?? args.oldString ?? '')
+          const newString = String(args.new_string ?? args.newString ?? '')
+          const raw = readFileSync(fp, 'utf-8')
+          // 统一按 \n 处理，写回时还原 CRLF——模型发 LF 也能改 CRLF 文件
+          const crlf = raw.includes('\r\n')
+          const content = crlf ? raw.replace(/\r\n/g, '\n') : raw
+          const res = applyEdit(
+            content,
+            oldString.replace(/\r\n/g, '\n'),
+            newString.replace(/\r\n/g, '\n'),
+            args.replace_all === true,
+          )
+          if (!res.ok) return { error: `${res.error} (file: ${fp})` }
+          writeFileSync(fp, crlf ? res.content.replace(/\n/g, '\r\n') : res.content, 'utf-8')
+          return {
+            success: true,
+            file_path: fp,
+            replacements: res.replacements,
+            firstChangedLine: res.firstChangedLine,
+            ...(res.fuzzy ? { note: 'Matched with trailing-whitespace tolerance' } : {}),
+            diff: diffSnippet(oldString, newString),
           }
-          content = content.split(old_string).join(new_string)
-          writeFileSync(fp, content, 'utf-8')
-          return { success: true, file_path: fp }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Edit failed' }
         }
