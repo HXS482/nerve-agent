@@ -710,6 +710,13 @@ button, a, input, textarea, select {
   width: var(--img-w, 220px);
 }
 
+/* 生成卡元信息标签呼吸（ImageGeneration） */
+@keyframes igLabelPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+
 /* 图片卡操作：hover 时浮现在右侧角落 */
 .stage-card-close {
   position: absolute;
@@ -785,11 +792,11 @@ button, a, input, textarea, select {
   flex-shrink: 0;
 }
 
-/* 代码卡：不透明终端风（实色深底，不依赖毛玻璃），圆角加大 */
+/* 代码卡：不透明终端风（实色深底，不依赖毛玻璃），圆角与图片卡一致 */
 .stage-card[data-kind="code"] {
   padding: 0;
   overflow: visible; /* 右侧批注图标要探出卡片边界 */
-  border-radius: 18px;
+  border-radius: 12px;
   background: #0c1017;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -822,45 +829,72 @@ button, a, input, textarea, select {
   align-items: center;
   gap: 8px;
   height: 40px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 12.5px;
 }
-.stage-code-file {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
+.stage-code-fileicon {
+  flex-shrink: 0;
   color: var(--text-outline-variant);
+  opacity: 0.7;
 }
 .stage-code-filename {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-on-surface);
+  opacity: 0.8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
-.stage-code-copy {
+/* 语言标签：小写大写字距（参照 beui CodeBlock 头栏） */
+.stage-code-lang {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sc-ink3);
+}
+/* 状态指示：Writing（蓝，spinner 旋转）/ Ready（绿） */
+.stage-code-state {
   margin-left: auto;
-  margin-right: -4px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 24px;
-  padding: 0 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
-  color: var(--text-outline-variant);
+  color: #34d399;
+}
+.stage-code-state.is-streaming {
+  color: #60a5fa;
+}
+.stage-code-spin {
+  animation: stage-code-rotate 1s linear infinite;
+}
+@keyframes stage-code-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+/* 圆形 Copy 按钮（参照 beui CodeBlock）：28px 圆底，悬停提亮 */
+.stage-code-copy {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sc-ink3);
   cursor: pointer;
   transition: color 0.1s, background 0.1s;
 }
 .stage-code-copy:hover {
-  background: var(--bg-surface-container);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-on-surface);
 }
 .stage-code-copy[data-copied="true"] {
@@ -868,15 +902,21 @@ button, a, input, textarea, select {
 }
 .stage-code-body {
   position: relative;
+  /* flex 子项需 min-height:0 才能被 max-height 约束（否则被内容撑开不出现滚动） */
+  min-height: 0;
   padding: 12px 0;
   font-size: 12.5px;
   line-height: 1.65;
   color: var(--sc-ink2);
-  /* 纵向缩放：--code-h 由右下角缩放柄驱动，限高后内部滚动；
-     默认限高 28vh（上限 240px），防止长代码卡超出屏幕 */
+  /* 纵向缩放：--code-h 由右下角缩放柄驱动。
+     拖过柄后 height + max-height 同锁该值（可撑大可压小，内容超出内部滚动）；
+     未拖过时高度跟随内容，只限高 240px/28vh 防长代码超屏 */
+  height: var(--code-h, auto);
   max-height: var(--code-h, min(240px, 28vh));
   overflow-y: auto;
   overflow-x: hidden;
+  /* 滚到头不再把 wheel 冒泡给外层画布（否则拖住卡片时滚动错乱） */
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 .stage-code-body::-webkit-scrollbar {
@@ -908,12 +948,6 @@ button, a, input, textarea, select {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-}
-/* 头栏元信息（语言/行数），copy 按钮自带 margin-left:auto 推到最右 */
-.stage-code-meta {
-  font-size: 10px;
-  color: var(--sc-ink3);
-  font-variant-numeric: tabular-nums;
 }
 /* 底部说明栏：模型对代码的解释常驻显示（两行截断），不用再点批注图标 */
 .stage-code-caption {
@@ -1284,9 +1318,10 @@ button, a, input, textarea, select {
 /* ===== 用户消息悬浮列表（右下角，无外框，点击回看该轮） ===== */
 .user-log-list {
   position: absolute;
-  right: 16px;
+  right: 0;
   bottom: 64px;
-  width: 300px;
+  width: fit-content; /* 宽度贴合内容：文字右端真正贴到 right 定位点 */
+  max-width: 300px;
   max-height: 240px;
   overflow-y: auto;
   z-index: 35;

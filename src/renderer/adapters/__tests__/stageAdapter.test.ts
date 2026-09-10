@@ -277,7 +277,7 @@ describe('buildStageView — Write .html 网页产物卡', () => {
     expect(card.label).toBe('game.html')
   })
 
-  it('Write 未完成 / 写入非 html 文件时不落 web 卡', () => {
+  it('Write 未完成不落 web 卡；写入代码文件落一张带文件名的代码卡', () => {
     const pending = buildStageView([
       msg('u1', 'user', 1000, text('写个小游戏')),
       msg('a1', 'assistant', 1100, htmlUse),
@@ -290,7 +290,10 @@ describe('buildStageView — Write .html 网页产物卡', () => {
         { type: 'tool_use', id: 'toolu_w2', name: 'Write', input: { file_path: 'a.ts', content: 'const a = 1' } },
         { type: 'tool_result', toolCallId: 'toolu_w2', content: '{}' }),
     ])
-    expect(tsFile.cards).toHaveLength(0)
+    expect(tsFile.cards).toHaveLength(1)
+    expect(tsFile.cards[0].card.kind).toBe('code')
+    expect(tsFile.cards[0].card.code).toBe('const a = 1')
+    expect(tsFile.cards[0].card.label).toBe('a.ts')
   })
 })
 

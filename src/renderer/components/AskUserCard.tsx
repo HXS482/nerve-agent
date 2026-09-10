@@ -107,7 +107,16 @@ export function AskUserCard() {
 
 function AskUserCardInner({ ask }: { ask: AskUserRequest }) {
   const removeAsk = useChatStore((s) => s.removeAsk)
-  const questions = ask.questions
+  // IPC 边界防御：畸形 questions（如对象嵌在 options 里）若直接渲染会崩掉整棵 React 树
+  const questions = (Array.isArray(ask.questions) ? ask.questions : []).map((raw: any) => ({
+    q: typeof raw?.q === 'string' ? raw.q : String(raw?.q ?? ''),
+    type: raw?.type === 'check' ? 'check' as const : 'radio' as const,
+    options: ((Array.isArray(raw?.options) ? raw.options : []) as unknown[])
+      .map((o: unknown) => typeof o === 'string' ? o
+        : typeof (o as any)?.description === 'string' ? (o as any).description
+        : JSON.stringify(o))
+      .slice(0, 4),
+  }))
   const [qi, setQi] = useState(0)
   const [answers, setAnswers] = useState<Record<number, number[]>>({})
   const [custom, setCustom] = useState<Record<number, string>>({})

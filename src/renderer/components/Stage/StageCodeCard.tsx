@@ -1,9 +1,11 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { Check, Copy, FileCode2, LoaderCircle } from 'lucide-react'
 
 // Stage 代码卡：回复中的 ``` 围栏代码块落地为产物卡。
-// 结构与样式参照 CodeBlock 参照组件：头栏（文件图标 + 语言 + Copy）、
-// 行号槽 + 分隔竖线、行内 pre-wrap 换行（不横向滚动）、轻量正则语法着色。
-// 配色 token（--sc-*）见 globals.css，明暗主题各一套。
+// 结构与交互参照 beui CodeBlock：头栏（FileCode2 图标 + 文件名 + 语言大写 +
+// Writing/Ready 状态 + 圆形 Copy 按钮）、行号槽 + 分隔竖线、pre-wrap 换行、
+// 轻量正则语法着色。配色 token（--sc-*）见 globals.css，明暗主题各一套。
 
 /* 轻量语法着色：keyword/import/条件、函数调用、字符串与数字 */
 const KEYWORDS = new Set([
@@ -33,54 +35,81 @@ function highlight(text: string): ReactNode[] {
   return nodes
 }
 
-function FileIcon() {
-  return (
-    <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-    </svg>
-  )
-}
+const SPRING_PRESS = { type: 'spring', stiffness: 500, damping: 30 } as const
 
-export function StageCodeCard({ language, code, fileName, caption }: { language?: string; code: string; fileName?: string; caption?: string }) {
+export function StageCodeCard({ language, code, fileName, caption, status = 'complete' }: {
+  language?: string
+  code: string
+  fileName?: string
+  caption?: string
+  status?: 'streaming' | 'complete'
+}) {
+  const reduce = useReducedMotion() ?? false
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const copyTimer = useRef<number | undefined>(undefined)
   const [copied, setCopied] = useState(false)
-  const copy = useCallback(() => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    }).catch(() => {})
+  const streaming = status === 'streaming'
+  const lines = useMemo(() => code.split('\n'), [code])
+  const langLabel = (language ?? 'code').toLowerCase()
+
+  // 复制完成后清理定时器，避免卸载后 setState
+  useEffect(() => () => {
+    if (copyTimer.current) window.clearTimeout(copyTimer.current)
+  }, [])
+
+  // 流式状态：新内容到达时平滑滚到底
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport || !streaming) return
+    const frame = requestAnimationFrame(() => {
+      if (viewport.scrollHeight <= viewport.clientHeight) return
+      if (typeof viewport.scrollTo === 'function') {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: reduce ? 'auto' : 'smooth' })
+      } else {
+        viewport.scrollTop = viewport.scrollHeight
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  })
+
+  const copy = useCallback(async () => {
+    try { await navigator.clipboard.writeText(code) } catch { /* 剪贴板不可用 */ }
+    setCopied(true)
+    if (copyTimer.current) window.clearTimeout(copyTimer.current)
+    copyTimer.current = window.setTimeout(() => setCopied(false), 1600)
   }, [code])
 
-  const lines = code.split('\n')
-
   return (
-    <div className="stage-code">
-      {/* 头栏：文件图标 + 文件名（Write 关联）或语言 · 行数 · Copy */}
+    <div className="stage-code" data-state={status} aria-busy={streaming}>
+      {/* 头栏：FileCode2 图标 + 文件名/语言大写 + 状态 + 圆形 Copy 按钮 */}
       <div className="stage-code-header">
-        <span className="stage-code-file">
-          <FileIcon />
-          <span className="stage-code-filename">{fileName || language || 'code'}</span>
+        <FileCode2 aria-hidden="true" size={14} strokeWidth={1.8} className="stage-code-fileicon" />
+        <span className="stage-code-filename">{fileName}</span>
+        <span className="stage-code-lang">{langLabel}</span>
+        <span className={`stage-code-state${streaming ? ' is-streaming' : ''}`}>
+          {streaming ? (
+            <LoaderCircle size={12} className={reduce ? undefined : 'stage-code-spin'} />
+          ) : (
+            <Check size={12} />
+          )}
+          {streaming ? 'Writing' : 'Ready'}
         </span>
-        {fileName && language && <span className="stage-code-meta">{language}</span>}
-        <span className="stage-code-meta">{lines.length} lines</span>
-        <button
+        <motion.button
           type="button"
-          className="stage-code-copy"
-          data-copied={copied}
-          aria-label="Copy code"
+          aria-label={copied ? 'Copied' : 'Copy code'}
+          title={copied ? 'Copied' : 'Copy code'}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={copy}
+          whileTap={reduce ? undefined : { scale: 0.9 }}
+          transition={SPRING_PRESS}
+          className="stage-code-copy"
         >
-          {copied ? (
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-          ) : (
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-          )}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+        </motion.button>
       </div>
 
       {/* 正文：行号槽（20px + 分隔竖线）+ pre-wrap 换行的代码行 */}
-      <div className="stage-code-body">
+      <div className="stage-code-body" ref={viewportRef} role={streaming ? 'log' : undefined} aria-live={streaming ? 'polite' : undefined}>
         <span className="stage-code-gutter-line" aria-hidden />
         {lines.map((line, i) => (
           <div key={i} className="stage-code-line">
@@ -95,4 +124,3 @@ export function StageCodeCard({ language, code, fileName, caption }: { language?
     </div>
   )
 }
-

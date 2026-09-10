@@ -59,7 +59,22 @@ export interface ExtractedCodeBlock {
 /** Write 写入的代码文件扩展名（用于给围栏代码块卡关联真实文件名） */
 const CODE_FILE_RE = /\.(ts|tsx|js|jsx|mjs|cjs|py|java|go|rs|c|cpp|h|hpp|cs|rb|php|swift|kt|sh|sql|css|scss|less|json|yaml|yml|toml|vue|svelte)$/i
 
-export function extractCodeBlocks(text: string): { prose: string; codeBlocks: ExtractedCodeBlock[] } {
+/** 扩展名 → 语法着色语言标签（覆盖 CODE_FILE_RE 的常见后缀） */
+function guessLanguage(fileName: string | undefined): string | undefined {
+  if (!fileName) return undefined
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  if (!ext) return undefined
+  const map: Record<string, string> = {
+    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+    py: 'python', java: 'java', go: 'go', rs: 'rust', c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp',
+    cs: 'csharp', rb: 'ruby', php: 'php', swift: 'swift', kt: 'kotlin', sh: 'bash', sql: 'sql',
+    css: 'css', scss: 'scss', less: 'less', json: 'json', yaml: 'yaml', yml: 'yaml',
+    toml: 'toml', vue: 'vue', svelte: 'svelte',
+  }
+  return map[ext]
+}
+
+export function extractCodeBlocks(text: string): { prose: string; codeBlocks: ExtractedCodeBlock[]; openFence?: { language: string; code: string } } {
   const codeBlocks: ExtractedCodeBlock[] = []
   const parts: string[] = []
   const FENCE = /```([A-Za-z0-9+#.-]*)\s*\n([\s\S]*?)```/g
@@ -84,8 +99,25 @@ export function extractCodeBlocks(text: string): { prose: string; codeBlocks: Ex
     parts.push(before)
     codeBlocks.push({ language: m[1], code, caption })
   }
-  parts.push(text.slice(last))
-  return { prose: parts.join('').replace(/\n{3,}/g, '\n\n').trim(), codeBlocks }
+  // 流式中间态：尾部有一个未闭合的 ``` 围栏（开了头还没等到闭合 ```），
+  // 实时抽出——调用方据此落一张 streaming 代码卡，实现边生成边显示
+  const tail = text.slice(last)
+  const openMatch = tail.match(/```([A-Za-z0-9+#.-]*)[ \t]*\n([\s\S]*)$/)
+  let openFence: { language: string; code: string } | undefined
+  if (openMatch) {
+    const before = tail.slice(0, (openMatch.index ?? 0))
+    const code = openMatch[2].replace(/\n$/, '')
+    if (code.trim() || openMatch[1]) {
+      parts.push(before)
+      openFence = { language: openMatch[1], code }
+    } else {
+      // 空围栏（仅 ```lang 头、无代码内容）不落卡，剩余文本照常并入 prose
+      parts.push(tail)
+    }
+  } else {
+    parts.push(tail)
+  }
+  return { prose: parts.join('').replace(/\n{3,}/g, '\n\n').trim(), codeBlocks, openFence }
 }
 
 // ─── 正文图片引用抽取 ───
@@ -105,7 +137,25 @@ export function extractImageRefs(text: string): { prose: string; images: string[
 // 纯文字轮：文字走旁白（不落地）；混合轮：产物卡 + 弹幕批注。
 // 无选中时焦点永远是最新轮；选中旧轮可回看，旧轮文字只在被选中时渲染。
 
-function groupRounds(messages: ChatMessage[]): StageRound[] {
+/** 图片路径 → 文件名小写，用于跨路径写法（相对/绝对/正反斜杠）的同图比对 */
+const imgBase = (p: string) => p.split(/[/\\]/).pop()?.toLowerCase() ?? ''
+
+/** 移除与 GenerateImage 结果同名、但不是生成动画卡（无 prompt 且非 :genN 前缀）的图片卡 */
+function pruneDuplicateImageCards(
+  round: StageRound,
+  genResultPaths: string[],
+) {
+  const genBases = new Set(genResultPaths.map(imgBase))
+  if (genBases.size === 0) return
+  round.artifactCards = round.artifactCards.filter((c) => {
+    if (c.kind !== 'image') return true
+    // 生成动画卡本身保留（生成中无 block；有 block 的 genN 卡也算）
+    if (c.prompt != null || /:gen\d+$/.test(c.id)) return true
+    return !genBases.has(imgBase(c.block?.src ?? ''))
+  })
+}
+
+function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
   const rounds: StageRound[] = []
   let current: StageRound | null = null
   const newRound = (id: string, startTs: number, userText: string, fromUser: boolean): StageRound => {
@@ -136,7 +186,9 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
       prompt: typeof input?.prompt === 'string' ? input.prompt : undefined,
       resolution: typeof input?.size === 'string' ? input.size.replace(/x/gi, ' × ') : undefined,
     })
-    const completedGens: { n: number; input?: Record<string, unknown> }[] = []
+    const completedGens: { n: number; input?: Record<string, unknown>; paths: string[] }[] = []
+    // 生成结果落盘路径的独立副本（completedGens 会被 image 分支 shift 消费，prune 需要完整列表）
+    const genResultPaths: string[] = []
     let genIdx = 0
     // Write 写入的代码文件：用于给同消息的代码块卡关联真实文件名（不单独落卡，避免与围栏代码块重复）
     const writeFiles: { fileName: string; content: string }[] = []
@@ -154,7 +206,12 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
             if (!p.result) {
               r.artifactCards.push({ id: `${msg.id}:gen${n}`, kind: 'image', ...genMeta(p.use.input), timestamp: msg.timestamp })
             } else if (!p.result.is_error) {
-              completedGens.push({ n, input: p.use.input })
+              // 记录生成结果的落盘路径：文本里复述的同图引用不再落第二张卡
+              try {
+                const rc = JSON.parse(typeof p.result.content === 'string' ? p.result.content : '{}')
+                if (typeof rc?.path === 'string') genResultPaths.push(rc.path)
+              } catch { /* result 不是 JSON */ }
+              completedGens.push({ n, input: p.use.input, paths: genResultPaths.slice() })
             }
             return
           }
@@ -172,7 +229,18 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
                 timestamp: msg.timestamp,
               })
             } else if (content && CODE_FILE_RE.test(filePath)) {
+              // 代码文件直接落一张代码卡（带真实文件名）——模型常用 Write 写源码，
+              // 只靠正文提及路径的话用户看不到代码内容
               const fileName = filePath.split(/[/\\]/).pop()
+              const lang = fileName?.split('.').pop()
+              r.artifactCards.push({
+                id: `${msg.id}:wf${gi}-${pi}`,
+                kind: 'code',
+                code: content,
+                language: guessLanguage(fileName) ?? undefined,
+                label: fileName,
+                timestamp: msg.timestamp,
+              })
               if (fileName) writeFiles.push({ fileName, content })
             }
           }
@@ -180,19 +248,34 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
         return
       }
       const b = g.block
+      const imgBase = (p: string) => p.split(/[/\\]/).pop()?.toLowerCase() ?? ''
       if (b.type === 'text' && b.text?.trim()) {
         // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注；
         // 围栏代码块与本消息 Write 写入的代码文件内容匹配时，头栏挂上真实文件名
-        const { prose: proseNoCode, codeBlocks } = extractCodeBlocks(b.text)
+        const { prose: proseNoCode, codeBlocks, openFence } = extractCodeBlocks(b.text)
         codeBlocks.forEach((cb, ci) => {
           const snippet = cb.code.trim().slice(0, 80)
           const wf = snippet ? writeFiles.find((w) => w.content.includes(snippet)) : undefined
           r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, label: wf?.fileName, caption: cb.caption, timestamp: msg.timestamp })
         })
-        // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡
+        // 流式中间态：尾部未闭合围栏 → 一张 streaming 代码卡，边生成边逐行显示；
+        // 围栏闭合后同一文本走上面的 codeBlocks 分支，id 保持 :cdN 序列不换卡
+        if (openFence && isLastMsg && isLoading) {
+          const ci = codeBlocks.length
+          r.artifactCards.push({
+            id: `${msg.id}:cd${gi}-${ci}`,
+            kind: 'code',
+            code: openFence.code,
+            language: openFence.language || undefined,
+            streaming: true,
+            timestamp: msg.timestamp,
+          })
+        }
+        // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡；
+        // 与 GenerateImage 输出同名的引用由后置兜底过滤移除（见下方 pruneDuplicateImageCards）
         const { prose, images } = extractImageRefs(proseNoCode)
         images.forEach((src, ii) => {
-          if (r.artifactCards.some((c) => c.kind === 'image' && c.block?.src === src)) return
+          if (r.artifactCards.some((c) => c.kind === 'image' && imgBase(c.block?.src ?? '') === imgBase(src))) return
           r.artifactCards.push({ id: `${msg.id}:imt${gi}-${ii}`, kind: 'image', block: { type: 'image', src }, timestamp: msg.timestamp })
         })
         if (prose.trim()) r.textSegments.push(prose)
@@ -200,8 +283,8 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
       else if (b.type === 'image' && b.src) {
         const gen = completedGens.shift()
         if (gen) r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', block: b, ...genMeta(gen.input), timestamp: msg.timestamp })
-        // 正文引用已落卡的同图不重复落卡
-        else if (!r.artifactCards.some((c) => c.kind === 'image' && c.block?.src === b.src)) {
+        // 正文引用已落卡的同图不重复落卡（按文件名比对，路径写法可能不同）
+        else if (!r.artifactCards.some((c) => c.kind === 'image' && imgBase(c.block?.src ?? '') === imgBase(b.src ?? ''))) {
           r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
         }
       }
@@ -213,12 +296,16 @@ function groupRounds(messages: ChatMessage[]): StageRound[] {
         r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', ...genMeta(gen.input), timestamp: msg.timestamp }),
       )
     }
+    // 后置兜底：存储层拍平后 text 落在 tool_use 之前，处理文本时 completedGens 还没填上，
+    // 前置跳过对文本引用卡无效。这里统一移除「与生成结果同名但不是生成卡」的图片卡，
+    // 同一张图只保留 GenerateImage 的动画卡。
+    pruneDuplicateImageCards(r, genResultPaths)
   }
   return rounds
 }
 
-export function buildStageView(messages: ChatMessage[], selectedRoundId?: string | null): StageViewModel {
-  const allRounds = groupRounds(messages)
+export function buildStageView(messages: ChatMessage[], selectedRoundId?: string | null, isLoading = false): StageViewModel {
+  const allRounds = groupRounds(messages, isLoading)
   // 空轮（用户只发了文字、agent 尚未回复的瞬间）不参与焦点/卡片，但进列表
   const liveRounds = allRounds.filter((r) => r.artifactCards.length > 0 || r.textSegments.length > 0)
 

@@ -16,6 +16,8 @@ export interface StageCardData {
   language?: string
   /** kind = 'code'：围栏前的引导短句（如"输出："），底部说明栏优先于整轮批注 */
   caption?: string
+  /** kind = 'code'：流式生成中（Writing 状态，逐行追加） */
+  streaming?: boolean
   /** kind = 'image' 且来自 GenerateImage：提示词与分辨率（无 block = 仍在生成中） */
   prompt?: string
   resolution?: string
@@ -54,7 +56,7 @@ export const StageCard = memo(function StageCard({ card, annotations }: { card: 
         <WebScreen title={card.label} html={card.html} />
       )}
       {card.kind === 'code' && card.code != null && (
-        <StageCodeCard language={card.language} code={card.code} fileName={card.label} caption={card.caption ?? annotations?.join('\n')} />
+        <StageCodeCard language={card.language} code={card.code} fileName={card.label} caption={card.caption ?? annotations?.join('\n')} status={card.streaming ? 'streaming' : 'complete'} />
       )}
       {card.kind === 'file' && card.block && (
         <div className="stage-card-file">

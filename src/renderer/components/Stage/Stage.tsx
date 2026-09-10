@@ -157,7 +157,7 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
     () => (currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : []),
     [messages, currentSessionId],
   )
-  const vm = useMemo(() => buildStageView(filtered, selectedRoundId), [filtered, selectedRoundId])
+  const vm = useMemo(() => buildStageView(filtered, selectedRoundId, isLoading), [filtered, selectedRoundId, isLoading])
   const allCards = vm.cards.filter(({ card }) => !hiddenCardIds[card.id])
   const narrationText = vm.narrationText
   const focusRoundId = vm.focusRoundId
