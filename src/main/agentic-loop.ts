@@ -533,6 +533,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
     }
 
     let fullContent = ''
+    let fullReasoning = ''
     let finishReason: string | null = null
     const toolCallAccumulators = new Map<number, { id: string; name: string; arguments: string }>()
 
@@ -555,8 +556,11 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         onTextDelta?.(delta.content)
       }
 
-      if ((delta as any).reasoning_content) {
-        params.onThinkingDelta?.((delta as any).reasoning_content)
+      // 推理字段名因网关/模型而异：DeepSeek 用 reasoning_content，GLM/vLLM 网关用 reasoning
+      const reasoning = (delta as any).reasoning_content ?? (delta as any).reasoning ?? (delta as any).thinking
+      if (reasoning) {
+        fullReasoning += reasoning
+        params.onThinkingDelta?.(reasoning)
       }
 
       if (delta.tool_calls) {
@@ -581,9 +585,11 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
     // Build assistant message for history
     const assistantMsg: any = { role: 'assistant' }
     if (fullContent) assistantMsg.content = fullContent
+    // 思考文本单独携带（不进 content，OpenAI 历史格式不认），仅用于上层收集展示
+    if (fullReasoning) (assistantMsg as any).reasoning = fullReasoning
 
     if (toolCallAccumulators.size === 0) {
-      messages.push({ role: 'assistant', content: fullContent || '' })
+      messages.push({ role: 'assistant', content: fullContent || '', ...(fullReasoning ? { reasoning: fullReasoning } : {}) })
       return {
         stopReason: finishReason === 'length' ? 'max_tokens' : 'end_turn',
         usage: { inputTokens: totalInput, outputTokens: totalOutput },

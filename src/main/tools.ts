@@ -606,9 +606,20 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         AskUser: {
           description: 'Ask the user structured questions to collect requirements before producing artifacts — e.g. clarifying what image to generate, which plan/style/format to pick. The user answers via an on-screen option card; their selections and custom text are returned. Use this instead of guessing when the requirement has a few discrete choices. Do NOT use for open-ended discussion.',
           input_schema: zodToInputSchema(askUserSchema),
-          execute: async ({ questions }: { questions: import('../shared/types').AskUserQuestion[] }) => {
-            const answers = await hooks.askUser!(questions)
-            return questions.map((q, i) => {
+          execute: async ({ questions }: { questions: unknown }) => {
+            // 模型可能产出畸形结构（如把问题对象嵌进 options），先归一化，
+            // 否则渲染卡片时对象被当 React child 直接崩溃整个 UI
+            const safe = (Array.isArray(questions) ? questions : []).map((raw: any) => ({
+              q: typeof raw?.q === 'string' ? raw.q : String(raw?.q ?? ''),
+              type: raw?.type === 'check' ? 'check' as const : 'radio' as const,
+              options: (Array.isArray(raw?.options) ? raw.options : [])
+                .map((o: unknown) => typeof o === 'string' ? o
+                  : typeof (o as any)?.description === 'string' ? (o as any).description
+                  : JSON.stringify(o))
+                .slice(0, 4),
+            }))
+            const answers = await hooks.askUser!(safe)
+            return safe.map((q, i) => {
               const a = answers[i]
               const parts = [...(a?.selected ?? [])]
               if (a?.custom?.trim()) parts.push(`补充: ${a.custom.trim()}`)
