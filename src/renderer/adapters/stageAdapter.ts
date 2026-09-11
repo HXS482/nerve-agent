@@ -32,6 +32,8 @@ export interface StageRoundSummary {
   userText: string
   hasArtifacts: boolean
   hasText: boolean
+  /** 该轮产物卡的类型（去重，按出现顺序）——时间轴节点旁的产物标记 */
+  artifactKinds: Array<StageCardData['kind']>
 }
 
 export interface StageViewModel {
@@ -354,6 +356,7 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
       userText: r.userText,
       hasArtifacts: r.artifactCards.length > 0,
       hasText: r.textSegments.length > 0,
+      artifactKinds: [...new Set(r.artifactCards.map((c) => c.kind))],
     }))
 
   return {

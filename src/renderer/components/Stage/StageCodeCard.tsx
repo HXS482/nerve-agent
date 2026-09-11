@@ -1,38 +1,43 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { Check, Copy, FileCode2, LoaderCircle } from 'lucide-react'
+import { common, createLowlight } from 'lowlight'
 
 // Stage 代码卡：回复中的 ``` 围栏代码块落地为产物卡。
 // 结构与交互参照 beui CodeBlock：头栏（FileCode2 图标 + 文件名 + 语言大写 +
 // Writing/Ready 状态 + 圆形 Copy 按钮）、行号槽 + 分隔竖线、pre-wrap 换行、
-// 轻量正则语法着色。配色 token（--sc-*）见 globals.css，明暗主题各一套。
+// lowlight(highlight.js) 真语法高亮（hljs-* 类名映射到 --sc-* token，见 globals.css）。
 
-/* 轻量语法着色：keyword/import/条件、函数调用、字符串与数字 */
-const KEYWORDS = new Set([
-  'import', 'from', 'export', 'default', 'async', 'function', 'const', 'let', 'var',
-  'await', 'return', 'if', 'else', 'for', 'while', 'new', 'throw', 'try', 'catch',
-  'null', 'true', 'false', 'undefined',
-])
-const TOKEN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`|\b\d+(?:\.\d+)?\b|\b(?:import|from|export|default|async|function|const|let|var|await|return|if|else|for|while|new|throw|try|catch|null|true|false|undefined)\b|[A-Za-z_$][\w$]*(?=\s*\())/g
+const low = createLowlight(common)
 
-function highlight(text: string): ReactNode[] {
-  const nodes: ReactNode[] = []
-  let last = 0
-  let k = 0
-  for (const m of text.matchAll(TOKEN)) {
-    const idx = m.index ?? 0
-    const t = m[0]
-    if (idx > last) nodes.push(<span key={k++}>{text.slice(last, idx)}</span>)
-    let color: string
-    let weight: number | undefined
-    if (/^["'`]/.test(t) || /^\d/.test(t)) color = 'var(--sc-orange)' // 字符串 / 数字
-    else if (KEYWORDS.has(t)) color = 'var(--sc-accent)' // 关键字
-    else { color = 'var(--sc-ink)'; weight = 500 } // 函数调用
-    nodes.push(<span key={k++} style={{ color, fontWeight: weight }}>{t}</span>)
-    last = idx + t.length
+interface CodeSeg { cls?: string; text: string }
+
+// 整段代码一次高亮（跨行注释/字符串不断色），再把 hast 树按行拆成片段数组——
+// 行号槽仍按逻辑行对齐，包裹 span 在换行处克隆延续
+function splitHighlightLines(code: string, language?: string): CodeSeg[][] {
+  const lang = language && low.registered(language) ? language : undefined
+  if (!lang) return code.split('\n').map((t) => [{ text: t }])
+  const tree = low.highlight(lang, code)
+  const lines: CodeSeg[][] = [[]]
+  const push = (cls: string | undefined, text: string) => {
+    text.split('\n').forEach((part, i) => {
+      if (i > 0) lines.push([])
+      if (part) lines[lines.length - 1].push(cls ? { cls, text: part } : { text: part })
+    })
   }
-  if (last < text.length) nodes.push(<span key={k++}>{text.slice(last)}</span>)
-  return nodes
+  const walk = (node: any, cls?: string) => {
+    if (node.type === 'text') {
+      push(cls, node.value)
+    } else if (node.type === 'element') {
+      const own = ((node.properties?.className as string[] | undefined) ?? []).join(' ')
+      // 嵌套元素合并类名（如 hljs-string > hljs-subst），外层色可继承
+      node.children?.forEach((ch: any) => walk(ch, cls && own ? `${cls} ${own}` : own || cls))
+    } else {
+      node.children?.forEach((ch: any) => walk(ch, cls))
+    }
+  }
+  walk(tree)
+  return lines
 }
 
 const SPRING_PRESS = { type: 'spring', stiffness: 500, damping: 30 } as const
@@ -49,7 +54,7 @@ export function StageCodeCard({ language, code, fileName, caption, status = 'com
   const copyTimer = useRef<number | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const streaming = status === 'streaming'
-  const lines = useMemo(() => code.split('\n'), [code])
+  const lines = useMemo(() => splitHighlightLines(code, language), [code, language])
   const langLabel = (language ?? 'code').toLowerCase()
 
   // 复制完成后清理定时器，避免卸载后 setState
@@ -57,17 +62,21 @@ export function StageCodeCard({ language, code, fileName, caption, status = 'com
     if (copyTimer.current) window.clearTimeout(copyTimer.current)
   }, [])
 
-  // 流式状态：新内容到达时平滑滚到底
+  // 流式状态：新内容到达时滚到底；用户上翻超过阈值则暂停跟随，回到底部附近自动恢复。
+  // 用瞬时滚动（非 smooth）：smooth 动画途中 scrollHeight 继续增长，onScroll 的
+  // 距底判定会瞬时超阈值，把程序滚动误判成用户上翻而永久暂停跟随
+  const followRef = useRef(true)
+  const onBodyScroll = useCallback(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    followRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 24
+  }, [])
   useLayoutEffect(() => {
     const viewport = viewportRef.current
-    if (!viewport || !streaming) return
+    if (!viewport || !streaming || !followRef.current) return
     const frame = requestAnimationFrame(() => {
       if (viewport.scrollHeight <= viewport.clientHeight) return
-      if (typeof viewport.scrollTo === 'function') {
-        viewport.scrollTo({ top: viewport.scrollHeight, behavior: reduce ? 'auto' : 'smooth' })
-      } else {
-        viewport.scrollTop = viewport.scrollHeight
-      }
+      viewport.scrollTop = viewport.scrollHeight
     })
     return () => cancelAnimationFrame(frame)
   })
@@ -109,12 +118,16 @@ export function StageCodeCard({ language, code, fileName, caption, status = 'com
       </div>
 
       {/* 正文：行号槽（20px + 分隔竖线）+ pre-wrap 换行的代码行 */}
-      <div className="stage-code-body" ref={viewportRef} role={streaming ? 'log' : undefined} aria-live={streaming ? 'polite' : undefined}>
+      <div className="stage-code-body" ref={viewportRef} onScroll={onBodyScroll} role={streaming ? 'log' : undefined} aria-live={streaming ? 'polite' : undefined}>
         <span className="stage-code-gutter-line" aria-hidden />
         {lines.map((line, i) => (
           <div key={i} className="stage-code-line">
             <span className="stage-code-num">{i + 1}</span>
-            <code className="stage-code-text">{highlight(line)}</code>
+            <code className="stage-code-text">
+              {line.map((seg, j) =>
+                seg.cls ? <span key={j} className={seg.cls}>{seg.text}</span> : seg.text,
+              )}
+            </code>
           </div>
         ))}
       </div>

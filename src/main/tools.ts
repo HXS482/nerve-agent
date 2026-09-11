@@ -82,6 +82,98 @@ function matchGlob(pattern: string, filePath: string): boolean {
   return regex.test(filePath)
 }
 
+/** Edit 失败时的定位反馈：用 old_string 里最有辨识度的行在文件中找候选，给出行号 */
+function editNotFoundMessage(fp: string, content: string, oldString: string): string {
+  const anchors = oldString
+    .split('\n')
+    .map((l) => l.trim().replace(/\s+/g, ' '))
+    .filter((l) => l.length >= 4)
+    .sort((a, b) => b.length - a.length)
+  const fileLines = content.split('\n').map((l) => l.replace(/\s+/g, ' '))
+  const hits: string[] = []
+  for (const anchor of anchors.slice(0, 3)) {
+    for (let i = 0; i < fileLines.length && hits.length < 5; i++) {
+      if (fileLines[i].includes(anchor)) hits.push(`  L${i + 1}: ${fileLines[i].trimEnd().slice(0, 120)}`)
+    }
+    if (hits.length > 0) break
+  }
+  const closest = hits.length > 0 ? `\nClosest matching line(s):\n${hits.join('\n')}` : ''
+  return `old_string not found in ${fp}.${closest}\nHint: re-Read the file and copy the exact text — watch indentation, whitespace and line endings (CRLF vs LF).`
+}
+
+/** old_string 在文件中每次出现的起始行号（1 起，非重叠、同行去重，与 split 计数一致） */
+function occurrenceLines(content: string, needle: string): number[] {
+  const lines: number[] = []
+  let from = 0
+  let idx = -1
+  while ((idx = content.indexOf(needle, from)) !== -1) {
+    const lineNo = content.slice(0, idx).split('\n').length
+    if (lines[lines.length - 1] !== lineNo) lines.push(lineNo)
+    from = idx + needle.length
+  }
+  return lines
+}
+
+/**
+ * 行级 LCS diff：Edit/Write 落地后随结果返回「改了哪几行」。
+ * 大文件（行数乘积超阈值）只给增减统计，不算 patch。
+ */
+export function computeLineDiff(before: string, after: string): { added: number; removed: number; patch?: string } {
+  if (before === after) return { added: 0, removed: 0 }
+  const a = before.split('\n')
+  const b = after.split('\n')
+  const n = a.length
+  const m = b.length
+  if (n * m > 4_000_000) {
+    return { added: -1, removed: -1 } // -1 = 文件过大未计算；调用方应带 diffSkipped 提示
+  }
+  // dp[i][j] = a[i:] 与 b[j:] 的 LCS 长度
+  const dp = new Uint32Array((n + 1) * (m + 1))
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * (m + 1) + j] = a[i] === b[j]
+        ? dp[(i + 1) * (m + 1) + j + 1] + 1
+        : Math.max(dp[(i + 1) * (m + 1) + j], dp[i * (m + 1) + j + 1])
+    }
+  }
+  // 回溯出 ops 序列
+  const ops: { t: ' ' | '-' | '+'; line: string }[] = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { ops.push({ t: ' ', line: a[i] }); i++; j++ }
+    else if (dp[(i + 1) * (m + 1) + j] >= dp[i * (m + 1) + j + 1]) { ops.push({ t: '-', line: a[i] }); i++ }
+    else { ops.push({ t: '+', line: b[j] }); j++ }
+  }
+  while (i < n) { ops.push({ t: '-', line: a[i] }); i++ }
+  while (j < m) { ops.push({ t: '+', line: b[j] }); j++ }
+
+  const added = ops.filter((o) => o.t === '+').length
+  const removed = ops.filter((o) => o.t === '-').length
+
+  // 只保留变更行 ±2 行上下文，输出上限 80 行
+  const CONTEXT = 2
+  const keep = new Set<number>()
+  ops.forEach((o, k) => {
+    if (o.t !== ' ') {
+      for (let x = Math.max(0, k - CONTEXT); x <= Math.min(ops.length - 1, k + CONTEXT); x++) keep.add(x)
+    }
+  })
+  const out: string[] = []
+  let prev = -1
+  let truncated = false
+  for (const k of [...keep].sort((x, y) => x - y)) {
+    if (out.length >= 80) { truncated = true; break }
+    if (prev !== -1 && k > prev + 1) out.push('···')
+    // 单行上限 200 字符（与 Grep 一致），防 minified 单行撑爆 patch
+    const text = ops[k].line.length > 200 ? ops[k].line.slice(0, 200) + '…' : ops[k].line
+    out.push(`${ops[k].t} ${text}`)
+    prev = k
+  }
+  if (truncated) out.push('··· (diff truncated)')
+  return { added, removed, patch: out.join('\n') }
+}
+
 export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers> }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
@@ -106,8 +198,9 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
   })
   const editSchema = z.object({
     file_path: z.string().describe('Absolute path to the file'),
-    old_string: z.string().describe('Exact string to find and replace'),
+    old_string: z.string().describe('Exact string to find. Must match exactly one location unless replace_all is true.'),
     new_string: z.string().describe('Replacement string'),
+    replace_all: z.boolean().optional().describe('Replace every occurrence (default false — multiple matches without this flag is an error)'),
   })
   const globSchema = z.object({
     pattern: z.string().describe('Glob pattern (e.g. "**/*.ts")'),
@@ -244,17 +337,35 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
           const dir = dirname(fp)
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+          const isImage = isImageFile(fp)
+          // 图片不做 diff（避免把二进制当 utf-8 读进内存）
+          let before: string | null = null
+          if (!isImage) {
+            try { if (existsSync(fp)) before = readFileSync(fp, 'utf-8') } catch { before = null }
+          }
           writeFileSync(fp, content, 'utf-8')
 
           // Auto-intercept: if it's an image file, move to gallery
-          if (isImageFile(fp)) {
+          if (isImage) {
             const result = moveToGallery(fp, `Written by agent: ${basename(fp)}`)
             if (result.moved) {
               return { success: true, file_path: result.galleryPath, savedTo: 'gallery', note: 'Image automatically saved to gallery' }
             }
           }
 
-          return { success: true, file_path: fp }
+          // 改动可视化：覆盖写带行级 diff；新文件报行数
+          if (before === null) {
+            const lines = content === '' ? 0 : content.split('\n').length - (content.endsWith('\n') ? 1 : 0)
+            return { success: true, file_path: fp, newFile: true, lines }
+          }
+          const diff = computeLineDiff(before, content)
+          return {
+            success: true,
+            file_path: fp,
+            ...(diff.added >= 0
+              ? { added: diff.added, removed: diff.removed, diff: diff.patch }
+              : { diffSkipped: 'file too large to diff' }),
+          }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Write failed' }
         }
@@ -277,20 +388,51 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     Edit: {
-      description: 'Edit a file by replacing old_string with new_string.',
+      description: 'Edit a file by replacing old_string with new_string. old_string must match exactly one location (or set replace_all to change every occurrence). Fails with closest-match hints when the text is not found.',
       input_schema: zodToInputSchema(editSchema),
       execute: async (args: any) => {
         try {
           const fp = args.file_path || args.filePath || args.path
-          const old_string = args.old_string || args.oldString
-          const new_string = args.new_string || args.newString
+          const old_string: string = args.old_string ?? args.oldString ?? ''
+          const new_string: string = args.new_string ?? args.newString ?? ''
+          const replaceAll = !!(args.replace_all ?? args.replaceAll)
+          if (!old_string) return { error: 'old_string must not be empty' }
           let content = readFileSync(fp, 'utf-8')
-          if (!content.includes(old_string)) {
-            return { error: `old_string not found in ${fp}` }
+
+          // 行尾容错（双向）：文件 CRLF 而 old_string 是 LF → 转 CRLF 再匹配；
+          // 文件 LF 而 old_string 带 CRLF → 去掉 \r 再匹配。归一化用 /\r?\n/，幂等，
+          // 不会把已是 CRLF 的 new_string 二次转成 \r\r\n；文件其余部分保持不动
+          let oldTry = old_string
+          let newTry = new_string
+          if (!content.includes(oldTry)) {
+            if (content.includes('\r\n')) {
+              oldTry = old_string.replace(/\r?\n/g, '\r\n')
+              newTry = new_string.replace(/\r?\n/g, '\r\n')
+            } else {
+              oldTry = old_string.replace(/\r\n/g, '\n')
+              newTry = new_string.replace(/\r\n/g, '\n')
+            }
           }
-          content = content.split(old_string).join(new_string)
-          writeFileSync(fp, content, 'utf-8')
-          return { success: true, file_path: fp }
+
+          const occurrences = content.split(oldTry).length - 1
+          if (occurrences === 0) {
+            return { error: editNotFoundMessage(fp, content, old_string) }
+          }
+          if (occurrences > 1 && !replaceAll) {
+            const lines = occurrenceLines(content, oldTry)
+            return { error: `old_string matches ${occurrences} locations in ${fp} (lines ${lines.join(', ')}). Provide more surrounding context to make it unique, or set replace_all: true to change all of them.` }
+          }
+          const after = content.split(oldTry).join(newTry)
+          writeFileSync(fp, after, 'utf-8')
+          const diff = computeLineDiff(content, after)
+          return {
+            success: true,
+            file_path: fp,
+            replacements: occurrences,
+            ...(diff.added >= 0
+              ? { added: diff.added, removed: diff.removed, diff: diff.patch }
+              : { diffSkipped: 'file too large to diff' }),
+          }
         } catch (err: any) {
           return { error: err.message?.slice(0, 2000) || 'Edit failed' }
         }

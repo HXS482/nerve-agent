@@ -824,6 +824,31 @@ button, a, input, textarea, select {
   --sc-accent: #2563eb;
   --sc-orange: #ea580c;
 }
+/* lowlight(highlight.js) 类名 → --sc-* token（离线可用，不依赖 CDN 主题） */
+.stage-code .hljs-keyword,
+.stage-code .hljs-literal,
+.stage-code .hljs-selector-tag,
+.stage-code .hljs-tag,
+.stage-code .hljs-name { color: var(--sc-accent); }
+.stage-code .hljs-string,
+.stage-code .hljs-regexp,
+.stage-code .hljs-number,
+.stage-code .hljs-symbol,
+.stage-code .hljs-char.escape_ { color: var(--sc-orange); }
+.stage-code .hljs-comment,
+.stage-code .hljs-quote,
+.stage-code .hljs-meta { color: var(--sc-ink3); font-style: italic; }
+.stage-code .hljs-title,
+.stage-code .hljs-section { color: var(--sc-ink); font-weight: 500; }
+.stage-code .hljs-attr,
+.stage-code .hljs-attribute,
+.stage-code .hljs-variable,
+.stage-code .hljs-template-variable,
+.stage-code .hljs-params { color: var(--sc-ink2); }
+.stage-code .hljs-type,
+.stage-code .hljs-built_in,
+.stage-code .hljs-selector-class,
+.stage-code .hljs-selector-id { color: var(--sc-orange); font-style: italic; }
 .stage-code-header {
   display: flex;
   align-items: center;
@@ -917,10 +942,22 @@ button, a, input, textarea, select {
   overflow-x: hidden;
   /* 滚到头不再把 wheel 冒泡给外层画布（否则拖住卡片时滚动错乱） */
   overscroll-behavior: contain;
-  scrollbar-width: none;
+  /* 细滚动条：默认透明，hover 卡片时显现（长代码有位置感，平时不抢视觉） */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 .stage-code-body::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+.stage-code-body::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: transparent;
+}
+.stage-code:hover .stage-code-body {
+  scrollbar-color: var(--sc-ink3) transparent;
+}
+.stage-code:hover .stage-code-body::-webkit-scrollbar-thumb {
+  background: var(--sc-ink3);
 }
 /* 行号槽 20px，竖线压在槽右缘 */
 .stage-code-gutter-line {
@@ -1315,73 +1352,155 @@ button, a, input, textarea, select {
   color: var(--error);
 }
 
-/* ===== 用户消息悬浮列表（右下角，无外框，点击回看该轮） ===== */
-.user-log-list {
+/* ===== 用户消息时间轴（右下角）：roadmap 轨道 —— 分段连线 + 节点层级 + 产物标记 ===== */
+.user-log-timeline {
   position: absolute;
-  right: 0;
+  right: 48px;
   bottom: 64px;
-  width: fit-content; /* 宽度贴合内容：文字右端真正贴到 right 定位点 */
-  max-width: 300px;
-  max-height: 240px;
-  overflow-y: auto;
   z-index: 35;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-family: var(--font-mono);
-  /* 顶部渐隐示意可滚动（沿用 narration-scroll 的手法） */
-  mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
+  gap: 5px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px 0;
+  scrollbar-width: none;
+  /* 上下渐隐：滚动方向的视觉提示 */
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 24px, #000 calc(100% - 24px), transparent 100%);
 }
-.user-log-list::-webkit-scrollbar { width: 3px; }
-.user-log-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
-.user-log-row {
+.user-log-timeline::-webkit-scrollbar { display: none; }
+.user-log-entry {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   width: 100%;
-  padding: 2px 6px;
+  padding: 0;
   border: none;
-  border-radius: 4px;
   background: transparent;
-  font-size: 11px;
-  line-height: 1.55;
   text-align: left;
-  color: var(--text-on-surface);
-  opacity: 0.55;
   cursor: pointer;
+  animation: userLogEntryIn 0.2s ease-out;
+  transition: transform 0.15s ease-out;
+}
+.user-log-entry:hover { transform: translateX(2px); }
+/* 分段连线：每行节点上方一段（行高 16.5px + 间距 5px，段长覆盖到上一节点圆心）；
+   颜色随「已行驶 / 未到达」分层；首行无来向段 */
+.user-log-entry::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: -13px;
+  bottom: 50%;
+  width: 1px;
+  background: var(--text-outline-variant);
+  opacity: 0.4;
+  pointer-events: none;
+  transition: background 0.15s ease-out, opacity 0.15s ease-out;
+}
+.user-log-entry:first-child::before { content: none; }
+/* 末行的去向尾段，向下渐隐 */
+.user-log-entry:last-child::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  bottom: -8px;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--text-outline-variant), transparent);
+  opacity: 0.4;
+  pointer-events: none;
+}
+/* 已行驶段（焦点轮之前）与驶入焦点轮的段点亮 */
+.user-log-entry.is-passed::before,
+.user-log-entry.is-active::before {
+  background: var(--text-on-surface-variant);
+  opacity: 0.7;
+}
+/* 对话节点：默认空心环；有产物的轮实心点 */
+.user-log-dot {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 1px solid var(--text-outline-variant);
+  border-radius: 50%;
+  background: transparent;
+  opacity: 0.8;
+  cursor: pointer;
+  transition: transform 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out, opacity 0.15s ease-out;
+}
+.user-log-entry.has-artifacts .user-log-dot { background: var(--text-outline-variant); }
+.user-log-entry.is-passed .user-log-dot { border-color: var(--text-on-surface-variant); }
+.user-log-entry.is-passed.has-artifacts .user-log-dot { background: var(--text-on-surface-variant); }
+.user-log-dot:hover {
+  opacity: 1;
+  transform: scale(1.4);
+}
+/* 当前活跃轮：绿色呼吸 + 外扩光环，尺寸略放大 */
+.user-log-entry.is-active .user-log-dot {
+  width: 9px;
+  height: 9px;
+  background: #34d399;
+  border-color: #34d399;
+  opacity: 1;
+  animation: userLogBreathe 2s ease-in-out infinite;
+}
+.user-log-entry.is-active .user-log-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  animation: userLogRing 2s ease-out infinite;
+}
+/* 产物类型标记：文本前的小图标列 */
+.user-log-kinds {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  color: var(--text-on-surface);
+  opacity: 0.45;
   transition: opacity 0.15s;
 }
-.user-log-row:hover {
-  opacity: 0.9;
+.user-log-kinds svg {
+  width: 11px;
+  height: 11px;
 }
-.user-log-row.is-active {
-  opacity: 1;
-}
-.user-log-row.is-active::before {
-  content: '';
-  width: 2px;
-  align-self: stretch;
-  border-radius: 1px;
-  background: var(--accent-primary);
-  flex-shrink: 0;
-}
-.user-log-time {
-  color: var(--text-outline-variant);
-  flex-shrink: 0;
-}
-.user-log-prompt {
-  color: #4880ff;
-  flex-shrink: 0;
-  font-weight: 600;
-}
-.user-log-row.is-active .user-log-prompt {
-  color: var(--accent-primary);
-}
+.user-log-entry:hover .user-log-kinds { opacity: 0.85; }
+.user-log-entry.is-active .user-log-kinds { opacity: 0.9; }
+/* 节点右侧贴用户消息文本 */
 .user-log-text {
-  white-space: nowrap;
+  user-select: none;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-on-surface);
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.user-log-entry.is-passed .user-log-text { opacity: 0.45; }
+.user-log-entry:hover .user-log-text { opacity: 0.9; }
+.user-log-entry.is-active .user-log-text { opacity: 1; }
+@keyframes userLogBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+@keyframes userLogRing {
+  0% { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes userLogEntryIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* 全局思考点（Stage 形态）：顶栏 loader 正下方，悬浮展开思考内容 */

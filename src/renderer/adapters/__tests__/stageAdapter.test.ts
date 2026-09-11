@@ -341,6 +341,33 @@ describe('buildStageView — 画布只展示焦点轮（新指令清空画布）
   })
 })
 
+describe('buildStageView — 用户消息列表行的产物标记 artifactKinds', () => {
+  it('按轮去重汇总产物卡类型；纯文字轮为空数组', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('画图兼写代码')),
+      msg('a1', 'assistant', 1100,
+        { type: 'image', src: '/gallery/a.png' },
+        text('```ts\nconst a = 1\n```')),
+      msg('u2', 'user', 2000, text('随便聊聊')),
+      msg('a2', 'assistant', 2100, text('好的')),
+    ])
+    const r1 = vm.rounds.find((r) => r.id === 'u1')
+    const r2 = vm.rounds.find((r) => r.id === 'u2')
+    expect(r1?.artifactKinds).toEqual(['image', 'code'])
+    expect(r2?.artifactKinds).toEqual([])
+  })
+
+  it('同类型多张卡只出现一次', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('两张图')),
+      msg('a1', 'assistant', 1100,
+        { type: 'image', src: '/gallery/1.png' },
+        { type: 'image', src: '/gallery/2.png' }),
+    ])
+    expect(vm.rounds[0].artifactKinds).toEqual(['image'])
+  })
+})
+
 describe('buildStageView — 代码卡关联 Write 文件名', () => {
   const CODE = 'def is_palindrome(s):\n    return s == s[::-1]'
   const writePy: ContentBlock = {
