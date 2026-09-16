@@ -82,11 +82,12 @@ export class IPCChannel implements OutputChannel {
     this.send(IPC_CHANNELS.GIT_REFRESH, {})
   }
 
-  sendToolApprovalRequest(approvalId: string, toolName: string, toolInput: unknown): void {
+  sendToolApprovalRequest(approvalId: string, toolName: string, toolInput: unknown, toolCallId?: string): void {
     this.send(IPC_CHANNELS.TOOL_APPROVAL_REQUEST, {
       approvalId,
       toolName,
       toolInput,
+      toolCallId,
     })
   }
 

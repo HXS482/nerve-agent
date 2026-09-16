@@ -234,6 +234,13 @@ export type ColorScheme = 'purple' | 'blue' | 'green' | 'pink' | 'orange'
 
 export type MessageRole = 'user' | 'assistant' | 'system'
 
+// TodoWrite 任务清单项（长任务拆解，Stage 画布 TaskRows 卡片展示）
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  note?: string
+}
+
 export interface ContentBlock {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image' | 'file' | 'approval'
   text?: string
@@ -443,6 +450,8 @@ export interface ToolApprovalRequest {
   approvalId: string
   toolName: string
   toolInput: Record<string, unknown>
+  /** 发起审批的 tool_use.id —— 渲染端精确匹配到具体调用（否则同名工具全部误判 pending） */
+  toolCallId?: string
 }
 
 export interface ToolApprovalResponse {

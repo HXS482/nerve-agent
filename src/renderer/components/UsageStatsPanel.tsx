@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useState, useEffect, useMemo, useRef, useId } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import { useChatStore } from '../stores/chatStore'
 import { UsageStats } from '../../shared/types'
 
@@ -54,13 +54,13 @@ function buildYearGrid(dailyActivity: Record<string, { messages: number; tokens:
   return { grid, maxVal }
 }
 
-const CELL = 10
-const GAP = 2
+const CELL = 11
+const GAP = 3
+const STACK_LIMIT = 3
 
-// --- Detail view constants ---
-const DETAIL_DAYS = 7          // rows: last 7 days, newest at top
-const SLOTS = 8                // columns: 8 × 3-hour slots
-const SLOT_STARTS = [0, 3, 6, 9, 12, 15, 18, 21]  // start hour of each slot
+// Reference GitHubActivity coloring: one accent + per-level opacity over a neutral base cell
+const ACCENT = '#39d353'
+const LEVEL_OPACITY: Record<number, number> = { 0: 0, 1: 0.3, 2: 0.52, 3: 0.76, 4: 1 }
 
 /** Format a token count with K/M suffixes. */
 function formatTokens(n: number): string {
@@ -72,14 +72,9 @@ function formatTokens(n: number): string {
 export function UsageStatsPanel() {
   const [stats, setStats] = useState<UsageStats | null>(null)
   const [collapsed, setCollapsed] = useState(false)
-  const [view, setView] = useState<'heatmap' | 'detail'>('heatmap')
+  const [open, setOpen] = useState(false) // bottom floating panel (expand/collapse)
   const theme = useChatStore((s) => s.theme)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const [scrollRatio, setScrollRatio] = useState(0)
-  const dragging = useRef(false)
-  const dragStartX = useRef(0)
-  const dragStartScroll = useRef(0)
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     window.claude.getUsageStats().then((s: UsageStats) => setStats(s)).catch(() => {})
@@ -90,96 +85,10 @@ export function UsageStatsPanel() {
     return buildYearGrid(stats.dailyActivity)
   }, [stats])
 
-  const detail = useMemo(() => {
-    if (!stats) return null
-
-    // Build last DETAIL_DAYS local dates, newest first.
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const days: { key: string; label: string }[] = []
-    for (let i = 0; i < DETAIL_DAYS; i++) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      days.push({ key, label: `${d.getMonth() + 1}/${d.getDate()}` })
-    }
-
-    // 2D matrix: rows = days, cols = slots. Values = token sums.
-    const matrix: number[][] = days.map(({ key }) => {
-      const hours = stats.dailyHourlyTokens[key] || new Array(24).fill(0)
-      return SLOT_STARTS.map((start) =>
-        hours[start] + hours[start + 1] + hours[start + 2]
-      )
-    })
-
-    let globalMax = 0
-    for (const row of matrix) for (const v of row) if (v > globalMax) globalMax = v
-
-    // Peak slot = the slot column with the highest 7-day total.
-    const slotTotals = new Array(SLOTS).fill(0)
-    for (const row of matrix) {
-      for (let s = 0; s < SLOTS; s++) slotTotals[s] += row[s]
-    }
-    let peakSlot = 0
-    for (let s = 1; s < SLOTS; s++) if (slotTotals[s] > slotTotals[peakSlot]) peakSlot = s
-    const peakValue = slotTotals[peakSlot]
-
-    return { days, matrix, globalMax, peakSlot, peakValue, hasData: globalMax > 0 }
-  }, [stats])
-
-  const syncScroll = useCallback(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const maxScroll = el.scrollWidth - el.clientWidth
-    if (maxScroll <= 0) { setScrollRatio(0); return }
-    setScrollRatio(el.scrollLeft / maxScroll)
-  }, [])
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    syncScroll()
-    el.addEventListener('scroll', syncScroll, { passive: true })
-    return () => el.removeEventListener('scroll', syncScroll)
-  }, [syncScroll, collapsed])
-
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    dragging.current = true
-    dragStartX.current = e.clientX
-    dragStartScroll.current = scrollRef.current?.scrollLeft || 0
-
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current || !scrollRef.current || !trackRef.current) return
-      const el = scrollRef.current
-      const maxScroll = el.scrollWidth - el.clientWidth
-      if (maxScroll <= 0) return
-      const dx = ev.clientX - dragStartX.current
-      el.scrollLeft = dragStartScroll.current + (dx / trackRef.current.clientWidth) * maxScroll
-      syncScroll()
-    }
-
-    const onUp = () => {
-      dragging.current = false
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [syncScroll])
-
-  const handleTrackClick = useCallback((e: React.MouseEvent) => {
-    const el = scrollRef.current
-    if (!el) return
-    const maxScroll = el.scrollWidth - el.clientWidth
-    if (maxScroll <= 0) return
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    el.scrollLeft = ((e.clientX - rect.left) / rect.width) * maxScroll
-    syncScroll()
-  }, [syncScroll])
-
   if (!stats || grid.length === 0) return null
+
+  const totalTokens = formatTokens(stats.totalInputTokens + stats.totalOutputTokens)
+  const totalMessages = formatTokens(stats.totalMessages)
 
   return (
     <div style={{ marginBottom: 4 }}>
@@ -207,303 +116,352 @@ export function UsageStatsPanel() {
 
       {!collapsed && (
         <div style={{ padding: '0 5px 6px' }}>
-          <AnimatePresence mode="wait" initial={false}>
-            {view === 'heatmap' ? (
-              <motion.div
-                key="heatmap"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.1 }}
-              >
-                {/* Heatmap card — glassmorphism like functional island */}
-                <div
-                  className={`rounded-[10px] ${theme === 'aurora' ? 'dynamic-island' : ''}`}
-                  onClick={() => setView('detail')}
-                  style={{
-                    background: theme === 'aurora'
-                      ? undefined
-                      : theme === 'light'
-                        ? 'rgba(255, 255, 255, 0.6)'
-                        : 'rgba(30, 30, 32, 0.6)',
-                    backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                    WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                    border: theme === 'aurora'
-                      ? '1px solid var(--glass-border)'
-                      : theme === 'light'
-                        ? '1px solid rgba(0,0,0,0.06)'
-                        : '1px solid rgba(255,255,255,0.08)',
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div
-                    ref={scrollRef}
-                    style={{ overflowX: 'hidden', overflowY: 'hidden', padding: '8px' }}
-                  >
-                    {/* Grid — fills container uniformly */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: GAP, flexShrink: 0 }}>
-                      {grid.map((row, ri) => (
-                        <div key={ri} style={{ display: 'flex', gap: GAP }}>
-                          {row.map((val, ci) => {
-                            const intensity = maxVal > 0 && val !== null ? val / maxVal : 0
-                            const isNull = val === null
-                            return (
-                              <div
-                                key={ci}
-                                style={{
-                                  width: CELL,
-                                  height: CELL,
-                                  borderRadius: 2,
-                                  background: isNull
-                                    ? 'transparent'
-                                    : intensity > 0
-                                      ? `rgba(99, 148, 255, ${0.12 + intensity * 0.88})`
-                                      : theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            )
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Scrollbar — dot on line, no shadow */}
-                <div
-                  ref={trackRef}
-                  style={{
-                    height: 2,
-                    borderRadius: 1,
-                    background: theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)',
-                    marginTop: 8,
-                    position: 'relative',
-                    cursor: 'pointer',
-                    marginLeft: 6,
-                    marginRight: 6,
-                  }}
-                  onClick={handleTrackClick}
-                >
-                  {/* Invisible hit area for easier grabbing */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -8,
-                      left: 0,
-                      right: 0,
-                      height: 18,
-                      cursor: 'grab',
-                    }}
-                    onMouseDown={(e) => { e.stopPropagation(); handleDragStart(e) }}
-                  />
-                  {/* Visible dot */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: 'var(--text-on-surface-variant)',
-                      transform: 'translate(-50%, -50%)',
-                      left: `${Math.min(scrollRatio * 100, 100)}%`,
-                      pointerEvents: 'none',
-                      transition: dragging.current ? 'none' : 'left 0.1s ease-out',
-                    }}
-                  />
-                </div>
-
-                {/* Summary */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8, padding: '0 6px' }}>
-                  <SummaryRow label="Total tokens" value={formatTokens(stats.totalInputTokens + stats.totalOutputTokens)} theme={theme} />
-                  <SummaryRow label="Sessions" value={String(stats.totalSessions)} theme={theme} />
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="detail"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                transition={{ duration: 0.1 }}
-              >
-                <DetailView
-                  detail={detail}
-                  theme={theme}
-                  onBack={() => setView('heatmap')}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <HeatmapCard
+            theme={theme}
+            grid={grid}
+            maxVal={maxVal}
+            open={open}
+            setOpen={setOpen}
+            reduceMotion={reduceMotion}
+            totalTokens={totalTokens}
+            totalMessages={totalMessages}
+            totalSessions={String(stats.totalSessions)}
+          />
         </div>
       )}
     </div>
   )
 }
 
-function SummaryRow({ label, value, theme }: { label: string; value: string; theme: string }) {
+// --- Heatmap card: vertical week columns + bottom floating panel (GitHubActivity-style) ---
+// Collapsed: floating bar = title + stacked circular metric icons + chevron.
+// Expanded: panel covers the card; icons morph (layoutId) into one row per metric.
+type MetricKind = 'tokens' | 'sessions' | 'messages'
+
+function MetricIcon({ kind, size = 12 }: { kind: MetricKind; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  }
+  if (kind === 'tokens') {
+    // coin: circle + mini bar chart
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M8.5 15v-3M12 15V9M15.5 15v-4.5" />
+      </svg>
+    )
+  }
+  if (kind === 'sessions') {
+    // chat bubble
+    return (
+      <svg {...common}>
+        <path d="M21 12a8 8 0 0 1-8 8H4l2.2-2.6A8 8 0 1 1 21 12Z" />
+      </svg>
+    )
+  }
+  // messages: envelope
   return (
-    <div className="flex items-center justify-between" style={{ padding: '1px 0' }}>
-      <span style={{ fontSize: 10, color: 'var(--text-on-surface-variant)', letterSpacing: '0.3px' }}>
-        {label}
-      </span>
-      <span style={{
-        fontSize: 10,
-        fontWeight: 500,
-        color: theme === 'light' ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)',
-        fontVariantNumeric: 'tabular-nums',
-      }}>
-        {value}
-      </span>
-    </div>
+    <svg {...common}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </svg>
   )
 }
 
-function DetailView({
-  detail,
-  theme,
-  onBack,
-}: {
-  detail: {
-    days: { key: string; label: string }[]
-    matrix: number[][]
-    globalMax: number
-    peakSlot: number
-    peakValue: number
-    hasData: boolean
-  } | null
-  theme: string
-  onBack: () => void
-}) {
-  if (!detail) return null
+const EASE_OUT = [0.22, 1, 0.36, 1] as const
+const SPRING = { type: 'spring' as const, bounce: 0.2, duration: 0.62 }
+const HEADER_SPRING = { ...SPRING, bounce: 0.45 }
+const ROW_SPRING = { ...SPRING, bounce: 0.26, delay: 0.08 }
+const ROW_OFFSET = 10
 
-  const slotLabel = (s: number) => `${String(s).padStart(2, '0')}:00`
+function HeatmapCard({
+  theme,
+  grid,
+  maxVal,
+  open,
+  setOpen,
+  reduceMotion,
+  totalTokens,
+  totalMessages,
+  totalSessions,
+}: {
+  theme: string
+  grid: (number | null)[][]
+  maxVal: number
+  open: boolean
+  setOpen: (v: boolean) => void
+  reduceMotion: boolean | null
+  totalTokens: string
+  totalMessages: string
+  totalSessions: string
+}) {
+  const isLight = theme === 'light'
+
+  const spring = reduceMotion ? { duration: 0 } : SPRING
+  const headerSpring = reduceMotion ? { duration: 0 } : HEADER_SPRING
+  const rowSpring = reduceMotion ? { duration: 0 } : ROW_SPRING
+
+  // grid rows = days (0..6), transpose into week columns
+  const weeks = useMemo(() => {
+    if (!grid.length) return []
+    const totalWeeks = grid[0].length
+    return Array.from({ length: totalWeeks }, (_, w) =>
+      Array.from({ length: ROWS }, (_, d) => grid[d]?.[w] ?? null)
+    )
+  }, [grid])
+
+  // Grid fills the container exactly: cell size derives from measured width and column count,
+  // so cells stretch to use every pixel and the leftover (< one cell) splits evenly left/right.
+  const fitRef = useRef<HTMLDivElement>(null)
+  const [fit, setFit] = useState<{ cell: number; count: number; pad: number }>()
+  useEffect(() => {
+    const el = fitRef.current
+    if (!el) return
+    const measure = () => {
+      const inner = el.clientWidth - 16 // minus the 8px padding on each side
+      const count = Math.max(1, Math.floor((inner + GAP) / (CELL + GAP)))
+      const cell = (inner - (count - 1) * GAP) / count
+      const pad = (inner - count * cell - (count - 1) * GAP) / 2
+      setFit({ cell, count, pad })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const show = (val: number | null, cell: HTMLElement) => {
+    if (val === null) return
+    const rect = cell.getBoundingClientRect()
+    setTooltip({ text: `${formatTokens(val)} tokens`, x: rect.left + rect.width / 2, y: rect.top })
+  }
+
+  // The last `fit.count` week columns
+  const shown = fit ? weeks.slice(-fit.count) : []
+
+  // metrics: icon + label + value
+  const metrics: { kind: MetricKind; label: string; value: string }[] = [
+    { kind: 'tokens', label: 'Token usage', value: totalTokens },
+    { kind: 'sessions', label: 'Sessions', value: totalSessions },
+    { kind: 'messages', label: 'Messages', value: totalMessages },
+  ]
+  const uid = useId()
+
+  const CARD_GLASS: React.CSSProperties = theme === 'aurora'
+    ? { border: '1px solid var(--glass-border)' }
+    : {
+        background: isLight ? 'rgba(255, 255, 255, 0.6)' : 'rgba(30, 30, 32, 0.6)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        border: isLight ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)',
+      }
+
+  const PANEL_BG: React.CSSProperties = theme === 'aurora'
+    ? { background: 'rgba(20, 15, 40, 0.5)' }
+    : { background: isLight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(30, 30, 32, 0.92)' }
+  const PANEL_BORDER: React.CSSProperties = theme === 'aurora'
+    ? { border: '1px solid var(--glass-border)' }
+    : { border: isLight ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)' }
+
+  const kick = reduceMotion ? {} : { x: ROW_OFFSET, y: ROW_OFFSET }
+  const rowMotion = {
+    initial: { opacity: 0, ...kick },
+    animate: { opacity: 1, x: 0, y: 0 },
+    exit: { opacity: 0, ...kick },
+  }
+
+  const iconChip = (ml?: number): React.CSSProperties => ({
+    width: 18,
+    height: 18,
+    marginLeft: ml,
+    background: isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)',
+    color: 'var(--text-on-surface-variant)',
+  })
 
   return (
     <div
-      className={`rounded-[10px] ${theme === 'aurora' ? 'dynamic-island' : ''}`}
-      style={{
-        background: theme === 'aurora'
-          ? undefined
-          : theme === 'light'
-            ? 'rgba(255, 255, 255, 0.6)'
-            : 'rgba(30, 30, 32, 0.6)',
-        backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-        border: theme === 'aurora'
-          ? '1px solid var(--glass-border)'
-          : theme === 'light'
-            ? '1px solid rgba(0,0,0,0.06)'
-            : '1px solid rgba(255,255,255,0.08)',
-        padding: 8,
-      }}
+      className={`rounded-[10px] relative overflow-hidden ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+      style={CARD_GLASS}
     >
-      {/* Header: back + title */}
-      <div className="flex items-center" style={{ marginBottom: 8 }}>
-        <button
-          onClick={onBack}
-          className="flex items-center"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '2px 4px',
-            color: 'var(--text-on-surface-variant)',
-          }}
-          aria-label="Back to heatmap"
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <span style={{
-          fontSize: 11,
-          fontWeight: 500,
-          color: 'var(--text-on-surface-variant)',
-          letterSpacing: '0.4px',
-          marginLeft: 4,
-        }}>
-          Active Hours
-        </span>
+      {/* Grid area */}
+      <div ref={fitRef} style={{ padding: 8, paddingBottom: open ? 8 : 30 }}>
+        <div style={{ overflow: 'hidden' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: GAP,
+              justifyContent: 'center',
+              paddingLeft: fit?.pad,
+              paddingRight: fit?.pad,
+            }}
+          >
+            {shown.map((week, wi) => (
+              <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: GAP }}>
+                {week.map((val, di) => {
+                  // intensity 0..1 → level 0..4 → accent color at stepped opacity,
+                  // layered on the same neutral base cell the reference uses
+                  const level = maxVal > 0 && val ? Math.min(4, Math.ceil((val / maxVal) * 4)) : 0
+                  return (
+                    <div
+                      key={di}
+                      onMouseEnter={(e) => show(val, e.currentTarget)}
+                      onMouseLeave={() => setTooltip(null)}
+                      style={{
+                        width: fit?.cell ?? CELL,
+                        height: fit?.cell ?? CELL,
+                        borderRadius: 2,
+                        // null = future days (right edge) — still draw the base cell so columns look full
+                        background:
+                          level > 0
+                            ? `rgba(57, 211, 83, ${LEVEL_OPACITY[level]})`
+                            : isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)',
+                        flexShrink: 0,
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {!detail.hasData ? (
-        <div style={{
-          fontSize: 10,
-          color: 'var(--text-outline-variant)',
-          textAlign: 'center',
-          padding: '16px 0',
-        }}>
-          No usage data
+      {/* Bottom floating panel */}
+      <motion.div
+        data-state={open ? 'open' : 'closed'}
+        style={{
+          position: 'absolute',
+          left: 5,
+          right: 5,
+          top: open ? 5 : undefined,
+          bottom: open ? 5 : 5,
+          borderRadius: 8,
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          overflow: 'hidden',
+          zIndex: 5,
+          ...PANEL_BG,
+          ...PANEL_BORDER,
+        }}
+        transition={spring}
+      >
+        {/* Header row: title (open) + stacked icons (closed) + chevron */}
+        <div
+          className="flex items-center justify-between"
+          style={{ padding: '5px 7px' }}
+        >
+          <span style={{ fontSize: 10, letterSpacing: '0.3px', color: 'var(--text-on-surface-variant)' }}>
+            {open ? 'Usage' : ''}
+          </span>
+
+          <div className="flex items-center" style={{ gap: 5 }}>
+            {!open && (
+              <div className="flex items-center">
+                {metrics.slice(0, STACK_LIMIT).map((m, index) => (
+                  <motion.span
+                    key={m.kind}
+                    layoutId={`${uid}-${index}`}
+                    transition={spring}
+                    className="grid place-items-center rounded-full shrink-0"
+                    style={iconChip(index === 0 ? 0 : -5)}
+                    title={`${m.label}: ${m.value}`}
+                  >
+                    <MetricIcon kind={m.kind} size={10} />
+                  </motion.span>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+              className="grid place-items-center rounded-full cursor-pointer shrink-0"
+              style={{
+                width: 18,
+                height: 18,
+                background: isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)',
+                border: 'none',
+              }}
+              title={open ? 'Collapse' : 'Expand'}
+            >
+              <motion.svg
+                width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: 'var(--text-on-surface-variant)' }}
+                initial={false}
+                animate={{ rotate: open ? 180 : 0 }}
+                transition={spring}
+              >
+                <path d="M6 9l6 6 6-6" />
+              </motion.svg>
+            </button>
+          </div>
         </div>
-      ) : (
-        <>
-          {/* X axis: slot labels */}
-          <div style={{ display: 'flex', marginLeft: 28, gap: 2, marginBottom: 3 }}>
-            {SLOT_STARTS.map((h) => (
-              <div key={h} style={{
-                flex: 1,
-                fontSize: 7,
-                color: 'var(--text-outline-variant)',
-                textAlign: 'center',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {h}
-              </div>
-            ))}
-          </div>
 
-          {/* Rows: one per day */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {detail.days.map((day, ri) => (
-              <div key={day.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <div style={{
-                  width: 26,
-                  fontSize: 8,
-                  color: 'var(--text-outline-variant)',
-                  fontVariantNumeric: 'tabular-nums',
-                  flexShrink: 0,
-                }}>
-                  {day.label}
-                </div>
-                <div style={{ display: 'flex', gap: 2, flex: 1 }}>
-                  {detail.matrix[ri].map((val, ci) => {
-                    const intensity = detail.globalMax > 0 ? val / detail.globalMax : 0
-                    return (
-                      <div
-                        key={ci}
-                        title={`${day.label} ${slotLabel(SLOT_STARTS[ci])}-${slotLabel(SLOT_STARTS[ci] + 3)}: ${formatTokens(val)} tokens`}
-                        style={{
-                          flex: 1,
-                          height: 12,
-                          borderRadius: 2,
-                          background: intensity > 0
-                            ? `rgba(99, 148, 255, ${0.12 + intensity * 0.88})`
-                            : theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
-                        }}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Expanded: one row per metric; icons morph from the collapsed stack via layoutId */}
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div key="panel-body" style={{ padding: '0 3px 4px' }}>
+              {metrics.map((m, index) => (
+                <motion.div
+                  key={m.kind}
+                  {...rowMotion}
+                  transition={rowSpring}
+                  className="flex items-center"
+                  style={{ gap: 7, padding: '3px 5px', borderRadius: 6 }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <motion.span
+                    layoutId={`${uid}-${index}`}
+                    transition={spring}
+                    className="grid place-items-center rounded-full shrink-0"
+                    style={iconChip()}
+                  >
+                    <MetricIcon kind={m.kind} size={10} />
+                  </motion.span>
+                  <span className="flex-1 truncate" style={{ fontSize: 10, color: 'var(--text-on-surface-variant)', letterSpacing: '0.3px' }}>
+                    {m.label}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 500, color: isLight ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)', fontVariantNumeric: 'tabular-nums' }}>
+                    {m.value}
+                  </span>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
-          {/* Peak summary */}
-          <div className="flex items-center justify-between" style={{ marginTop: 8, paddingTop: 6, borderTop: theme === 'light' ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.06)' }}>
-            <span style={{ fontSize: 9, color: 'var(--text-outline-variant)' }}>Peak</span>
-            <span style={{
-              fontSize: 9,
-              fontWeight: 500,
-              color: theme === 'light' ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)',
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {slotLabel(SLOT_STARTS[detail.peakSlot])}–{slotLabel(SLOT_STARTS[detail.peakSlot] + 3)} · {formatTokens(detail.peakValue)}
-            </span>
-          </div>
-        </>
+      {/* Tooltip (hover on heatmap cell) */}
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: 'translate(-50%, calc(-100% - 8px))',
+            background: isLight ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.8)',
+            color: '#fff',
+            fontSize: 10,
+            padding: '3px 7px',
+            borderRadius: 6,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            zIndex: 100,
+          }}
+        >
+          {tooltip.text}
+        </div>
       )}
     </div>
   )

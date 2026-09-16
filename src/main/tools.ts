@@ -8,6 +8,7 @@ import { zodToInputSchema } from './tool-schema'
 import { estimateTokens } from './core/token-estimator'
 import { saveImage, getImagesDir } from './images'
 import simpleGit from 'simple-git'
+import type { TodoItem } from '../shared/types'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'])
 const ARTIFACT_EXTS = new Set(['.html', '.htm'])
@@ -174,7 +175,7 @@ export function computeLineDiff(before: string, after: string): { added: number;
   return { added, removed, patch: out.join('\n') }
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers> }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers>; onTodos?: (todos: TodoItem[]) => void }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
@@ -707,6 +708,36 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         }
       },
     },
+
+    // TodoWrite — 长任务清单：拆解步骤并实时同步进度到 UI（Stage TaskRows 卡片）
+    ...(hooks?.onTodos ? (() => {
+      const todoSchema = z.object({
+        todos: z.array(z.object({
+          content: z.string().describe('The task description (imperative, one sentence)'),
+          status: z.enum(['pending', 'in_progress', 'completed']).describe('Current state of this task'),
+          note: z.string().optional().describe('Optional short detail shown when the row is expanded'),
+        })).min(1).max(20).describe('The full task list — always send the complete list, not a diff'),
+      })
+      return {
+        TodoWrite: {
+          description: 'Write/update the task list for a long-running task. Break multi-step work (multi-file edits, refactors, batch operations) into 3-10 concrete todos, mark exactly one as in_progress while working, and flip each to completed as you finish it. Send the FULL list every time (it replaces the previous one). Skip this for simple single-step requests.',
+          input_schema: zodToInputSchema(todoSchema),
+          execute: async ({ todos }: { todos: { content: string; status: string; note?: string }[] }) => {
+            // 宽容畸形输入：content 非字符串的项丢弃，status 非法值归一 pending
+            const safe: TodoItem[] = (Array.isArray(todos) ? todos : [])
+              .map((t) => ({
+                content: typeof t?.content === 'string' ? t.content : String(t?.content ?? ''),
+                status: t?.status === 'in_progress' || t?.status === 'completed' ? t.status : 'pending' as const,
+                ...(typeof t?.note === 'string' && t.note.trim() ? { note: t.note.trim() } : {}),
+              }))
+              .filter((t) => t.content.length > 0)
+              .slice(0, 20)
+            hooks.onTodos!(safe)
+            return { success: true, count: safe.length }
+          },
+        },
+      }
+    })() : {}),
 
     // load_skill — on-demand skill loading (two-layer model)
     ...(skillRegistry ? (() => {

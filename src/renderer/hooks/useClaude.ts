@@ -2,7 +2,8 @@ import { useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 import { useStageStore } from '../stores/stageStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
-import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment, ToolApprovalRequest, ToolApprovalResponse } from '../../shared/types'
+import { useTodoStore } from '../stores/todoStore'
+import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment, ToolApprovalRequest, ToolApprovalResponse, TodoItem } from '../../shared/types'
 
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
 type Workspace = 'chat' | 'stage'
@@ -516,6 +517,23 @@ export function useClaude() {
         // 标记产物来源工作区，stage 产物不进 chat 的 flow 面板
         workspace: pendingWorkspace.current,
       })
+      // TodoWrite 清单 → todoStore（Stage TaskRows 卡片数据源）
+      if (data.type === 'todo') {
+        try {
+          const parsed = JSON.parse(data.content)
+          if (Array.isArray(parsed)) {
+            const sessionId = data.meta?.sessionId || getWorkspaceSessionId(pendingWorkspace.current)
+            const todos: TodoItem[] = (parsed as any[])
+              .map((t) => ({
+                content: typeof t?.content === 'string' ? t.content : '',
+                status: t?.status === 'in_progress' || t?.status === 'completed' ? t.status : 'pending' as const,
+                ...(typeof t?.note === 'string' && t.note.trim() ? { note: t.note.trim() } : {}),
+              }))
+              .filter((t: TodoItem) => t.content.length > 0)
+            if (sessionId) useTodoStore.getState().setTodos(sessionId, todos)
+          }
+        } catch { /* 畸形 JSON 忽略 */ }
+      }
       // 产物图片实时注入消息流：chat/stage 两种模式共用同一数据源
       if (data.type === 'image') {
         const store = useChatStore.getState()

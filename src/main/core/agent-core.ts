@@ -289,7 +289,8 @@ export class AgentCore {
       const routeImagesRef: { fn: ((toolName: string | undefined, resultContent: string) => void) | null } = { fn: null }
       const { allToolDefs, allToolExecutors, orchestratorTools, pluginSnapshot } = await this.buildTools(
         client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls,
-        (toolName, content) => { routeImagesRef.fn?.(toolName, content) }
+        (toolName, content) => { routeImagesRef.fn?.(toolName, content) },
+        sessionId
       )
 
       // 图片工具结果路由
@@ -463,6 +464,9 @@ export class AgentCore {
       }
     }
 
+    // TodoWrite 指引：长任务先拆解清单，逐项推进并实时更新状态
+    systemPrompt += '\n\n## Task List (TodoWrite)\nFor long-running work (multi-file edits, refactors, batch operations, anything with 3+ steps), first call `TodoWrite` with a breakdown of 3-10 concrete todos, mark exactly one as `in_progress` while you work on it, and re-send the full list each time a task\'s status changes (flip to `completed` immediately when done). Skip it for simple single-step requests.'
+
     return { messages, systemPrompt, mcpTools }
   }
 
@@ -488,7 +492,8 @@ export class AgentCore {
     mcpTools: McpToolEntry[],
     channel: OutputChannel,
     pendingToolCalls: Map<string, { name: string; input: any }>,
-    routeImages?: (toolName: string | undefined, resultContent: string) => void
+    routeImages?: (toolName: string | undefined, resultContent: string) => void,
+    sessionId?: string
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
@@ -507,6 +512,10 @@ export class AgentCore {
         this.pendingAsks.set(askId, { resolve })
         askChannel.sendAskUserRequest(askId, questions)
       }),
+      // TodoWrite → FLOW_ITEM('todo')：渲染端 todoStore 消费，Stage TaskRows 卡片展示
+      onTodos: (todos) => {
+        askChannel.sendFlowItem('todo', JSON.stringify(todos), { sessionId })
+      },
     } : undefined)
 
     // MCP 工具名冲突解决：与内置工具或其他 MCP 工具重名时加 serverName__ 前缀
@@ -651,7 +660,7 @@ export class AgentCore {
             if (!this.needsApproval(name)) return true
             const approvalId = `approve-${id}`
             if (isElectronChannel(channel)) {
-              channel.sendToolApprovalRequest(approvalId, name, input)
+              channel.sendToolApprovalRequest(approvalId, name, input, id)
             }
             return new Promise<boolean>((resolve) => {
               pendingApprovals.set(approvalId, { resolve })

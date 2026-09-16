@@ -86,7 +86,7 @@ class AsciiFilter {
     this.domElement.appendChild(this.pre);
 
     this.canvas = document.createElement('canvas');
-    this.context = this.canvas.getContext('2d');
+    this.context = this.canvas.getContext('2d', { willReadFrequently: true });
     this.domElement.appendChild(this.canvas);
 
     this.deg = 0;
@@ -215,7 +215,7 @@ class CanvasTxt {
 
   constructor(txt: string, { fontSize = 200, fontFamily = 'Arial', color = '#fdf9f3' }: CanvasTxtOptions = {}) {
     this.canvas = document.createElement('canvas');
-    this.context = this.canvas.getContext('2d');
+    this.context = this.canvas.getContext('2d', { willReadFrequently: true });
     this.txt = txt;
     this.fontSize = fontSize;
     this.fontFamily = fontFamily;

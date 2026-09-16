@@ -18,6 +18,16 @@ export interface StageRound {
   userText: string
   /** false = 会话恢复时 assistant 开头的孤儿轮（auto-*），不进消息列表 */
   fromUser: boolean
+  /** coding 控制台的操作记录（Write 代码文件等，随代码卡抑制填充） */
+  codingOps: CodingOp[]
+}
+
+/** coding 控制台的单条操作：Write 落盘的代码文件（围栏代码块并入时 kind='fence'） */
+export interface CodingOp {
+  kind: 'write' | 'fence'
+  fileName?: string
+  language?: string
+  code: string
 }
 
 export interface StageCardEntry {
@@ -161,7 +171,7 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
   const rounds: StageRound[] = []
   let current: StageRound | null = null
   const newRound = (id: string, startTs: number, userText: string, fromUser: boolean): StageRound => {
-    current = { id, startTs, artifactCards: [], textSegments: [], userText, fromUser }
+    current = { id, startTs, artifactCards: [], textSegments: [], userText, fromUser, codingOps: [] }
     rounds.push(current)
     return current
   }
@@ -231,18 +241,10 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
                 timestamp: msg.timestamp,
               })
             } else if (content && CODE_FILE_RE.test(filePath)) {
-              // 代码文件直接落一张代码卡（带真实文件名）——模型常用 Write 写源码，
-              // 只靠正文提及路径的话用户看不到代码内容
+              // 代码文件不再落画布卡（coding 时逐张飞入铺满画布），改道 coding 控制台；
+              // 文件名仍记入 writeFiles，给同消息围栏代码块关联真实文件名
               const fileName = filePath.split(/[/\\]/).pop()
-              const lang = fileName?.split('.').pop()
-              r.artifactCards.push({
-                id: `${msg.id}:wf${gi}-${pi}`,
-                kind: 'code',
-                code: content,
-                language: guessLanguage(fileName) ?? undefined,
-                label: fileName,
-                timestamp: msg.timestamp,
-              })
+              r.codingOps.push({ kind: 'write', fileName, language: guessLanguage(fileName) ?? undefined, code: content })
               if (fileName) writeFiles.push({ fileName, content })
             }
           }
@@ -254,24 +256,40 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
       if (b.type === 'text' && b.text?.trim()) {
         // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注；
         // 围栏代码块与本消息 Write 写入的代码文件内容匹配时，头栏挂上真实文件名
+        // coding 轮（本消息已有 Write 代码活动）时围栏代码改道 coding 控制台，不再落卡
+        const codingRound = writeFiles.length > 0 || r.codingOps.length > 0
         const { prose: proseNoCode, codeBlocks, openFence } = extractCodeBlocks(b.text)
         codeBlocks.forEach((cb, ci) => {
           const snippet = cb.code.trim().slice(0, 80)
           const wf = snippet ? writeFiles.find((w) => w.content.includes(snippet)) : undefined
-          r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, label: wf?.fileName, caption: cb.caption, timestamp: msg.timestamp })
+          if (codingRound) {
+            r.codingOps.push({ kind: 'fence', fileName: wf?.fileName, language: cb.language || undefined, code: cb.code })
+          } else {
+            r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, label: wf?.fileName, caption: cb.caption, timestamp: msg.timestamp })
+          }
         })
         // 流式中间态：尾部未闭合围栏 → 一张 streaming 代码卡，边生成边逐行显示；
         // 围栏闭合后同一文本走上面的 codeBlocks 分支，id 保持 :cdN 序列不换卡
+        // coding 轮改道控制台：不落卡，流式内容并入 codingOps（同一条 op 原地更新）
         if (openFence && isLastMsg && isLoading) {
-          const ci = codeBlocks.length
-          r.artifactCards.push({
-            id: `${msg.id}:cd${gi}-${ci}`,
-            kind: 'code',
-            code: openFence.code,
-            language: openFence.language || undefined,
-            streaming: true,
-            timestamp: msg.timestamp,
-          })
+          if (codingRound) {
+            const last = r.codingOps[r.codingOps.length - 1]
+            if (last && last.kind === 'fence') {
+              last.code = openFence.code
+            } else {
+              r.codingOps.push({ kind: 'fence', language: openFence.language || undefined, code: openFence.code })
+            }
+          } else {
+            const ci = codeBlocks.length
+            r.artifactCards.push({
+              id: `${msg.id}:cd${gi}-${ci}`,
+              kind: 'code',
+              code: openFence.code,
+              language: openFence.language || undefined,
+              streaming: true,
+              timestamp: msg.timestamp,
+            })
+          }
         }
         // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡；
         // 与 GenerateImage 输出同名的引用由后置兜底过滤移除（见下方 pruneDuplicateImageCards）

@@ -3,8 +3,10 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { ChatMessage } from '../../../shared/types'
 import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useTodoStore } from '../../stores/todoStore'
 import { buildStageView, listSessionImageCards } from '../../adapters/stageAdapter'
 import { StageCard, type StageCardData } from './StageCard'
+import { TaskRows } from './TaskRows'
 import { NarrationLayer } from './NarrationLayer'
 import { CardCoverFlow } from './CardCoverFlow'
 import ASCIIText from '../ASCIIText'
@@ -153,10 +155,15 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   const hiddenCardIds = useStageStore((s) => s.hiddenCardIds)
   const hideCard = useStageStore((s) => s.hideCard)
   const isLoading = useChatStore((s) => s.isLoading)
+  // 原子订阅（不能 select 新对象——useSyncExternalStore 要求快照稳定）
+  const todoSessionId = useTodoStore((s) => s.sessionId)
+  const todos = useTodoStore((s) => s.todos)
   const filtered = useMemo(
     () => (currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : []),
     [messages, currentSessionId],
   )
+  // 固定右上角 todo 卡：仅当前会话的清单显示（todoStore 全局只有最新一份）
+  const activeTodos = todoSessionId === currentSessionId ? todos : []
   const vm = useMemo(() => buildStageView(filtered, selectedRoundId, isLoading), [filtered, selectedRoundId, isLoading])
   const allCards = vm.cards.filter(({ card }) => !hiddenCardIds[card.id])
   const narrationText = vm.narrationText
@@ -216,6 +223,12 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
 
   return (
     <div className="stage-root">
+      {/* 固定右上角 todo 卡（无边框紧凑列表，coding 时随 TodoWrite 更新） */}
+      {activeTodos.length > 0 && (
+        <div className="stage-todo-fixed">
+          <TaskRows todos={activeTodos} />
+        </div>
+      )}
       {showEmptyState ? (
         <div className="flex-1 flex items-center justify-center" style={{ paddingInline: 'var(--sp-md)' }}>
           <div className="flex flex-col items-center justify-center py-20 gap-3" style={{ position: 'relative', width: '100%', height: '300px' }}>

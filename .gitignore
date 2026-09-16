@@ -7,6 +7,12 @@ dist/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+
+# tsc 编译产物（源码在 src/ 下，构建输出不入库）
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+!src/renderer/vite-env.d.ts
 .heartbeat
 .agents/skills/
 

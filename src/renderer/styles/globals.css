@@ -1002,6 +1002,192 @@ button, a, input, textarea, select {
   overflow: hidden;
 }
 
+/* ===== TaskRows：TodoWrite 任务卡（Stage 画布） ===== */
+/* ===== TaskRows：固定右上角 todo 卡（无边框紧凑列表，融入壁纸） ===== */
+.stage-todo-fixed {
+  position: absolute;
+  top: 46px;
+  right: 20px;
+  z-index: 26;
+  width: 250px;
+  max-width: 30vw;
+  pointer-events: auto;
+}
+.stage-task-card {
+  --stage-task-line: rgba(255, 255, 255, 0.14);
+  --stage-task-run: #60a5fa;
+  --stage-task-done: #34d399;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+[data-theme="light"] .stage-task-card {
+  --stage-task-line: rgba(0, 0, 0, 0.12);
+}
+.stage-task-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 2px 4px 4px;
+}
+.stage-task-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-outline);
+}
+.stage-task-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-outline-variant);
+}
+.stage-task-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stage-task-row {
+  border-radius: 8px;
+  transition: background-color 200ms;
+}
+.stage-task-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme="light"] .stage-task-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.stage-task-row-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.stage-task-badge-slot {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+.stage-task-row[data-status="completed"] .stage-task-badge-slot {
+  animation: fade-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.stage-task-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stage-task-ring svg {
+  position: absolute;
+  inset: 0;
+}
+.stage-task-ring-num {
+  position: relative;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-on-surface);
+}
+.stage-task-row[data-status="completed"] .stage-task-ring {
+  display: none;
+}
+.stage-task-badge {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: #fff;
+}
+.stage-task-label {
+  min-width: 0;
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stage-task-row[data-status="completed"] .stage-task-label {
+  color: var(--text-on-surface-variant);
+}
+.stage-task-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 9.5px;
+  font-weight: 500;
+  background: rgba(52, 211, 153, 0.14);
+  color: #34d399;
+}
+.stage-task-pill.is-running {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+}
+.stage-task-chevron {
+  flex-shrink: 0;
+  color: var(--text-outline-variant);
+}
+.stage-task-detail-wrap {
+  display: grid;
+  transition: grid-template-rows 300ms cubic-bezier(0.23, 1, 0.32, 1), opacity 300ms;
+}
+.stage-task-detail-clip {
+  overflow: hidden;
+}
+.stage-task-detail {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  padding: 0 6px 6px 6px;
+}
+.stage-task-line {
+  width: 1px;
+  height: 100%;
+  margin: 0 auto;
+  background: var(--stage-task-line);
+}
+.stage-task-detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 2px;
+}
+.stage-task-detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stage-task-detail-label {
+  font-size: 10.5px;
+  color: var(--text-on-surface-variant);
+}
+.stage-task-detail-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-outline-variant);
+}
+
 /* 旁白层：逐行渐现 + 规整正文排版，长回复内部滚动 */
 .narration-layer {
   position: absolute;
@@ -1563,7 +1749,11 @@ button, a, input, textarea, select {
 .think-spot-panel .think-trace-row-text {
   font-size: 11px;
   line-height: 1.55;
-  color: #5c7cff;
+  color: #b3b8c2;
+}
+/* stage 思考面板竖线：改为中性灰（原 --text-outline 偏蓝且过亮） */
+.think-spot-panel .think-trace-line {
+  background: #6b7280;
 }
 /* 收起时不挡壁纸交互 */
 .think-spot-panel[data-open="false"] {
@@ -1588,11 +1778,20 @@ button, a, input, textarea, select {
   gap: 8px;
   max-height: 48vh;
   overflow-y: auto;
-  scrollbar-width: none;
+  /* 细滚动条：溢出可见（隐藏滚动条 + 无遮罩会让老图标"凭空消失"） */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   pointer-events: auto;
+  /* 上下渐隐提示还有更多图标 */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 .tool-spot-dock::-webkit-scrollbar {
-  display: none;
+  width: 3px;
+}
+.tool-spot-dock::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
 }
 .tool-spot-icon {
   width: 30px;
@@ -1603,33 +1802,34 @@ button, a, input, textarea, select {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: var(--dynamic-island-bg);
-  backdrop-filter: var(--dynamic-island-blur);
-  -webkit-backdrop-filter: var(--dynamic-island-blur);
-  border: 1px solid var(--border-strong);
+  /* 毛玻璃同款（InputBar 添加文件按钮 .glass-dock）：浅白底 + 轻 blur + 细白边 */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-on-surface-variant);
-  transition: color 0.15s, filter 0.15s, border-color 0.15s;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
 }
 button.tool-spot-icon {
   cursor: pointer;
 }
 button.tool-spot-icon:hover {
   color: var(--text-on-surface);
-  filter: brightness(1.12);
+  background: rgba(255, 255, 255, 0.1);
 }
-/* 胶囊总图标：无圆圈底，纯 SVG 蓝色，位置相对挂数量角标 */
+/* 胶囊总图标：毛玻璃圆底（同 glass-dock 语言），位置相对挂数量角标 */
 .tool-spot-all {
   position: relative;
   pointer-events: auto;
-  background: transparent;
-  border: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #17abe3;
 }
 button.tool-spot-all:hover {
   color: #17abe3;
-  opacity: 0.75;
+  background: rgba(255, 255, 255, 0.1);
   filter: none;
 }
 .tool-spot-all[data-status="error"] {
@@ -1651,21 +1851,32 @@ button.tool-spot-all:hover {
   justify-content: center;
   padding: 0 4px;
   pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 .tool-spot-dock .tool-spot-icon[data-status="running"] {
-  color: #17abe3;
-  border-color: rgba(23, 171, 227, 0.45);
+  color: var(--tool-spot-running, #60a5fa);
+  border-color: rgba(96, 165, 250, 0.45);
 }
 .tool-spot-dock .tool-spot-icon[data-status="running"] svg {
   animation: thinking-pulse 1.4s ease-in-out infinite;
 }
 .tool-spot-dock .tool-spot-icon[data-status="pending"] {
-  color: #dfa88f;
-  border-color: rgba(223, 168, 143, 0.45);
+  color: var(--tool-spot-pending, #e0c878);
+  border-color: rgba(224, 200, 120, 0.45);
 }
 .tool-spot-dock .tool-spot-icon[data-status="error"] {
   color: var(--error);
   border-color: rgba(207, 45, 86, 0.5);
+}
+/* 总图标：running 蓝、pending 琥珀（此前 pending 无样式，与 done 视觉相同） */
+.tool-spot-all[data-status="running"] {
+  color: var(--tool-spot-running, #60a5fa);
+}
+.tool-spot-all[data-status="pending"] {
+  color: var(--tool-spot-pending, #e0c878);
+}
+.tool-spot-all[data-status="pending"] svg {
+  animation: thinking-pulse 1.4s ease-in-out infinite;
 }
 /* 总图标仅在运行时脉冲 */
 .tool-spot-all[data-status="running"] svg {
@@ -1677,13 +1888,45 @@ button.tool-spot-all:hover {
   top: 50%;
   transform: translateY(-50%);
   width: 380px;
-  max-height: 300px;
+  max-height: min(60vh, 480px);
   overflow-y: auto;
   pointer-events: auto;
-  background: var(--dynamic-island-bg);
-  backdrop-filter: var(--dynamic-island-blur);
-  -webkit-backdrop-filter: var(--dynamic-island-blur);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  border-radius: 16px;
+  /* 毛玻璃同语言（glass-dock）：浅白底 + 轻 blur + 细白边 */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.tool-spot-panel::-webkit-scrollbar {
+  width: 3px;
+}
+.tool-spot-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+}
+/* 面板内嵌详情限高：避免 400px 内滚被 300px 外滚嵌套卡死（双滚轮陷阱） */
+.tool-spot-panel .toolflow-detail {
+  max-height: 200px;
+}
+/* 面板内的 subagent 任务行：颜色走状态语义（对齐 dock/timeline 色板） */
+.toolflow-subtask {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+.toolflow-subtask-dot {
+  color: var(--tool-spot-running, #60a5fa);
+}
+.toolflow-subtask[data-status="completed"] .toolflow-subtask-dot {
+  color: #8db88d;
+}
+.toolflow-subtask[data-status="error"] .toolflow-subtask-dot {
+  color: var(--error);
 }
 
 /* ===== Chat scroll: 顶部渐隐（多段缓动，避免线性渐变的生硬感） ===== */

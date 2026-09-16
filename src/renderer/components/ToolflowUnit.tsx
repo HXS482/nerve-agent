@@ -3,6 +3,8 @@ import type { ContentBlock } from '../../shared/types'
 import {
   pairTools,
   deriveUnitStatus,
+  getToolSummary,
+  getToolDetail,
   type UnitStatus,
   type ToolPair,
 } from './toolflow-utils'
@@ -111,10 +113,15 @@ function ToolsUnit({ tools, status }: { tools: ToolPair[]; status: UnitStatus })
             <div className="toolflow-tool-list">
               {tools.map((pair, i) => {
                 const toolName = pair.use.type === 'tool_use' ? pair.use.name : ''
-                // NOTE: ToolApprovalRequest carries no toolCallId, so we match by
-                // toolName. If two tools of the same name run concurrently, both
-                // would render as pending — acceptable given the current data model.
-                const isPending = pendingApprovals.some((a) => a.toolName === toolName)
+                const input = pair.use.type === 'tool_use' ? pair.use.input : undefined
+                const useId = pair.use.type === 'tool_use' ? pair.use.id : undefined
+                // 按 toolCallId 精确匹配审批；无 id 时退回名字匹配（且已有结果优先于 pending）
+                const isPending =
+                  !pair.result &&
+                  !!toolName &&
+                  pendingApprovals.some((a) =>
+                    a.toolCallId ? a.toolCallId === useId : a.toolName === toolName,
+                  )
                 const isSubagent =
                   pair.use.type === 'tool_use' &&
                   (pair.use.name === 'spawn_subagent' ||
@@ -122,13 +129,17 @@ function ToolsUnit({ tools, status }: { tools: ToolPair[]; status: UnitStatus })
                     pair.use.name === 'chain_subagents')
                 const toolCallId = isSubagent && pair.use.type === 'tool_use' ? pair.use.id : undefined
                 let status: RowStatus
-                if (isPending) status = 'pending'
-                else if (pair.result) status = pair.result.is_error ? 'error' : 'done'
+                if (pair.result) status = pair.result.is_error ? 'error' : 'done'
+                else if (isPending) status = 'pending'
                 else status = 'running'
+                const summary = toolName ? getToolSummary(toolName, input) : ''
+                const detail = toolName ? getToolDetail(toolName, input, pair.result) : ''
                 return (
                   <ToolflowRow
-                    key={i}
-                    pair={pair}
+                    key={pair.use.id ?? (pair.use as any).toolCallId ?? i}
+                    toolName={toolName || ''}
+                    summary={summary}
+                    detail={detail}
                     status={status}
                     toolCallId={toolCallId}
                   />

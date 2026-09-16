@@ -43,7 +43,8 @@ function buildPalette(scheme: ColorScheme) {
 
 // --- Default pixel art frames (our 6 behavioral states) ---
 
-type Frame = string[][]
+// 一帧 = 16 行字符串（每字符一个像素）；帧数组 = string[][]
+type Frame = string[]
 
 const idleFrames: Frame[] = [
   [

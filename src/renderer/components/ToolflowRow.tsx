@@ -1,6 +1,4 @@
 import { useState, memo, useMemo } from 'react'
-import type { ContentBlock } from '../../shared/types'
-import { getToolSummary, getToolDetail } from './toolflow-utils'
 import { useSubagentTracker } from '../stores/subagentTracker'
 
 export type RowStatus = 'running' | 'pending' | 'done' | 'error'
@@ -39,23 +37,22 @@ function StatusIcon({ status }: { status: RowStatus }) {
 }
 
 interface Props {
-  pair: { use: ContentBlock; result?: ContentBlock }
+  /** 工具名（原始值而非 pair 对象——memo 依赖稳定，流式 tick 不重渲染） */
+  toolName: string
+  /** 单行摘要（文件路径/命令/pattern） */
+  summary: string
+  /** 展开详情文本（diff/输出），空串 = 不可展开（subagent 除外） */
+  detail: string
   status: RowStatus
   toolCallId?: string  // subagent 工具的 tool_use.id，用于查子任务
 }
 
-export const ToolflowRow = memo(function ToolflowRow({ pair, status, toolCallId }: Props) {
+export const ToolflowRow = memo(function ToolflowRow({ toolName, summary, detail, status, toolCallId }: Props) {
   const [detailOpen, setDetailOpen] = useState(false)
 
-  // tool_use 块：取 name + input；孤儿 result 块：name 留空
-  const isUse = pair.use.type === 'tool_use'
-  const name = isUse ? pair.use.name || 'tool' : ''
-  const input = isUse ? pair.use.input : undefined
-  const summary = isUse ? getToolSummary(name, input) : ''
-  const detail = isUse ? getToolDetail(name, input, pair.result) : ''
-
-  // Select cards with a stable reference (Zustand Object.is on s.cards avoids
-  // re-rendering every row on each tracker update); derive tasks in useMemo.
+  // 只在有子任务可查时才订阅 tracker（其余行不因 subagent 进度事件重渲染）。
+  // selector 必须返回稳定引用（空数组字面量每次都是新对象 → getSnapshot 死循环闪退），
+  // 所以这里订阅整个 cards，用 toolCallId 判断是否真的取任务。
   const cards = useSubagentTracker((s) => s.cards)
   const subagentTasks = useMemo(() => {
     if (!toolCallId) return null
@@ -82,7 +79,7 @@ export const ToolflowRow = memo(function ToolflowRow({ pair, status, toolCallId 
       >
         <span className="toolflow-rail" />
         <StatusIcon status={status} />
-        {name && <span className="toolflow-name">{name}</span>}
+        {toolName && <span className="toolflow-name">{toolName}</span>}
         {summary && <span className="toolflow-summary">{summary}</span>}
         {clickable && <span className="toolflow-chevron" data-open={detailOpen}>▸</span>}
       </div>
@@ -90,10 +87,8 @@ export const ToolflowRow = memo(function ToolflowRow({ pair, status, toolCallId 
         <div className="toolflow-detail-clip">
           <div className="toolflow-detail">
             {hasSubagent && subagentTasks!.map((t) => (
-              <div key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
-                <span style={{ color: t.status === 'completed' ? '#8db88d' : t.status === 'error' ? '#cf2d56' : '#dfa88f' }}>
-                  {t.status === 'completed' ? '✓' : t.status === 'error' ? '✕' : '●'}
-                </span>
+              <div key={t.id} className="toolflow-subtask" data-status={t.status}>
+                <span className="toolflow-subtask-dot">{t.status === 'completed' ? '✓' : t.status === 'error' ? '✕' : '●'}</span>
                 <span style={{ flex: 1 }}>{t.task}</span>
               </div>
             ))}

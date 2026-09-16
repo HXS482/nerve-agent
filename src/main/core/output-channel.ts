@@ -47,8 +47,8 @@ export interface ElectronOutputChannel extends OutputChannel {
   /** 发送 Git 刷新事件 */
   sendGitRefresh(): void
 
-  /** 发送工具审批请求 */
-  sendToolApprovalRequest(approvalId: string, toolName: string, toolInput: unknown): void
+  /** 发送工具审批请求（toolCallId 用于渲染端精确匹配到具体调用） */
+  sendToolApprovalRequest(approvalId: string, toolName: string, toolInput: unknown, toolCallId?: string): void
 
   /** 发送 AskUser 结构化提问请求（渲染端弹卡片收集回答） */
   sendAskUserRequest(askId: string, questions: AskUserQuestion[]): void
