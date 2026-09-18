@@ -86,33 +86,26 @@ describe('extractCodeBlocks — 代码块抽取', () => {
   })
 })
 
-describe('buildStageView — 代码块产物卡', () => {
+describe('buildStageView — 代码块随正文渲染（不落独立代码卡）', () => {
   const CODE = '```ts\nexport async function churnBatch() {\n  return null;\n}\n```'
 
-  it('纯代码回复：代码成卡、不走旁白', () => {
+  it('纯代码回复：代码随正文走旁白，不落卡', () => {
     const vm = buildStageView([
       msg('u1', 'user', 1000, text('写个函数')),
       msg('a1', 'assistant', 1100, text(CODE)),
     ])
-    expect(vm.narrationText).toBe('')
-    expect(vm.cards).toHaveLength(1)
-    const { card } = vm.cards[0]
-    expect(card.kind).toBe('code')
-    expect(card.language).toBe('ts')
-    expect(card.code).toContain('churnBatch')
+    expect(vm.narrationText).toContain('churnBatch')
+    expect(vm.cards).toHaveLength(0)
   })
 
-  it('文字 + 代码：代码成卡，文字转为批注', () => {
+  it('文字 + 代码：整体走旁白，不落卡、无批注', () => {
     const vm = buildStageView([
       msg('u1', 'user', 1000, text('写个函数')),
       msg('a1', 'assistant', 1100, text(`实现如下：\n${CODE}\n以上。`)),
     ])
-    expect(vm.cards).toHaveLength(1)
-    expect(vm.cards[0].card.kind).toBe('code')
-    // 引导短句"实现如下："绑定为卡片 caption，不再流落为批注
-    expect(vm.cards[0].card.caption).toBe('实现如下：')
-    expect(vm.cards[0].annotations?.join('')).toContain('以上')
-    expect(vm.narrationText).toBe('')
+    expect(vm.cards).toHaveLength(0)
+    expect(vm.narrationText).toContain('实现如下：')
+    expect(vm.narrationText).toContain('以上')
   })
 
   it('无代码回复行为不变（仍走旁白）', () => {
@@ -277,7 +270,7 @@ describe('buildStageView — Write .html 网页产物卡', () => {
     expect(card.label).toBe('game.html')
   })
 
-  it('Write 未完成不落 web 卡；写入代码文件落一张带文件名的代码卡', () => {
+  it('Write 未完成不落 web 卡；写入代码文件改道 codingOps（不落画布卡）', () => {
     const pending = buildStageView([
       msg('u1', 'user', 1000, text('写个小游戏')),
       msg('a1', 'assistant', 1100, htmlUse),
@@ -290,10 +283,8 @@ describe('buildStageView — Write .html 网页产物卡', () => {
         { type: 'tool_use', id: 'toolu_w2', name: 'Write', input: { file_path: 'a.ts', content: 'const a = 1' } },
         { type: 'tool_result', toolCallId: 'toolu_w2', content: '{}' }),
     ])
-    expect(tsFile.cards).toHaveLength(1)
-    expect(tsFile.cards[0].card.kind).toBe('code')
-    expect(tsFile.cards[0].card.code).toBe('const a = 1')
-    expect(tsFile.cards[0].card.label).toBe('a.ts')
+    // 代码文件走 coding 控制台（codingOps），画布不落卡
+    expect(tsFile.cards).toHaveLength(0)
   })
 })
 
@@ -306,10 +297,9 @@ describe('buildStageView — 画布只展示焦点轮（新指令清空画布）
     msg('a2', 'assistant', 2100, text('```ts\nconst b = 2\n```')),
   ]
 
-  it('默认只显示最新轮的产物卡，旧轮不堆积', () => {
+  it('默认只显示最新轮的旁白内容，旧轮不堆积', () => {
     const vm = buildStageView(twoRounds)
-    expect(vm.cards).toHaveLength(1)
-    expect(vm.cards[0].card.code).toContain('const b')
+    expect(vm.narrationText).toContain('const b')
   })
 
   it('发出新指令等待回复时画布清空', () => {
@@ -321,10 +311,9 @@ describe('buildStageView — 画布只展示焦点轮（新指令清空画布）
     expect(vm.narrationText).toBe('')
   })
 
-  it('选中旧轮可回看该轮卡片', () => {
+  it('选中旧轮可回看该轮正文', () => {
     const vm = buildStageView(twoRounds, 'u1')
-    expect(vm.cards).toHaveLength(1)
-    expect(vm.cards[0].card.code).toContain('const a')
+    expect(vm.narrationText).toContain('const a')
   })
 
   it('listSessionImageCards 不受画布清空影响，返回全量图片卡', () => {
@@ -353,7 +342,8 @@ describe('buildStageView — 用户消息列表行的产物标记 artifactKinds'
     ])
     const r1 = vm.rounds.find((r) => r.id === 'u1')
     const r2 = vm.rounds.find((r) => r.id === 'u2')
-    expect(r1?.artifactKinds).toEqual(['image', 'code'])
+    // 围栏代码不再落卡，随正文走旁白 → 该轮只有 image 一种产物卡
+    expect(r1?.artifactKinds).toEqual(['image'])
     expect(r2?.artifactKinds).toEqual([])
   })
 
@@ -368,7 +358,7 @@ describe('buildStageView — 用户消息列表行的产物标记 artifactKinds'
   })
 })
 
-describe('buildStageView — 代码卡关联 Write 文件名', () => {
+describe('buildStageView — coding 轮（Write 代码文件）的围栏改道', () => {
   const CODE = 'def is_palindrome(s):\n    return s == s[::-1]'
   const writePy: ContentBlock = {
     type: 'tool_use',
@@ -378,21 +368,24 @@ describe('buildStageView — 代码卡关联 Write 文件名', () => {
   }
   const writeOk: ContentBlock = { type: 'tool_result', toolCallId: 'toolu_f1', content: '{"file_path":"G:\\work\\palindrome.py"}' }
 
-  it('围栏代码块与 Write 文件内容匹配时挂上真实文件名', () => {
+  it('coding 轮的围栏代码改道 codingOps，不落画布卡（正文保留原文）', () => {
     const vm = buildStageView([
       msg('u1', 'user', 1000, text('写个回文函数')),
       msg('a1', 'assistant', 1100, writePy, writeOk, text(`已写入：\n\n\`\`\`python\n${CODE}\n\`\`\``)),
     ])
-    const codeCard = vm.cards.find(({ card }) => card.kind === 'code')
-    expect(codeCard?.card.label).toBe('palindrome.py')
+    // coding 轮：围栏代码并入 codingOps（供控制台参考），画布不落代码卡；
+    // 正文保留原文（含围栏），走旁白展示
+    expect(vm.cards.filter(({ card }) => card.kind === 'code')).toHaveLength(0)
+    expect(vm.narrationText).toContain('已写入')
+    expect(vm.narrationText).toContain('is_palindrome')
   })
 
-  it('无匹配 Write 文件时 label 为空', () => {
+  it('无 Write 活动的纯围栏轮走旁白正文', () => {
     const vm = buildStageView([
       msg('u1', 'user', 1000, text('写个回文函数')),
       msg('a1', 'assistant', 1100, text(`\`\`\`python\n${CODE}\n\`\`\``)),
     ])
-    const codeCard = vm.cards.find(({ card }) => card.kind === 'code')
-    expect(codeCard?.card.label).toBeUndefined()
+    expect(vm.cards).toHaveLength(0)
+    expect(vm.narrationText).toContain('is_palindrome')
   })
 })

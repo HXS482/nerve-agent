@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ChatMessage } from '../../../shared/types'
 import { useStageStore } from '../../stores/stageStore'
@@ -7,6 +7,7 @@ import { useTodoStore } from '../../stores/todoStore'
 import { buildStageView, listSessionImageCards } from '../../adapters/stageAdapter'
 import { StageCard, type StageCardData } from './StageCard'
 import { TaskRows } from './TaskRows'
+import { WritingCard } from './WritingCard'
 import { NarrationLayer } from './NarrationLayer'
 import { CardCoverFlow } from './CardCoverFlow'
 import ASCIIText from '../ASCIIText'
@@ -149,7 +150,19 @@ function DraggableCard({ card, isNew, annotations, onClose }: { card: StageCardD
 
 // ─── Stage 空间 ───
 
-export function Stage({ messages }: { messages: ChatMessage[] }) {
+export function Stage({ messages, onSend }: { messages: ChatMessage[]; onSend?: (prompt: string) => void }) {
+  // 写作重生成占位态：提交指令的瞬间置位（卡片原地清空重写，不卸载）
+  const [regenerating, setRegenerating] = useState(false)
+  const regenTextRef = useRef('')
+  // 写作卡专用的发送包装：提交修改指令的瞬间置 regenerating（卡片原地清空重写，不卸载）
+  const handleWritingSend = useCallback(
+    (prompt: string) => {
+      regenTextRef.current = 'pending'
+      setRegenerating(true)
+      onSend?.(prompt)
+    },
+    [onSend],
+  )
   const currentSessionId = useStageStore((s) => s.stageSessionId)
   const selectedRoundId = useStageStore((s) => s.selectedRoundId)
   const hiddenCardIds = useStageStore((s) => s.hiddenCardIds)
@@ -167,7 +180,17 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   const vm = useMemo(() => buildStageView(filtered, selectedRoundId, isLoading), [filtered, selectedRoundId, isLoading])
   const allCards = vm.cards.filter(({ card }) => !hiddenCardIds[card.id])
   const narrationText = vm.narrationText
+  const writingText = vm.writingText
+  const writingStreaming = vm.writingStreaming
   const focusRoundId = vm.focusRoundId
+
+  // 新一轮已产出写作正文 → 重生成完成
+  useEffect(() => {
+    if (writingText && regenerating) {
+      regenTextRef.current = writingText
+      setRegenerating(false)
+    }
+  }, [writingText, regenerating])
 
   // CoverFlow 数据源：会话内全部已出图的图片卡（不随选轮/隐藏/画布清空变化——常驻收容所）
   const coverFlowImages = useMemo(
@@ -219,7 +242,7 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
   }, [allCards.length])
 
   // 生成中（等回复期间）不走空态：否则旁白清空后壁纸会随 .stage-bg 一起消失
-  const showEmptyState = allCards.length === 0 && !narrationText && !isLoading
+  const showEmptyState = allCards.length === 0 && !narrationText && !writingText && !isLoading
 
   return (
     <div className="stage-root">
@@ -251,7 +274,16 @@ export function Stage({ messages }: { messages: ChatMessage[] }) {
         </div>
       )}
       <AnimatePresence>
-        {narrationText && focusRoundId && (
+        {(writingText || regenerating) && focusRoundId && (
+          <WritingCard
+            key="stage-writing"
+            text={writingText}
+            streaming={writingStreaming || regenerating}
+            regenerating={regenerating}
+            onSend={handleWritingSend}
+          />
+        )}
+        {!writingText && !regenerating && narrationText && focusRoundId && (
           <NarrationLayer key={focusRoundId} text={narrationText} />
         )}
       </AnimatePresence>

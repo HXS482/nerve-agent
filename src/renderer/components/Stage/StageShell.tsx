@@ -4,7 +4,8 @@ import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
-import { BgVideo, isVideoBg } from './StageBgMedia'
+import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
+import { PredictiveArcBg } from './PredictiveArcBg'
 import { ThinkSpot } from './ThinkSpot'
 import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
@@ -37,12 +38,14 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
-      {/* 静态壁纸/视频背景：进入 Stage 模式即固定铺满内框；支持设置面板自定义（图片/视频） */}
+      {/* 背景：默认 Predictive Arc 弧光动画；自定义壁纸（图片/视频/HTML）优先 */}
       <div
         className="stage-bg"
-        style={stageBg ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : undefined}
+        style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : { background: '#030303' }}
       >
+        {!stageBg && <PredictiveArcBg />}
         {stageBg && isVideoBg(stageBg) && <BgVideo src={stageBg} />}
+        {stageBg && isHtmlBg(stageBg) && <BgHtml src={stageBg} />}
       </div>
       {/* 顶栏 */}
       <div className="stage-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
@@ -123,7 +126,7 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
       {/* 主体：产物空间 + 固定状态点 */}
       <div className="stage-main">
-        <Stage messages={claude.messages} />
+        <Stage messages={claude.messages} onSend={claude.send} />
         <ThinkSpot messages={claude.messages} />
         <ToolSpot messages={claude.messages} />
         <UserLogTerminal messages={claude.messages} />

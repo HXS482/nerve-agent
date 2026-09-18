@@ -402,7 +402,7 @@ export function useClaude() {
             flushTimer.current = setTimeout(() => {
               flushTimer.current = null
               flushPendingText()
-            }, 16) // ~60fps
+            }, 40) // ~25fps：flush 触发整条 Stage 视图链全量重算，60fps 会把重算放大成卡顿；25fps 视觉上仍是连续打字
           }
         }
       }

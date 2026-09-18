@@ -467,6 +467,10 @@ export class AgentCore {
     // TodoWrite 指引：长任务先拆解清单，逐项推进并实时更新状态
     systemPrompt += '\n\n## Task List (TodoWrite)\nFor long-running work (multi-file edits, refactors, batch operations, anything with 3+ steps), first call `TodoWrite` with a breakdown of 3-10 concrete todos, mark exactly one as `in_progress` while you work on it, and re-send the full list each time a task\'s status changes (flip to `completed` immediately when done). Skip it for simple single-step requests.'
 
+    // Write 工具纪律：仅当用户明确要求保存/创建/修改文件时才落盘；
+    // 文稿、文章、草稿等阅读型内容默认直接输出正文，不写文件
+    systemPrompt += '\n\n## File Writing Discipline\nUse the `Write` tool ONLY when the user explicitly asks to save, create, or modify a file (or when doing coding work on files in the project). For essays, drafts, articles, plans, letters, and other readable content, output the full text directly in your reply as the response — do NOT write it to a file unless the user asks. Temporary or one-off content lives in the conversation, not on disk. When unsure whether to save, just reply with the content; the user can ask you to save it afterwards.'
+
     return { messages, systemPrompt, mcpTools }
   }
 

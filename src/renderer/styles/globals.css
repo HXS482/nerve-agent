@@ -307,6 +307,17 @@ button, a, input, textarea, select {
   box-shadow: none;
 }
 
+/* 底部 Ask anything 输入容器：聚焦不改矩形外观 */
+.glass-dock:focus-within {
+  outline: none;
+  box-shadow: none;
+}
+.glass-dock input:focus,
+.glass-dock input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* ===== Glass panel ===== */
 .glass-panel {
   background: var(--glass-bg);
@@ -449,13 +460,26 @@ button, a, input, textarea, select {
   min-height: 0;
 }
 
-/* Stage 静态壁纸背景（仅本模式）—— 替代雨幕动画，零持续渲染开销 */
+/* Stage 背景层 —— 默认渲染 Predictive Arc 弧光动画（.stage-bg-predictive），自定义壁纸时由内联样式覆盖 */
 .stage-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
+  background: #030303;
+}
+/* 默认动态背景：Predictive Arc 点阵弧光（PredictiveArcBg.tsx） */
+.stage-bg-predictive {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.stage-bg-predictive > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 /* 视频背景（自定义 mp4/webm 等）：填满足位容器 */
 .stage-bg-media {
@@ -464,6 +488,11 @@ button, a, input, textarea, select {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* HTML 背景的 iframe 变体：无框、不拦截交互 */
+.stage-bg-iframe {
+  border: none;
+  pointer-events: none;
 }
 
 /* 内容层压在壁纸上 */
@@ -1002,8 +1031,7 @@ button, a, input, textarea, select {
   overflow: hidden;
 }
 
-/* ===== TaskRows：TodoWrite 任务卡（Stage 画布） ===== */
-/* ===== TaskRows：固定右上角 todo 卡（无边框紧凑列表，融入壁纸） ===== */
+/* ===== TaskRows：固定右上角 todo 卡（无边框紧凑列表，融入壁纸）===== */
 .stage-todo-fixed {
   position: absolute;
   top: 46px;
@@ -1025,95 +1053,46 @@ button, a, input, textarea, select {
 [data-theme="light"] .stage-task-card {
   --stage-task-line: rgba(0, 0, 0, 0.12);
 }
+/* 头栏（beui TodoList）：整行可点折叠，图标 + 标题 + 计数 + chevron */
 .stage-task-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 2px 4px 4px;
-}
-.stage-task-title {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-outline);
-}
-.stage-task-count {
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-outline-variant);
-}
-.stage-task-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.stage-task-row {
-  border-radius: 8px;
-  transition: background-color 200ms;
-}
-.stage-task-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-[data-theme="light"] .stage-task-row:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-.stage-task-row-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 32px;
-  padding: 0 6px;
-  background: none;
+  height: 30px;
+  padding: 0 4px;
   border: none;
-  cursor: pointer;
+  background: transparent;
   text-align: left;
+  cursor: pointer;
   color: inherit;
 }
-.stage-task-badge-slot {
-  display: flex;
+/* 头栏状态图标（ListTodo ↔ 绿勾 swap） */
+.stage-task-hicon {
+  position: relative;
+  display: grid;
+  place-items: center;
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
+  color: var(--text-outline-variant);
 }
-.stage-task-row[data-status="completed"] .stage-task-badge-slot {
-  animation: fade-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-.stage-task-ring {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.stage-task-ring svg {
+.stage-task-hicon-svg {
   position: absolute;
-  inset: 0;
+  width: 18px;
+  height: 18px;
+  overflow: visible;
 }
-.stage-task-ring-num {
-  position: relative;
-  font-size: 10px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-on-surface);
+.stage-task-hicon-svg.is-complete {
+  color: #34d399;
 }
-.stage-task-row[data-status="completed"] .stage-task-ring {
-  display: none;
+.stage-task-hicon-svg.is-complete circle {
+  fill: #34d399;
 }
-.stage-task-badge {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  color: #fff;
+.stage-task-hicon-svg.is-complete path {
+  stroke: #fff;
 }
-.stage-task-label {
+.stage-task-title {
   min-width: 0;
   flex: 1;
   font-size: 11px;
@@ -1123,68 +1102,118 @@ button, a, input, textarea, select {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.stage-task-row[data-status="completed"] .stage-task-label {
-  color: var(--text-on-surface-variant);
-}
-.stage-task-pill {
+.stage-task-count {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  height: 16px;
-  padding: 0 6px;
-  border-radius: 9999px;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 500;
-  background: rgba(52, 211, 153, 0.14);
-  color: #34d399;
-}
-.stage-task-pill.is-running {
-  background: rgba(96, 165, 250, 0.12);
-  color: #60a5fa;
-}
-.stage-task-chevron {
-  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
   color: var(--text-outline-variant);
 }
-.stage-task-detail-wrap {
-  display: grid;
-  transition: grid-template-rows 300ms cubic-bezier(0.23, 1, 0.32, 1), opacity 300ms;
+.stage-task-count.is-done {
+  color: #34d399;
 }
-.stage-task-detail-clip {
+.stage-task-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-outline-variant);
+  opacity: 0.6;
+}
+/* 展开容器：grid-rows 0fr→1fr（AgentDisclosure 同语法） */
+.stage-task-disclose {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.stage-task-disclose[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.stage-task-clip {
   overflow: hidden;
+  min-height: 0;
 }
-.stage-task-detail {
-  display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 8px;
-  padding: 0 6px 6px 6px;
+.stage-task-viewport {
+  overflow-y: auto;
+  padding: 0 2px 4px;
+  scrollbar-width: none;
 }
-.stage-task-line {
-  width: 1px;
-  height: 100%;
-  margin: 0 auto;
-  background: var(--stage-task-line);
+.stage-task-viewport::-webkit-scrollbar {
+  display: none;
 }
-.stage-task-detail-rows {
+.stage-task-rows {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding-top: 2px;
 }
-.stage-task-detail-row {
+.stage-task-row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  transition: background-color 200ms;
 }
-.stage-task-detail-label {
-  font-size: 10.5px;
-  color: var(--text-on-surface-variant);
+.stage-task-row:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
-.stage-task-detail-meta {
-  font-family: var(--font-mono);
+[data-theme="light"] .stage-task-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+/* 行状态图标（beui TodoStatusIcon）：pending 虚线环 / in_progress 旋转进度弧 / completed 勾 */
+.stage-task-sicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  overflow: visible;
+  color: var(--text-outline-variant);
+}
+.stage-task-sicon.is-run {
+  color: var(--text-on-surface);
+}
+.stage-task-sicon .is-run-base {
+  opacity: 0.2;
+}
+.stage-task-label {
+  min-width: 0;
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-on-surface);
+}
+.stage-task-row[data-status="pending"] .stage-task-label {
+  color: var(--text-outline-variant);
+}
+.stage-task-row[data-status="completed"] .stage-task-label {
+  color: var(--text-outline-variant);
+  opacity: 0.75;
+}
+.stage-task-label-inner {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+/* 完成行的划线：从左往右生长 */
+.stage-task-strike {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  transform-origin: left;
+  background: currentColor;
+}
+.stage-task-note {
+  flex-shrink: 0;
   font-size: 10px;
-  font-variant-numeric: tabular-nums;
+  color: var(--text-outline-variant);
+  opacity: 0.7;
+}
+.stage-task-empty {
+  padding: 6px;
+  font-size: 10.5px;
   color: var(--text-outline-variant);
 }
 
@@ -1225,6 +1254,263 @@ button, a, input, textarea, select {
 }
 .narration-line:last-child {
   margin-bottom: 0;
+}
+/* 旁白层内的代码块：随正文渲染（代码卡已取消），深底玻璃与壁纸区分 */
+.narration-code {
+  margin: 0.25em 0 0.75em;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(12, 16, 23, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+.narration-code .prose {
+  font-size: 12px;
+}
+.narration-code pre {
+  margin: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.narration-code code {
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* 旁白/写作卡的 markdown 正文段：prose 排版 + 旁白行距字色 */
+.narration-md {
+  font-size: 14px;
+  line-height: 1.85;
+}
+.narration-md p {
+  margin: 0 0 0.5em;
+  color: var(--text-on-surface);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+}
+.narration-md p:last-child {
+  margin-bottom: 0;
+}
+.writing-card .narration-md p {
+  text-shadow: none;
+}
+
+/* ===== 写作卡（Stage 画布）：写作任务时正文进入居中固定玻璃卡 ===== */
+/* 写作卡定位层：全屏覆盖居中（卡本身不做 translate 居中——motion 会覆盖 transform） */
+.writing-card-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  padding: 56px 24px 90px;
+}
+.writing-card {
+  width: min(480px, 100%);
+  max-height: 100%;
+  /* 重生成清空时保持原有体量，不缩成一条加载条 */
+  min-height: min(52vh, 480px);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  /* 高斯模糊玻璃卡身（glass-dock 同配方） */
+  background: rgba(20, 20, 28, 0.45);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+[data-theme="light"] .writing-card {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.writing-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+.writing-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-on-surface-variant);
+}
+.writing-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--text-outline-variant);
+}
+.writing-card-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #60a5fa;
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+/* 头部右侧操作区：笔 + 复制 */
+.writing-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+.writing-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-outline-variant);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, transform 0.1s;
+}
+.writing-card-btn:hover {
+  color: var(--text-on-surface);
+  background: rgba(255, 255, 255, 0.08);
+}
+.writing-card-btn:active {
+  transform: scale(0.92);
+}
+/* 底部修改输入区：笔按钮切换显隐（grid-rows 0fr→1fr 滑出） */
+.writing-card-input-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s;
+  flex-shrink: 0;
+}
+.writing-card-input-wrap[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.writing-card-input {
+  overflow: hidden;
+  min-height: 0;
+  margin: 0 12px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 4px 0 14px;
+  border-radius: 12px;
+  /* 与卡身同配方的玻璃底 */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+/* 点击聚焦不改矩形外观（浏览器默认 outline/高亮去掉，保留 caret） */
+.writing-card-input:focus-within {
+  border-color: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+.writing-card-input input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.writing-card-input-wrap[data-open="false"] .writing-card-input {
+  min-height: 0;
+  height: 0;
+  padding-block: 0;
+  border-width: 0;
+}
+.writing-card-input input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12.5px;
+  color: var(--text-on-surface);
+  caret-color: var(--accent-primary);
+}
+.writing-card-input input::placeholder {
+  color: var(--text-outline-variant);
+}
+.writing-card-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-outline-variant);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+.writing-card-send:hover:not(:disabled) {
+  color: var(--accent-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+.writing-card-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* 重生成中：正文清空的占位态 */
+.writing-card-body.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.writing-card-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-outline-variant);
+  animation: fade-up 0.3s ease-out both;
+}
+.writing-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
+}
+.writing-card-body::-webkit-scrollbar {
+  width: 3px;
+}
+.writing-card-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+}
+/* 写作卡内文字比旁白层稍收敛：正文阅读排版 */
+.writing-card .narration-line {
+  font-size: 12.5px;
+  line-height: 1.85;
+  text-shadow: none;
+  margin: 0 0 0.8em;
+}
+.writing-card .narration-code {
+  background: rgba(12, 16, 23, 0.6);
+  margin: 0.4em 0 0.9em;
+}
+.writing-card .narration-code .prose,
+.writing-card .narration-code code {
+  font-size: 11px;
 }
 
 /* 弹幕批注：产物卡上沿的半透明小条 */
@@ -1538,31 +1824,49 @@ button, a, input, textarea, select {
   color: var(--error);
 }
 
-/* ===== 用户消息时间轴（右下角）：roadmap 轨道 —— 分段连线 + 节点层级 + 产物标记 ===== */
+/* ===== 用户消息时间轴（右下角）：Hook Sidebar 钩轨导航 =====
+   左缘一根常驻导轨（焦点=绿色实线+圆角钩子；悬停=灰色虚线预览），
+   钩子按行中心独立定位（ResizeObserver 测量），行文本右贴。 */
 .user-log-timeline {
   position: absolute;
-  right: 48px;
-  bottom: 64px;
+  right: 40px;
+  bottom: 52px;
   z-index: 35;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  max-height: 300px;
+  gap: 0;
+  max-height: 240px;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 6px 0;
   scrollbar-width: none;
   /* 上下渐隐：滚动方向的视觉提示 */
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 24px, #000 calc(100% - 24px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18px, #000 calc(100% - 18px), transparent 100%);
 }
 .user-log-timeline::-webkit-scrollbar { display: none; }
+/* 导轨层：覆盖时间轴，pointer-events 全透 */
+.rail-root {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.rail-line {
+  position: absolute;
+  left: 0.5px;
+  width: 1px;
+}
+.rail-hook {
+  position: absolute;
+  left: 0.5px;
+}
 .user-log-entry {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   width: 100%;
-  padding: 0;
+  padding: 1px 0 1px 16px;
   border: none;
   background: transparent;
   text-align: left;
@@ -1571,119 +1875,39 @@ button, a, input, textarea, select {
   transition: transform 0.15s ease-out;
 }
 .user-log-entry:hover { transform: translateX(2px); }
-/* 分段连线：每行节点上方一段（行高 16.5px + 间距 5px，段长覆盖到上一节点圆心）；
-   颜色随「已行驶 / 未到达」分层；首行无来向段 */
-.user-log-entry::before {
-  content: '';
-  position: absolute;
-  left: 3px;
-  top: -13px;
-  bottom: 50%;
-  width: 1px;
-  background: var(--text-outline-variant);
-  opacity: 0.4;
-  pointer-events: none;
-  transition: background 0.15s ease-out, opacity 0.15s ease-out;
-}
-.user-log-entry:first-child::before { content: none; }
-/* 末行的去向尾段，向下渐隐 */
-.user-log-entry:last-child::after {
-  content: '';
-  position: absolute;
-  left: 3px;
-  top: 50%;
-  bottom: -8px;
-  width: 1px;
-  background: linear-gradient(to bottom, var(--text-outline-variant), transparent);
-  opacity: 0.4;
-  pointer-events: none;
-}
-/* 已行驶段（焦点轮之前）与驶入焦点轮的段点亮 */
-.user-log-entry.is-passed::before,
-.user-log-entry.is-active::before {
-  background: var(--text-on-surface-variant);
-  opacity: 0.7;
-}
-/* 对话节点：默认空心环；有产物的轮实心点 */
-.user-log-dot {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  border: 1px solid var(--text-outline-variant);
-  border-radius: 50%;
-  background: transparent;
-  opacity: 0.8;
-  cursor: pointer;
-  transition: transform 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out, opacity 0.15s ease-out;
-}
-.user-log-entry.has-artifacts .user-log-dot { background: var(--text-outline-variant); }
-.user-log-entry.is-passed .user-log-dot { border-color: var(--text-on-surface-variant); }
-.user-log-entry.is-passed.has-artifacts .user-log-dot { background: var(--text-on-surface-variant); }
-.user-log-dot:hover {
-  opacity: 1;
-  transform: scale(1.4);
-}
-/* 当前活跃轮：绿色呼吸 + 外扩光环，尺寸略放大 */
-.user-log-entry.is-active .user-log-dot {
-  width: 9px;
-  height: 9px;
-  background: #34d399;
-  border-color: #34d399;
-  opacity: 1;
-  animation: userLogBreathe 2s ease-in-out infinite;
-}
-.user-log-entry.is-active .user-log-dot::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 1px solid rgba(52, 211, 153, 0.5);
-  animation: userLogRing 2s ease-out infinite;
-}
 /* 产物类型标记：文本前的小图标列 */
 .user-log-kinds {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
   color: var(--text-on-surface);
   opacity: 0.45;
   transition: opacity 0.15s;
 }
 .user-log-kinds svg {
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
 }
 .user-log-entry:hover .user-log-kinds { opacity: 0.85; }
 .user-log-entry.is-active .user-log-kinds { opacity: 0.9; }
-/* 节点右侧贴用户消息文本 */
+/* 行文本 */
 .user-log-text {
   user-select: none;
-  max-width: 240px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.45;
   color: var(--text-on-surface);
-  opacity: 0.55;
-  transition: opacity 0.15s;
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.2s;
 }
-.user-log-entry.is-passed .user-log-text { opacity: 0.45; }
+.user-log-entry.is-passed .user-log-text { opacity: 0.4; }
 .user-log-entry:hover .user-log-text { opacity: 0.9; }
 .user-log-entry.is-active .user-log-text { opacity: 1; }
-@keyframes userLogBreathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.3); }
-}
-@keyframes userLogRing {
-  0% { transform: scale(0.8); opacity: 0.7; }
-  100% { transform: scale(1.9); opacity: 0; }
-}
 @keyframes userLogEntryIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }

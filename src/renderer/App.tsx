@@ -4,7 +4,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { InputBar } from './components/InputBar'
 import { Sidebar } from './components/Sidebar'
 import { StageShell } from './components/Stage/StageShell'
-import { isVideoBg } from './components/Stage/StageBgMedia'
+import { isVideoBg, isHtmlBg } from './components/Stage/StageBgMedia'
 import { useStageStore } from './stores/stageStore'
 import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -117,9 +117,12 @@ export default function App() {
         <>
           {/* 外框底图（铺满窗口）+ 边缘毛玻璃环（会话按钮同款 backdrop blur）。
               视频背景时底图用纯色：环的 blur 采样 shell 边缘的视频像素即可，避免双份视频解码卡顿 */}
+          {/* 外框底图（铺满窗口）+ 边缘毛玻璃环（会话按钮同款 backdrop blur）。
+              视频背景时底图用纯色：环的 blur 采样 shell 边缘的视频像素即可，避免双份视频解码卡顿。
+              HTML 背景同策略：只在 StageShell 内渲染一次 iframe，外框用纯色。 */}
           <div
             className="stage-frame-bg"
-            style={stageBg ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : undefined}
+            style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : stageBg && isHtmlBg(stageBg) ? { background: '#0a0a0a' } : undefined}
           />
           <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
           <div className="stage-frame-frost" />

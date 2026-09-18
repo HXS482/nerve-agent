@@ -49,8 +49,12 @@ export interface StageRoundSummary {
 export interface StageViewModel {
   /** 待渲染卡片（含批注归属）；有效选中轮时只含该轮 */
   cards: StageCardEntry[]
-  /** 焦点轮为纯文字轮时的旁白文本（空串 = 不显示旁白） */
+  /** 焦点轮为纯文字轮时的旁白文本（空串 = 不显示旁白；写作任务时转入 writingText） */
   narrationText: string
+  /** 写作任务正文（非空 = 居中写作卡渲染，narrationText 为空） */
+  writingText: string
+  /** 写作卡是否仍在流式产出 */
+  writingStreaming: boolean
   /** 焦点轮 id（旁白渐现动画的 key + 列表高亮行判定） */
   focusRoundId: string | null
   /** 用户消息列表数据源 */
@@ -144,6 +148,12 @@ export function extractImageRefs(text: string): { prose: string; images: string[
   return { prose, images }
 }
 
+/** 只剥离图片路径引用、保留围栏代码的正文（普通轮旁白用——围栏随正文渲染，不剥） */
+function stripImageRefsKeepFences(text: string): string {
+  const cleaned = text.replace(/`([^`]+\.(?:png|jpe?g|gif|webp|svg|bmp))`/gi, '$1')
+  return cleaned.replace(IMAGE_REF_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 // ─── 轮次状态机 ───
 // 一轮 = 一条用户消息 → agent 完成回复。
 // 纯文字轮：文字走旁白（不落地）；混合轮：产物卡 + 弹幕批注。
@@ -192,136 +202,160 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
     }
     if (msg.role !== 'assistant') continue
     const r = current ?? newRound(`auto-${msg.id}`, msg.timestamp, '', false)
-    // GenerateImage 全生命周期：未出结果 → 生成中占位卡；出结果 → 同 id 换成真实图片卡。
-    // 消息级编号保证占位卡与图片卡 id 一致，React 不重挂载，图片在同一画框内浮现。
-    const genMeta = (input: Record<string, unknown> | undefined) => ({
-      prompt: typeof input?.prompt === 'string' ? input.prompt : undefined,
-      resolution: typeof input?.size === 'string' ? input.size.replace(/x/gi, ' × ') : undefined,
-    })
-    const completedGens: { n: number; input?: Record<string, unknown>; paths: string[] }[] = []
-    // 生成结果落盘路径的独立副本（completedGens 会被 image 分支 shift 消费，prune 需要完整列表）
-    const genResultPaths: string[] = []
-    let genIdx = 0
-    // Write 写入的代码文件：用于给同消息的代码块卡关联真实文件名（不单独落卡，避免与围栏代码块重复）
-    const writeFiles: { fileName: string; content: string }[] = []
-    // 结果与图片块分两条 IPC 事件到达，中间空窗期占位卡必须保持生成中状态（不卸载），
-    // 图片块流入后同一张卡内完成动画→图片的浮现；只队尾消息可能有在途图片，历史消息不补。
-    const isLastMsg = msg === messages[messages.length - 1]
-    groupBlocks(msg.content).forEach((g, gi) => {
-      // 工具调用/thinking 抽离到全局 ToolSpot / ThinkSpot，不落卡；
-      // 但 GenerateImage 未出结果时落一张「生成中」占位卡，结果到达后由真实图片卡替换
-      if (g.kind === 'toolflow') {
-        pairTools(g.blocks).tools.forEach((p, pi) => {
-          if (p.use.type !== 'tool_use') return
-          if (p.use.name === 'GenerateImage') {
-            const n = genIdx++
-            if (!p.result) {
-              r.artifactCards.push({ id: `${msg.id}:gen${n}`, kind: 'image', ...genMeta(p.use.input), timestamp: msg.timestamp })
-            } else if (!p.result.is_error) {
-              // 记录生成结果的落盘路径：文本里复述的同图引用不再落第二张卡
-              try {
-                const rc = JSON.parse(typeof p.result.content === 'string' ? p.result.content : '{}')
-                if (typeof rc?.path === 'string') genResultPaths.push(rc.path)
-              } catch { /* result 不是 JSON */ }
-              completedGens.push({ n, input: p.use.input, paths: genResultPaths.slice() })
-            }
-            return
-          }
-          // Write 生成 .html（可交互网页/小游戏）→ WebScreen 卡，写入完成后出现
-          if (p.use.name === 'Write' && p.result && !p.result.is_error) {
-            const input = p.use.input
-            const filePath = typeof input?.file_path === 'string' ? input.file_path : ''
-            const content = typeof input?.content === 'string' ? input.content : ''
-            if (/\.html?$/i.test(filePath) && content) {
-              r.artifactCards.push({
-                id: `${msg.id}:web${gi}-${pi}`,
-                kind: 'web',
-                html: content,
-                label: filePath.split(/[/\\]/).pop(),
-                timestamp: msg.timestamp,
-              })
-            } else if (content && CODE_FILE_RE.test(filePath)) {
-              // 代码文件不再落画布卡（coding 时逐张飞入铺满画布），改道 coding 控制台；
-              // 文件名仍记入 writeFiles，给同消息围栏代码块关联真实文件名
-              const fileName = filePath.split(/[/\\]/).pop()
-              r.codingOps.push({ kind: 'write', fileName, language: guessLanguage(fileName) ?? undefined, code: content })
-              if (fileName) writeFiles.push({ fileName, content })
-            }
-          }
-        })
-        return
-      }
-      const b = g.block
-      const imgBase = (p: string) => p.split(/[/\\]/).pop()?.toLowerCase() ?? ''
-      if (b.type === 'text' && b.text?.trim()) {
-        // 代码块抽离为产物卡（StageCodeCard 渲染），剩余文字走旁白/批注；
-        // 围栏代码块与本消息 Write 写入的代码文件内容匹配时，头栏挂上真实文件名
-        // coding 轮（本消息已有 Write 代码活动）时围栏代码改道 coding 控制台，不再落卡
-        const codingRound = writeFiles.length > 0 || r.codingOps.length > 0
-        const { prose: proseNoCode, codeBlocks, openFence } = extractCodeBlocks(b.text)
-        codeBlocks.forEach((cb, ci) => {
-          const snippet = cb.code.trim().slice(0, 80)
-          const wf = snippet ? writeFiles.find((w) => w.content.includes(snippet)) : undefined
-          if (codingRound) {
-            r.codingOps.push({ kind: 'fence', fileName: wf?.fileName, language: cb.language || undefined, code: cb.code })
-          } else {
-            r.artifactCards.push({ id: `${msg.id}:cd${gi}-${ci}`, kind: 'code', code: cb.code, language: cb.language || undefined, label: wf?.fileName, caption: cb.caption, timestamp: msg.timestamp })
-          }
-        })
-        // 流式中间态：尾部未闭合围栏 → 一张 streaming 代码卡，边生成边逐行显示；
-        // 围栏闭合后同一文本走上面的 codeBlocks 分支，id 保持 :cdN 序列不换卡
-        // coding 轮改道控制台：不落卡，流式内容并入 codingOps（同一条 op 原地更新）
-        if (openFence && isLastMsg && isLoading) {
-          if (codingRound) {
-            const last = r.codingOps[r.codingOps.length - 1]
-            if (last && last.kind === 'fence') {
-              last.code = openFence.code
-            } else {
-              r.codingOps.push({ kind: 'fence', language: openFence.language || undefined, code: openFence.code })
-            }
-          } else {
-            const ci = codeBlocks.length
-            r.artifactCards.push({
-              id: `${msg.id}:cd${gi}-${ci}`,
-              kind: 'code',
-              code: openFence.code,
-              language: openFence.language || undefined,
-              streaming: true,
-              timestamp: msg.timestamp,
-            })
-          }
-        }
-        // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡；
-        // 与 GenerateImage 输出同名的引用由后置兜底过滤移除（见下方 pruneDuplicateImageCards）
-        const { prose, images } = extractImageRefs(proseNoCode)
-        images.forEach((src, ii) => {
-          if (r.artifactCards.some((c) => c.kind === 'image' && imgBase(c.block?.src ?? '') === imgBase(src))) return
-          r.artifactCards.push({ id: `${msg.id}:imt${gi}-${ii}`, kind: 'image', block: { type: 'image', src }, timestamp: msg.timestamp })
-        })
-        if (prose.trim()) r.textSegments.push(prose)
-      }
-      else if (b.type === 'image' && b.src) {
-        const gen = completedGens.shift()
-        if (gen) r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', block: b, ...genMeta(gen.input), timestamp: msg.timestamp })
-        // 正文引用已落卡的同图不重复落卡（按文件名比对，路径写法可能不同）
-        else if (!r.artifactCards.some((c) => c.kind === 'image' && imgBase(c.block?.src ?? '') === imgBase(b.src ?? ''))) {
-          r.artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
-        }
-      }
-      else if (b.type === 'file') r.artifactCards.push({ id: `${msg.id}:fl${gi}`, kind: 'file', block: b, timestamp: msg.timestamp })
-    })
-    // 已出结果但图片块尚未流入（IPC 空窗）→ 占位卡保持生成中，等图片块到达后同 id 换图
-    if (isLastMsg) {
-      completedGens.forEach((gen) =>
-        r.artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', ...genMeta(gen.input), timestamp: msg.timestamp }),
-      )
-    }
-    // 后置兜底：存储层拍平后 text 落在 tool_use 之前，处理文本时 completedGens 还没填上，
-    // 前置跳过对文本引用卡无效。这里统一移除「与生成结果同名但不是生成卡」的图片卡，
-    // 同一张图只保留 GenerateImage 的动画卡。
-    pruneDuplicateImageCards(r, genResultPaths)
+    // 流式优化：历史消息不可变，其解析产物按消息对象弱缓存；
+    // 每次流式 flush 只有最后一条消息（内容在增长）需要重解析，长会话不再整轮重算
+    const c = assistantContribution(msg, msg === messages[messages.length - 1], isLoading)
+    r.artifactCards.push(...c.artifactCards)
+    r.textSegments.push(...c.textSegments)
+    r.codingOps.push(...c.codingOps)
   }
   return rounds
+}
+
+// ─── 单条 assistant 消息 → 轮次贡献（含消息级弱缓存） ───
+
+interface MsgContribution {
+  artifactCards: StageCardData[]
+  textSegments: string[]
+  codingOps: CodingOp[]
+}
+
+const contributionCache = new WeakMap<ChatMessage, MsgContribution>()
+
+function assistantContribution(msg: ChatMessage, isLastMsg: boolean, isLoading = false): MsgContribution {
+  if (!isLastMsg) {
+    const cached = contributionCache.get(msg)
+    if (cached) return cached
+  }
+  const artifactCards: StageCardData[] = []
+  const textSegments: string[] = []
+  const codingOps: CodingOp[] = []
+  // GenerateImage 全生命周期：未出结果 → 生成中占位卡；出结果 → 同 id 换成真实图片卡。
+  // 消息级编号保证占位卡与图片卡 id 一致，React 不重挂载，图片在同一画框内浮现。
+  const genMeta = (input: Record<string, unknown> | undefined) => ({
+    prompt: typeof input?.prompt === 'string' ? input.prompt : undefined,
+    resolution: typeof input?.size === 'string' ? input.size.replace(/x/gi, ' × ') : undefined,
+  })
+  const completedGens: { n: number; input?: Record<string, unknown>; paths: string[] }[] = []
+  // 生成结果落盘路径的独立副本（completedGens 会被 image 分支 shift 消费，prune 需要完整列表）
+  const genResultPaths: string[] = []
+  let genIdx = 0
+  // Write 写入的代码文件：用于给同消息的代码块卡关联真实文件名（不单独落卡，避免与围栏代码块重复）
+  const writeFiles: { fileName: string; content: string }[] = []
+  // 结果与图片块分两条 IPC 事件到达，中间空窗期占位卡必须保持生成中状态（不卸载），
+  // 图片块流入后同一张卡内完成动画→图片的浮现；只队尾消息可能有在途图片，历史消息不补。
+  groupBlocks(msg.content).forEach((g, gi) => {
+    // 工具调用/thinking 抽离到全局 ToolSpot / ThinkSpot，不落卡；
+    // 但 GenerateImage 未出结果时落一张「生成中」占位卡，结果到达后由真实图片卡替换
+    if (g.kind === 'toolflow') {
+      pairTools(g.blocks).tools.forEach((p, pi) => {
+        if (p.use.type !== 'tool_use') return
+        if (p.use.name === 'GenerateImage') {
+          const n = genIdx++
+          if (!p.result) {
+            artifactCards.push({ id: `${msg.id}:gen${n}`, kind: 'image', ...genMeta(p.use.input), timestamp: msg.timestamp })
+          } else if (!p.result.is_error) {
+            // 记录生成结果的落盘路径：文本里复述的同图引用不再落第二张卡
+            try {
+              const rc = JSON.parse(typeof p.result.content === 'string' ? p.result.content : '{}')
+              if (typeof rc?.path === 'string') genResultPaths.push(rc.path)
+            } catch { /* result 不是 JSON */ }
+            completedGens.push({ n, input: p.use.input, paths: genResultPaths.slice() })
+          }
+          return
+        }
+        // Write 生成 .html（可交互网页/小游戏）→ WebScreen 卡，写入完成后出现
+        if (p.use.name === 'Write' && p.result && !p.result.is_error) {
+          const input = p.use.input
+          const filePath = typeof input?.file_path === 'string' ? input.file_path : ''
+          const content = typeof input?.content === 'string' ? input.content : ''
+          if (/\.html?$/i.test(filePath) && content) {
+            artifactCards.push({
+              id: `${msg.id}:web${gi}-${pi}`,
+              kind: 'web',
+              html: content,
+              label: filePath.split(/[/\\]/).pop(),
+              timestamp: msg.timestamp,
+            })
+          } else if (content && CODE_FILE_RE.test(filePath)) {
+            // 代码文件不再落画布卡（coding 时逐张飞入铺满画布），改道 coding 控制台；
+            // 文件名仍记入 writeFiles，给同消息围栏代码块关联真实文件名
+            const fileName = filePath.split(/[/\\]/).pop()
+            codingOps.push({ kind: 'write', fileName, language: guessLanguage(fileName) ?? undefined, code: content })
+            if (fileName) writeFiles.push({ fileName, content })
+          }
+        }
+      })
+      return
+    }
+    const b = g.block
+    const imgBase = (p: string) => p.split(/[/\\]/).pop()?.toLowerCase() ?? ''
+    if (b.type === 'text' && b.text?.trim()) {
+      // 代码块不再单独渲染产物卡——正文（含围栏代码，含流式未闭合围栏）整体留在 textSegments
+      // 走旁白/正文流，由 NarrationLayer/WritingCard 的围栏段渲染。
+      // coding 轮（本消息已有 Write 代码活动）时围栏代码仍归入 codingOps 供工具链参考。
+      const codingRound = writeFiles.length > 0 || codingOps.length > 0
+      const { prose: proseNoCode, codeBlocks, openFence } = extractCodeBlocks(b.text)
+      codeBlocks.forEach((cb) => {
+        const snippet = cb.code.trim().slice(0, 80)
+        const wf = snippet ? writeFiles.find((w) => w.content.includes(snippet)) : undefined
+        if (codingRound) {
+          codingOps.push({ kind: 'fence', fileName: wf?.fileName, language: cb.language || undefined, code: cb.code })
+        }
+      })
+      // 流式中间态（未闭合围栏）在 coding 轮时并入 codingOps（同一条 op 原地更新），
+      // 非 coding 轮随正文走旁白，不落独立代码卡
+      if (openFence && isLastMsg && isLoading && codingRound) {
+        const last = codingOps[codingOps.length - 1]
+        if (last && last.kind === 'fence') {
+          last.code = openFence.code
+        } else {
+          codingOps.push({ kind: 'fence', language: openFence.language || undefined, code: openFence.code })
+        }
+      }
+      // 正文中的图片路径引用（skill/Bash 生图等非 GenerateImage 路径）抽为图片卡；
+      // 与 GenerateImage 输出同名的引用由后置兜底过滤移除（见下方 pruneDuplicateImageCards）
+      const { prose, images } = extractImageRefs(proseNoCode)
+      images.forEach((src, ii) => {
+        if (artifactCards.some((c) => c.kind === 'image' && imgBase(c.block?.src ?? '') === imgBase(src))) return
+        artifactCards.push({ id: `${msg.id}:imt${gi}-${ii}`, kind: 'image', block: { type: 'image', src }, timestamp: msg.timestamp })
+      })
+      // 旁白正文：
+      // - coding 轮：围栏代码已归入 codingOps 供控制台参考，正文只保留剥离围栏后的 prose；
+      //   prose 为空（正文被围栏占满）时保留原文，避免旁白整块消失。
+      // - 普通轮：围栏代码随正文走 NarrationLayer/WritingCard 的围栏段渲染（含流式未闭合围栏），
+      //   所以在原文基础上只剥离图片路径，不剥围栏。
+      if (codingRound) {
+        if (prose.trim()) textSegments.push(prose)
+        else if (b.text.trim()) textSegments.push(b.text.trim())
+      } else {
+        const withFences = stripImageRefsKeepFences(b.text)
+        if (withFences.trim()) textSegments.push(withFences)
+      }
+    }
+    else if (b.type === 'image' && b.src) {
+      const gen = completedGens.shift()
+      if (gen) artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', block: b, ...genMeta(gen.input), timestamp: msg.timestamp })
+      // 正文引用已落卡的同图不重复落卡（按文件名比对，路径写法可能不同）
+      else if (!artifactCards.some((c) => c.kind === 'image' && imgBase(c.block?.src ?? '') === imgBase(b.src ?? ''))) {
+        artifactCards.push({ id: `${msg.id}:im${gi}`, kind: 'image', block: b, timestamp: msg.timestamp })
+      }
+    }
+    else if (b.type === 'file') artifactCards.push({ id: `${msg.id}:fl${gi}`, kind: 'file', block: b, timestamp: msg.timestamp })
+  })
+  // 已出结果但图片块尚未流入（IPC 空窗）→ 占位卡保持生成中，等图片块到达后同 id 换图
+  if (isLastMsg) {
+    completedGens.forEach((gen) =>
+      artifactCards.push({ id: `${msg.id}:gen${gen.n}`, kind: 'image', ...genMeta(gen.input), timestamp: msg.timestamp }),
+    )
+  }
+  // 后置兜底：存储层拍平后 text 落在 tool_use 之前，处理文本时 completedGens 还没填上，
+  // 前置跳过对文本引用卡无效。这里统一移除「与生成结果同名但不是生成卡」的图片卡，
+  // 同一张图只保留 GenerateImage 的动画卡。
+  pruneDuplicateImageCards({ artifactCards } as StageRound, genResultPaths)
+  const contribution: MsgContribution = { artifactCards, textSegments, codingOps }
+  if (!isLastMsg) contributionCache.set(msg, contribution)
+  return contribution
 }
 
 export function buildStageView(messages: ChatMessage[], selectedRoundId?: string | null, isLoading = false): StageViewModel {
@@ -346,6 +380,14 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
   const focusHasArtifact = (focusRound?.artifactCards.length ?? 0) > 0
   // 纯文字轮 → 旁白；混合轮 → 批注
   const narrationText = !awaitingReply && focusRound && !focusHasArtifact ? focusRound.textSegments.join('\n') : ''
+  // 写作任务判定：纯文字轮的正文达到写作体量（长文/结构化标题），正文进居中写作卡而非旁白层。
+  // coding 轮（本轮有 Write 代码文件活动）永不判写作——代码解说的体量会误触阈值
+  const isCodingRound = (focusRound?.codingOps.length ?? 0) > 0
+  const isWriting =
+    !awaitingReply &&
+    !isCodingRound &&
+    !!narrationText &&
+    detectWriting(narrationText)
   // 批注 = 生成过程的文字摘要；若文字全被引导短句吸收成卡片 caption，用 caption 兜底，保证批注按钮不消失
   const focusAnnotations = focusRound && focusHasArtifact
     ? (focusRound.textSegments.length > 0
@@ -379,10 +421,21 @@ export function buildStageView(messages: ChatMessage[], selectedRoundId?: string
 
   return {
     cards,
-    narrationText,
+    narrationText: isWriting ? '' : narrationText,
+    writingText: isWriting ? narrationText : '',
+    writingStreaming: isWriting && !!isLoading,
     focusRoundId: focusRound?.id ?? null,
     rounds,
   }
+}
+
+/** 写作卡触发阈值：写作体量的长文（字数达标）或结构化文章（多个标题/分段） */
+function detectWriting(text: string): boolean {
+  const charCount = text.replace(/\s/g, '').length
+  if (charCount >= 600) return true
+  const headings = (text.match(/^#{1,3}\s/m) ?? []).length
+  if (headings >= 2 && charCount >= 300) return true
+  return false
 }
 
 /** 会话内全部已出图的图片卡（CoverFlow 数据源：不随焦点轮切换/画布清空变化） */

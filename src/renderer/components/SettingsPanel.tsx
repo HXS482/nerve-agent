@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore } from '../stores/chatStore'
-import { isVideoBg } from './Stage/StageBgMedia'
+import { isVideoBg, isHtmlBg, htmlFromDataUrl } from './Stage/StageBgMedia'
 
 interface Props {
   config: ClaudeConfig
@@ -617,7 +617,8 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
   )
 }
 
-// 选图/视频：图片 canvas 压缩（限宽 1920，jpeg q82）存 data URL；视频落盘（~/.nerve/stage-bg）存 nerve-file URL
+// 选图/视频/HTML：图片 canvas 压缩（限宽 1920，jpeg q82）存 data URL；
+// 视频落盘（~/.nerve/stage-bg）存 nerve-file URL；HTML 存 data:text/html;base64（沙箱 iframe 渲染）
 function StageBgPicker() {
   const stageBg = useChatStore((s) => s.stageBg)
   const setStageBg = useChatStore((s) => s.setStageBg)
@@ -628,6 +629,16 @@ function StageBgPicker() {
       const ext = '.' + (file.name.split('.').pop() || 'mp4')
       const url = await window.claude.saveStageBg(await file.arrayBuffer(), ext)
       setStageBg(url)
+      return
+    }
+    // HTML 动态背景：内容转 data:text/html;base64（自包含，重启仍在）
+    if (file.type === 'text/html' || /\.html?$/i.test(file.name)) {
+      const text = await file.text()
+      // UTF-8 → 二进制 → base64（中文等多字节安全）
+      const bytes = new TextEncoder().encode(text)
+      let bin = ''
+      bytes.forEach((b) => { bin += String.fromCharCode(b) })
+      setStageBg('data:text/html;base64,' + btoa(bin))
       return
     }
     const reader = new FileReader()
@@ -647,6 +658,7 @@ function StageBgPicker() {
   }
 
   const video = stageBg && isVideoBg(stageBg)
+  const html = stageBg && isHtmlBg(stageBg)
 
   return (
     <div>
@@ -654,7 +666,7 @@ function StageBgPicker() {
         style={{
           width: 240, aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
           border: '1px solid var(--border-subtle)',
-          background: video ? '#0a0a0a' : `#0a0a0a url("${stageBg ?? '/assets/stage-bg.jpg'}") center / cover no-repeat`,
+          background: video ? '#0a0a0a' : html ? '#0a0a0a' : stageBg ? `#0a0a0a url("${stageBg}") center / cover no-repeat` : '#030303',
           marginBottom: 8,
           position: 'relative',
         }}
@@ -669,16 +681,24 @@ function StageBgPicker() {
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         )}
+        {html && stageBg && (
+          <iframe
+            srcDoc={htmlFromDataUrl(stageBg)}
+            sandbox="allow-scripts"
+            title="Stage background preview"
+            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+          />
+        )}
       </div>
       <div className="flex items-center" style={{ gap: 8 }}>
-        <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片/视频</SecondaryButton>
+        <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片/视频/HTML</SecondaryButton>
         {stageBg && (
           <SecondaryButton onClick={() => setStageBg(null)}>恢复默认</SecondaryButton>
         )}
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,.html,.htm"
           style={{ display: 'none' }}
           onChange={(e) => {
             const f = e.target.files?.[0]
@@ -688,7 +708,7 @@ function StageBgPicker() {
         />
       </div>
       <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
-        支持图片（自动压缩到 1920 宽）和视频（mp4/webm，循环静音播放）；即时生效并本地持久化
+        支持图片（自动压缩到 1920 宽）、视频（mp4/webm，循环静音播放）和 HTML 动态背景（沙箱渲染，不可交互）；即时生效并本地持久化
       </div>
     </div>
   )
