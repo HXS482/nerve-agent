@@ -2007,11 +2007,16 @@ button, a, input, textarea, select {
   flex-direction: column;
   gap: 8px;
 }
+.tool-spot-dock-wrap {
+  /* 折叠/展开高度动画容器：收起时裁掉整个图标列 */
+  overflow: hidden;
+}
 .tool-spot-dock {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 48vh;
+  /* 可视最多 5 个工具图标（30px 高 + 8px 间距 ×4），多出的上下滚动追最新 */
+  max-height: calc(30px * 5 + 8px * 4);
   overflow-y: auto;
   /* 细滚动条：溢出可见（隐藏滚动条 + 无遮罩会让老图标"凭空消失"） */
   scrollbar-width: thin;
@@ -2116,36 +2121,6 @@ button.tool-spot-all:hover {
 /* 总图标仅在运行时脉冲 */
 .tool-spot-all[data-status="running"] svg {
   animation: thinking-pulse 1.4s ease-in-out infinite;
-}
-.tool-spot-panel {
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 380px;
-  max-height: min(60vh, 480px);
-  overflow-y: auto;
-  pointer-events: auto;
-  border-radius: 16px;
-  /* 毛玻璃同语言（glass-dock）：浅白底 + 轻 blur + 细白边 */
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-}
-.tool-spot-panel::-webkit-scrollbar {
-  width: 3px;
-}
-.tool-spot-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 2px;
-}
-/* 面板内嵌详情限高：避免 400px 内滚被 300px 外滚嵌套卡死（双滚轮陷阱） */
-.tool-spot-panel .toolflow-detail {
-  max-height: 200px;
 }
 /* 面板内的 subagent 任务行：颜色走状态语义（对齐 dock/timeline 色板） */
 .toolflow-subtask {
