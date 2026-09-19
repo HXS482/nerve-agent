@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { ChatMessage } from '../../../shared/types'
 import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
-import { useTodoStore } from '../../stores/todoStore'
+import { selectTodos, useTodoStore } from '../../stores/todoStore'
 import { buildStageView, listSessionImageCards } from '../../adapters/stageAdapter'
 import { StageCard, type StageCardData } from './StageCard'
 import { TaskRows } from './TaskRows'
@@ -168,15 +168,13 @@ export function Stage({ messages, onSend }: { messages: ChatMessage[]; onSend?: 
   const hiddenCardIds = useStageStore((s) => s.hiddenCardIds)
   const hideCard = useStageStore((s) => s.hideCard)
   const isLoading = useChatStore((s) => s.isLoading)
-  // 原子订阅（不能 select 新对象——useSyncExternalStore 要求快照稳定）
-  const todoSessionId = useTodoStore((s) => s.sessionId)
-  const todos = useTodoStore((s) => s.todos)
+  // 原子订阅（不能 select 新对象——useSyncExternalStore 要求快照稳定。
+  // selectTodos 返回存储中的数组引用，缺省走模块级 EMPTY，不制造新对象。）
+  const activeTodos = useTodoStore((s) => selectTodos(s, currentSessionId))
   const filtered = useMemo(
     () => (currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : []),
     [messages, currentSessionId],
   )
-  // 固定右上角 todo 卡：仅当前会话的清单显示（todoStore 全局只有最新一份）
-  const activeTodos = todoSessionId === currentSessionId ? todos : []
   const vm = useMemo(() => buildStageView(filtered, selectedRoundId, isLoading), [filtered, selectedRoundId, isLoading])
   const allCards = vm.cards.filter(({ card }) => !hiddenCardIds[card.id])
   const narrationText = vm.narrationText
@@ -246,10 +244,12 @@ export function Stage({ messages, onSend }: { messages: ChatMessage[]; onSend?: 
 
   return (
     <div className="stage-root">
-      {/* 固定右上角 todo 卡（无边框紧凑列表，coding 时随 TodoWrite 更新） */}
+      {/* 固定右上角 todo 卡（毛玻璃容器，无边框紧凑列表随 TodoWrite 更新） */}
       {activeTodos.length > 0 && (
         <div className="stage-todo-fixed">
-          <TaskRows todos={activeTodos} />
+          <div className="stage-todo-glass">
+            <TaskRows todos={activeTodos} />
+          </div>
         </div>
       )}
       {showEmptyState ? (
