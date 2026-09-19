@@ -270,6 +270,21 @@ describe('buildStageView — Write .html 网页产物卡', () => {
     expect(card.label).toBe('game.html')
   })
 
+  it('同一轮对同一 html 迭代 Write 只落一张卡（内容为最后一次覆盖）', () => {
+    const vm = buildStageView([
+      msg('u1', 'user', 1000, text('写个页面')),
+      msg('a1', 'assistant', 1100,
+        { type: 'tool_use', id: 'toolu_w1', name: 'Write', input: { file_path: 'game.html', content: '<html>v1</html>' } },
+        { type: 'tool_result', toolCallId: 'toolu_w1', content: '{}' },
+        { type: 'tool_use', id: 'toolu_w2', name: 'Write', input: { file_path: 'game.html', content: '<html>v2</html>' } },
+        { type: 'tool_result', toolCallId: 'toolu_w2', content: '{}' }),
+    ])
+    expect(vm.cards).toHaveLength(1)
+    expect(vm.cards[0].card.kind).toBe('web')
+    expect(vm.cards[0].card.html).toContain('v2')
+    expect(vm.cards[0].card.label).toBe('game.html')
+  })
+
   it('Write 未完成不落 web 卡；写入代码文件改道 codingOps（不落画布卡）', () => {
     const pending = buildStageView([
       msg('u1', 'user', 1000, text('写个小游戏')),

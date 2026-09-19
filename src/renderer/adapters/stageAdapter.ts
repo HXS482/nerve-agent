@@ -177,6 +177,25 @@ function pruneDuplicateImageCards(
   })
 }
 
+// 轮内 web 卡按源文件路径归并：todo 分步/迭代对同一 html 反复 Write 时，
+// 只保留最后一次覆盖内容（同一交付物不叠重复卡）；跨轮各自保留快照，回看不污染。
+function mergeWebCardsByPath(round: StageRound) {
+  const indexByPath = new Map<string, number>()
+  const kept: StageCardData[] = []
+  for (const card of round.artifactCards) {
+    if (card.kind === 'web' && card.path != null) {
+      const existing = indexByPath.get(card.path)
+      if (existing !== undefined) {
+        kept[existing] = card
+        continue
+      }
+      indexByPath.set(card.path, kept.length)
+    }
+    kept.push(card)
+  }
+  round.artifactCards = kept
+}
+
 function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
   const rounds: StageRound[] = []
   let current: StageRound | null = null
@@ -208,6 +227,8 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
     r.artifactCards.push(...c.artifactCards)
     r.textSegments.push(...c.textSegments)
     r.codingOps.push(...c.codingOps)
+    // 同一 html 迭代 Write 只留最后一次覆盖（todo 分步交付不叠重复卡）
+    mergeWebCardsByPath(r)
   }
   return rounds
 }
@@ -275,6 +296,7 @@ function assistantContribution(msg: ChatMessage, isLastMsg: boolean, isLoading =
               kind: 'web',
               html: content,
               label: filePath.split(/[/\\]/).pop(),
+              path: filePath,
               timestamp: msg.timestamp,
             })
           } else if (content && CODE_FILE_RE.test(filePath)) {
