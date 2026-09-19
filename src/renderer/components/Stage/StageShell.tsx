@@ -41,7 +41,7 @@ export function StageShell({ claude, onOpenSettings }: Props) {
       {/* 背景：默认 Predictive Arc 弧光动画；自定义壁纸（图片/视频/HTML）优先 */}
       <div
         className="stage-bg"
-        style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : { background: '#030303' }}
+        style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { background: `#0a0a0a url("${stageBg}") center / cover no-repeat` }) : { background: '#030303' }}
       >
         {!stageBg && <PredictiveArcBg />}
         {stageBg && isVideoBg(stageBg) && <BgVideo src={stageBg} />}
