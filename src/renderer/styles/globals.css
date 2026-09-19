@@ -1041,6 +1041,17 @@ button, a, input, textarea, select {
   max-width: 30vw;
   pointer-events: auto;
 }
+/* todo 卡毛玻璃容器（stage-sessions-fab 同款：浅白底 + blur(12px) + 细白边） */
+.stage-todo-glass {
+  border-radius: 12px;
+  padding: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
 .stage-task-card {
   --stage-task-line: rgba(255, 255, 255, 0.14);
   --stage-task-run: #60a5fa;

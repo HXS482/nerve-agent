@@ -732,8 +732,12 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
               }))
               .filter((t) => t.content.length > 0)
               .slice(0, 20)
-            hooks.onTodos!(safe)
-            return { success: true, count: safe.length }
+            // 按 content 去重（保留首次出现的项）：防止 agent 反复推送重复步骤撑爆清单
+            const seen = new Set<string>()
+            const deduped = safe.filter((t) => (seen.has(t.content) ? false : (seen.add(t.content), true)))
+            const dropped = safe.length - deduped.length
+            hooks.onTodos!(deduped)
+            return { success: true, count: deduped.length, ...(dropped > 0 ? { droppedDuplicates: dropped } : {}) }
           },
         },
       }

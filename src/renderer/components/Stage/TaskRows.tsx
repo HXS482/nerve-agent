@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronDown, ListTodo } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { TodoItem } from '../../../shared/types'
@@ -124,7 +124,7 @@ function TodoStatusIcon({ status }: { status: Status }) {
   )
 }
 
-export function TaskRows({
+export const TaskRows = memo(function TaskRows({
   todos,
   title = 'To-dos',
   maxHeight = 220,
@@ -217,7 +217,9 @@ export function TaskRows({
                   {todos.map((t, i) => (
                     <motion.li
                       layout="position"
-                      key={t.content}
+                      // key 用下标：TodoWrite 每次全量替换、行位置基本稳定；
+                      // 用内容做 key 会在"同一行内容改动"时把行当成新节点全部重播动画
+                      key={i}
                       initial={reduce ? { opacity: 1 } : { opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3 }}
@@ -262,4 +264,4 @@ export function TaskRows({
       </div>
     </section>
   )
-}
+})

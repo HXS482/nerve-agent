@@ -24,6 +24,8 @@ export interface StageCardData {
   /** kind = 'web'：Write 生成的可交互网页（HTML 全文与文件名） */
   html?: string
   label?: string
+  /** kind = 'web'：源文件路径（轮内同路径迭代 Write 合并的身份键） */
+  path?: string
   timestamp: number
 }
 

@@ -103,6 +103,21 @@ export function useClaude() {
       : useChatStore.getState().currentSessionId
   ), [])
 
+  // 运行中断（cancel / 错误 / 超时）→ 把当前会话还在 in_progress 的任务归一为 pending
+  // （completed 保留），避免清单卡在"转圈"停滞态。别名解析：临时 id 也能命中真实会话
+  const demoteInProgressTodos = useCallback((workspace: Workspace) => {
+    const sid = workspace === 'stage'
+      ? useStageStore.getState().stageSessionId
+      : useChatStore.getState().currentSessionId
+    if (!sid) return
+    const api = useTodoStore.getState()
+    const real = api.aliases[sid] ?? sid
+    const todos = api.bySession[real]
+    if (!todos) return
+    const next = todos.map((t) => (t.status === 'in_progress' ? { ...t, status: 'pending' as const } : t))
+    if (next.some((t, i) => t !== todos[i])) api.setTodos(real, next)
+  }, [])
+
   // Flush pending text to store
   const flushPendingText = useCallback(() => {
     const text = pendingText.current
@@ -418,6 +433,8 @@ export function useClaude() {
         timestamp: Date.now(),
       })
       setLoading(false)
+      // 运行中断 → 当前会话的 in_progress 归一为 pending（completed 保留）
+      demoteInProgressTodos(pendingWorkspace.current)
     })
 
     const unsubDone = window.claude.onDone((data) => {
@@ -475,6 +492,9 @@ export function useClaude() {
           useStageStore.getState().setStageSessionId(backendSessionId)
         }
 
+        // 临时 id 已由 onDone 迁移为后端 id → 清理 todo 别名映射
+        useTodoStore.getState().releaseAlias(tempSessionId, backendSessionId)
+
         pendingTempSessionId.current = null
 
         // Refresh session usage after completion
@@ -517,12 +537,11 @@ export function useClaude() {
         // 标记产物来源工作区，stage 产物不进 chat 的 flow 面板
         workspace: pendingWorkspace.current,
       })
-      // TodoWrite 清单 → todoStore（Stage TaskRows 卡片数据源）
+      // TodoWrite 清单 → todoStore（Stage TaskRows 卡片数据源，按会话隔离存储）
       if (data.type === 'todo') {
         try {
           const parsed = JSON.parse(data.content)
           if (Array.isArray(parsed)) {
-            const sessionId = data.meta?.sessionId || getWorkspaceSessionId(pendingWorkspace.current)
             const todos: TodoItem[] = (parsed as any[])
               .map((t) => ({
                 content: typeof t?.content === 'string' ? t.content : '',
@@ -530,6 +549,14 @@ export function useClaude() {
                 ...(typeof t?.note === 'string' && t.note.trim() ? { note: t.note.trim() } : {}),
               }))
               .filter((t: TodoItem) => t.content.length > 0)
+            // meta.sessionId 是后端真实 id；首轮流式期间工作区还在用临时 id（session-<ts>），
+            // 登记别名让临时 id 也能命中同一份清单（修复"首次新会话首轮卡片隐藏"）
+            const backendId = data.meta?.sessionId
+            const wsId = getWorkspaceSessionId(pendingWorkspace.current)
+            const sessionId = backendId || wsId
+            if (backendId && wsId && wsId !== backendId && wsId.startsWith('session-')) {
+              useTodoStore.getState().recordAlias(wsId, backendId)
+            }
             if (sessionId) useTodoStore.getState().setTodos(sessionId, todos)
           }
         } catch { /* 畸形 JSON 忽略 */ }
@@ -577,7 +604,7 @@ export function useClaude() {
       unsubApproval()
       unsubAskUser()
     }
-  }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId])
+  }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId, demoteInProgressTodos])
 
   const send = useCallback(
     async (prompt: string, files?: FileAttachment[]) => {
@@ -653,6 +680,7 @@ export function useClaude() {
         const state = useChatStore.getState()
         if (state.isLoading) {
           console.warn('[useClaude] safety timeout — resetting isLoading')
+          demoteInProgressTodos(pendingWorkspace.current)
           setLoading(false)
         }
       }, 180000)
@@ -672,13 +700,15 @@ export function useClaude() {
         setLoading(false)
       }
     },
-    [isLoading, addMessage, setLoading, addSession, setSessionId]
+    [isLoading, addMessage, setLoading, addSession, setSessionId, demoteInProgressTodos]
   )
 
   const cancel = useCallback(async () => {
     await window.claude.cancel()
     setLoading(false)
-  }, [setLoading])
+    // 中断运行 → 当前会话的 in_progress 归一为 pending（completed 保留）
+    demoteInProgressTodos(pendingWorkspace.current)
+  }, [setLoading, demoteInProgressTodos])
 
   const updateConfig = useCallback(async (partial: Partial<ClaudeConfig>) => {
     if (partial.model) await window.claude.setModel(partial.model)

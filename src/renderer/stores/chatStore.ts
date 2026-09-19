@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ChatMessage, ClaudeConfig, Theme, ModelInfo, SessionUsage, ProviderInfo, ToolApprovalRequest, AskUserRequest } from '../../shared/types'
+import { useTodoStore } from './todoStore'
 
 const MAX_FLOW_ITEMS = 30
 
@@ -250,12 +251,15 @@ export const useChatStore = create<ChatState>()(
             sess.id === id ? { ...sess, ...partial } : sess
           ),
         })),
-      deleteSession: (id) =>
+      deleteSession: (id) => {
+        // 联动清理该会话的 TodoWrite 清单及别名（Stage TaskRows 随删即消失）
+        useTodoStore.getState().clearSession(id)
         set((s) => {
           const sessionModes = { ...s.sessionModes }
           delete sessionModes[id]
           return { sessions: s.sessions.filter((sess) => sess.id !== id), sessionModes }
-        }),
+        })
+      },
       markSessionMode: (id, mode) =>
         set((s) => ({ sessionModes: { ...s.sessionModes, [id]: mode } })),
 
