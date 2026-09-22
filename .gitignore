@@ -25,3 +25,7 @@ docs/superpowers/specs/2026-06-06-telegram-image-rendering-design.md
 
 # AI 智能体工作规范（本地专用，不入库）
 AGENTS.md
+CLAUDE.md
+
+# 会话报告（测试产物）
+session-report-*.html
