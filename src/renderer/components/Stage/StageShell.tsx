@@ -5,7 +5,6 @@ import { useChatStore } from '../../stores/chatStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
-import { PredictiveArcBg } from './PredictiveArcBg'
 import { ThinkSpot } from './ThinkSpot'
 import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
@@ -24,6 +23,9 @@ export function StageShell({ claude, onOpenSettings }: Props) {
   const setViewMode = useStageStore((s) => s.setViewMode)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const stageBg = useChatStore((s) => s.stageBg)
+  const stageBgEnabled = useChatStore((s) => s.stageBgEnabled)
+  // 启用开关开着且有素材才渲染自定义背景；否则透明透出系统 Mica
+  const activeBg = stageBgEnabled ? stageBg : null
 
   // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
   useEffect(() => {
@@ -38,14 +40,13 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
-      {/* 背景：默认 Predictive Arc 弧光动画；自定义壁纸（图片/视频/HTML）优先 */}
+      {/* 背景：默认透明透出 Mica 模糊桌面；启用开关开着时渲染自定义壁纸（图片/视频/HTML） */}
       <div
         className="stage-bg"
-        style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { background: `#0a0a0a url("${stageBg}") center / cover no-repeat` }) : { background: '#030303' }}
+        style={activeBg && !isHtmlBg(activeBg) ? (isVideoBg(activeBg) ? { background: '#0a0a0a' } : { background: `#0a0a0a url("${activeBg}") center / cover no-repeat` }) : activeBg && isHtmlBg(activeBg) ? { background: '#0a0a0a' } : undefined}
       >
-        {!stageBg && <PredictiveArcBg />}
-        {stageBg && isVideoBg(stageBg) && <BgVideo src={stageBg} />}
-        {stageBg && isHtmlBg(stageBg) && <BgHtml src={stageBg} />}
+        {activeBg && isVideoBg(activeBg) && <BgVideo src={activeBg} />}
+        {activeBg && isHtmlBg(activeBg) && <BgHtml src={activeBg} />}
       </div>
       {/* 顶栏 */}
       <div className="stage-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>

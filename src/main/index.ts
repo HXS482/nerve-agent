@@ -93,6 +93,7 @@ function createWindow(): BrowserWindow {
     show: false,
     frame: false,
     transparent: true,
+    backgroundMaterial: 'mica',
     icon: join(__dirname, '../../resources/icons/icon_256x256.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: false,

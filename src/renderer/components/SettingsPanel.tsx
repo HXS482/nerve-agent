@@ -619,9 +619,12 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
 
 // 选图/视频/HTML：图片 canvas 压缩（限宽 1920，jpeg q82）存 data URL；
 // 视频落盘（~/.nerve/stage-bg）存 nerve-file URL；HTML 存 data:text/html;base64（沙箱 iframe 渲染）
+// 启用开关独立于素材：开关关着时 Stage 透出系统 Mica，素材保留随时可开
 function StageBgPicker() {
   const stageBg = useChatStore((s) => s.stageBg)
   const setStageBg = useChatStore((s) => s.setStageBg)
+  const stageBgEnabled = useChatStore((s) => s.stageBgEnabled)
+  const setStageBgEnabled = useChatStore((s) => s.setStageBgEnabled)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
@@ -662,6 +665,27 @@ function StageBgPicker() {
 
   return (
     <div>
+      {/* 启用开关：默认关（透出 Mica 模糊桌面）；有素材才能开 */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        <span className="text-[12px]" style={{ color: 'var(--text-on-surface-variant)' }}>
+          启用自定义背景
+        </span>
+        <button
+          onClick={() => setStageBgEnabled(!stageBgEnabled)}
+          disabled={!stageBg}
+          className="cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          style={{
+            width: 32, height: 18, borderRadius: 9, border: 'none', position: 'relative', flexShrink: 0,
+            background: stageBgEnabled && stageBg ? 'var(--accent-primary)' : 'var(--bg-surface-container-highest)',
+          }}
+        >
+          <div style={{
+            width: 14, height: 14, borderRadius: 7, background: '#fff',
+            position: 'absolute', top: 2, left: stageBgEnabled && stageBg ? 16 : 2,
+            transition: 'left 0.15s',
+          }} />
+        </button>
+      </div>
       <div
         style={{
           width: 240, aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
@@ -669,6 +693,7 @@ function StageBgPicker() {
           background: video ? '#0a0a0a' : html ? '#0a0a0a' : stageBg ? `#0a0a0a url("${stageBg}") center / cover no-repeat` : '#030303',
           marginBottom: 8,
           position: 'relative',
+          opacity: stageBgEnabled ? 1 : 0.5,
         }}
       >
         {video && (
@@ -693,7 +718,7 @@ function StageBgPicker() {
       <div className="flex items-center" style={{ gap: 8 }}>
         <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片/视频/HTML</SecondaryButton>
         {stageBg && (
-          <SecondaryButton onClick={() => setStageBg(null)}>恢复默认</SecondaryButton>
+          <SecondaryButton onClick={() => { setStageBg(null); setStageBgEnabled(false) }}>恢复默认</SecondaryButton>
         )}
         <input
           ref={fileRef}
@@ -708,7 +733,7 @@ function StageBgPicker() {
         />
       </div>
       <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
-        支持图片（自动压缩到 1920 宽）、视频（mp4/webm，循环静音播放）和 HTML 动态背景（沙箱渲染，不可交互）；即时生效并本地持久化
+        关闭开关时 Stage 显示系统 Mica（桌面模糊）；开启后使用所选背景 —— 图片（自动压缩到 1920 宽）、视频（mp4/webm，循环静音播放）或 HTML 动态背景（沙箱渲染，不可交互）；即时生效并本地持久化
       </div>
     </div>
   )

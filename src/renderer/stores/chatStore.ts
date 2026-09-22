@@ -40,6 +40,8 @@ interface ChatState {
 
   /** Stage 自定义壁纸（data URL，canvas 压缩后持久化）；null = 默认壁纸 */
   stageBg: string | null
+  /** Stage 自定义壁纸启用开关（false = 透出系统 Mica 模糊桌面）；壁纸素材本身保留在 stageBg */
+  stageBgEnabled: boolean
 
   // Sessions
   sessions: Session[]
@@ -101,6 +103,8 @@ interface ChatState {
   setTheme: (theme: Theme) => void
   /** 设置/清除 Stage 自定义壁纸（data URL | null） */
   setStageBg: (bg: string | null) => void
+  /** Stage 自定义壁纸启用开关（false = 透出系统 Mica 模糊桌面） */
+  setStageBgEnabled: (enabled: boolean) => void
 
   // Session actions
   addSession: (session: Session) => void
@@ -158,6 +162,7 @@ export const useChatStore = create<ChatState>()(
       // Theme state
       theme: 'dark',
       stageBg: null,
+      stageBgEnabled: false,
 
       // Sessions state
       sessions: [],
@@ -238,6 +243,7 @@ export const useChatStore = create<ChatState>()(
         set({ theme })
       },
       setStageBg: (bg) => set({ stageBg: bg }),
+      setStageBgEnabled: (enabled) => set({ stageBgEnabled: enabled }),
 
       // Session actions
       addSession: (session) =>
@@ -317,6 +323,7 @@ export const useChatStore = create<ChatState>()(
       partialize: (state) => ({
         theme: state.theme,
         stageBg: state.stageBg,
+        stageBgEnabled: state.stageBgEnabled,
         sessions: state.sessions,
         sessionModes: state.sessionModes,
         config: state.config,

@@ -460,13 +460,13 @@ button, a, input, textarea, select {
   min-height: 0;
 }
 
-/* Stage 背景层 —— 默认渲染 Predictive Arc 弧光动画（.stage-bg-predictive），自定义壁纸时由内联样式覆盖 */
+/* Stage 背景层 —— 默认透明（透出系统 Mica 模糊桌面），自定义壁纸时由内联样式覆盖 */
 .stage-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: #030303;
+  background: transparent;
 }
 /* 默认动态背景：Predictive Arc 点阵弧光（PredictiveArcBg.tsx） */
 .stage-bg-predictive {
@@ -1565,35 +1565,9 @@ button, a, input, textarea, select {
   position: relative;
   overflow: hidden;
   min-height: 0;
-  margin: 2px;
-  /* 背景透明：壁纸由 .stage-bg 承担；shell 若有实色背景会从 1px 透明描边处漏出一条深色线 */
-  border: 1px solid transparent; /* 保留 1px 几何：fab 底部补偿依赖它 */
-  border-radius: var(--app-shell-radius);
-}
-/* Stage 外框底图：锐利壁纸铺满窗口（含 shell 的 2px 缝隙），给毛玻璃环提供 backdrop */
-.stage-frame-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
-}
-/* Stage 外框毛玻璃环：与会话按钮同一质感（backdrop blur + 5% 白），
-   xor mask 抠掉中间只留窗口边缘一环；圆角由 border-radius + mask-clip 承担 */
-.stage-frame-frost {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  pointer-events: none;
+  /* 无 margin 无边框：Stage 铺满窗口，无自定义背景时透出系统 Mica 模糊桌面 */
+  background: transparent;
   border-radius: var(--app-window-radius);
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 5px; /* 环宽：盖住 1.5 描边 + 2 margin + 1 shell border */
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
 }
 /* Stage 模式全局隐藏滚动条（壁纸悬浮美学，滚动功能保留） */
 .stage-shell * {
@@ -1677,8 +1651,7 @@ button, a, input, textarea, select {
 .stage-sessions-fab {
   position: absolute;
   left: 12px;
-  /* 对齐底部输入栏的 + 按钮：InputBar 距根容器底 14px；
-     本按钮相对 .stage-main 定位，需扣除 shell 的 margin 2px + border 1px */
+  /* 对齐底部输入栏的 + 按钮：InputBar 距根容器底 14px */
   bottom: 10px;
   z-index: 55;
   width: 36px;
