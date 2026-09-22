@@ -1964,6 +1964,17 @@ button, a, input, textarea, select {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
 }
+/* 流式限高视口：高度随内容（≤ maxHeight）增长，超限后靠 y 弹簧偏移贴底跟随 */
+.think-stream {
+  position: relative;
+  overflow: hidden;
+}
+/* 完成后回看：内容已回弹到顶部，超长部分交给容器滚动 */
+.think-stream.is-scrollable {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.think-stream.is-scrollable::-webkit-scrollbar { display: none; }
 .think-spot-panel {
   position: absolute;
   top: 100%;
@@ -1976,9 +1987,9 @@ button, a, input, textarea, select {
   /* 无边框无底卡：思考文本直接悬浮在壁纸上；滚动由内容区自己承担 */
   margin-top: 6px;
 }
+/* stage 思考面板：流式阶段限高由 TS 端 useStreamMaxHeight 控制（170px 与 26vh 取小） */
 .think-spot-panel .think-trace-content {
-  /* 限高：收窄到不压到下方工具 dock（内容超长走内部滚动） */
-  max-height: min(170px, 26vh);
+  max-height: none;
 }
 /* stage 思考面板字号：8px 过小且行距失衡导致排版重叠，放宽到可读字号并统一行距 */
 .think-spot-panel .think-trace-row-text {
@@ -1986,9 +1997,34 @@ button, a, input, textarea, select {
   line-height: 1.55;
   color: #b3b8c2;
 }
-/* stage 思考面板竖线：改为中性灰（原 --text-outline 偏蓝且过亮） */
+/* stage 思考面板竖线：中性灰再降饱和（#6b7280 → 半透明淡灰），上下两端大范围渐隐 */
 .think-spot-panel .think-trace-line {
-  background: #6b7280;
+  background: rgba(255, 255, 255, 0.22);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 28px, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 28px, black calc(100% - 28px), transparent);
+}
+/* stage 思考面板：收紧线与文字之间的状态图标区（勾/spinner 更小、行距更矮、间隙更窄） */
+.think-spot-panel .think-trace-content {
+  gap: 2px;
+  padding: 2px 0;
+}
+.think-spot-panel .think-trace-row {
+  gap: 4px;
+  min-height: 20px;
+  padding: 1px 2px;
+}
+.think-spot-panel .think-trace-check {
+  width: 11px;
+  height: 11px;
+  margin-top: 4px;
+}
+.think-spot-panel .think-trace-spinner {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+}
+.think-spot-panel .think-trace-inner {
+  padding-left: 8px;
 }
 /* 收起时不挡壁纸交互 */
 .think-spot-panel[data-open="false"] {
@@ -3073,7 +3109,7 @@ pre.hljs {
   100% { opacity: 1; transform: translateY(0); }
 }
 
-/* Stage 思考行：纯淡入（无位移），长段落多行展开时避免行与行瞬时叠压 */
+/* stage 思考行过渡：纯 CSS 淡入保留作回退（Stage 面板已迁移到 motion 弹簧行入场） */
 @keyframes think-row-in {
   from { opacity: 0; }
   to { opacity: 1; }
