@@ -614,10 +614,12 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       let jsonOk = true
       try { input = JSON.parse(acc.arguments) } catch { jsonOk = false; input = {}; console.error(`[AgenticLoop] tool_call JSON parse failed: ${acc.name}`, acc.arguments.slice(0, 200)) }
 
+      // 截断/非法的参数字符串不能原样回传 API（网关会 400 整个请求），回传空对象保持请求合法；
+      // 模型仍会通过下方的 "malformed arguments" 工具结果得知失败并重试。
       assistantMsg.tool_calls.push({
         id: acc.id,
         type: 'function',
-        function: { name: acc.name, arguments: acc.arguments },
+        function: { name: acc.name, arguments: jsonOk ? acc.arguments : '{}' },
       })
 
       onToolCall?.(acc.id, acc.name, input)
