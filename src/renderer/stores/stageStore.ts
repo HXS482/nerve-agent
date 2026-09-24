@@ -6,6 +6,8 @@ export type ViewMode = 'chat' | 'stage'
 interface StageState {
   viewMode: ViewMode
   stageSessionId: string | null
+  // Stage 设置视图是否打开（内存态）：打开时 Stage 主界面整体卸载，进入独立设置模式
+  settingsOpen: boolean
   // 回看的轮次（内存态，null = 跟随最新轮）
   selectedRoundId: string | null
   // 卡片相对自动落位的拖拽偏移（内存态，不持久化）
@@ -18,6 +20,7 @@ interface StageState {
   hiddenCardIds: Record<string, true>
   setViewMode: (mode: ViewMode) => void
   setStageSessionId: (sessionId: string | null) => void
+  setSettingsOpen: (open: boolean) => void
   setSelectedRoundId: (roundId: string | null) => void
   setCardOffset: (cardId: string, offset: { x: number; y: number }) => void
   setCardSize: (cardId: string, width: number) => void
@@ -31,6 +34,7 @@ export const useStageStore = create<StageState>()(
     (set) => ({
       viewMode: 'stage',
       stageSessionId: null,
+      settingsOpen: false,
       selectedRoundId: null,
       cardOffsets: {},
       cardSizes: {},
@@ -39,6 +43,7 @@ export const useStageStore = create<StageState>()(
       setViewMode: (viewMode) => set({ viewMode }),
       // 切会话清掉回看选中，避免残留高亮
       setStageSessionId: (stageSessionId) => set({ stageSessionId, selectedRoundId: null }),
+      setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setSelectedRoundId: (selectedRoundId) => set({ selectedRoundId }),
       setCardOffset: (cardId, offset) =>
         set((s) => ({ cardOffsets: { ...s.cardOffsets, [cardId]: offset } })),

@@ -40,9 +40,9 @@ export function applyDwmFix(win: BrowserWindow) {
     const SWP_NOSIZE = 0x0001
     const SWP_NOZORDER = 0x0004
     const SWP_NOACTIVATE = 0x0010
-    const DWMWA_NCRENDERING_POLICY = 2
+    const DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    const DWMWCP_ROUND = 2
     const DWMWA_BORDER_COLOR = 34
-    const DWMNCRP_DISABLED = 1
     const DWMWA_COLOR_NONE = 0xfffffffe
 
     const GetWindowLongW = user32.func('int GetWindowLongW(void* hWnd, int nIndex)')
@@ -62,8 +62,10 @@ export function applyDwmFix(win: BrowserWindow) {
       SetWindowLongW(hwnd, GWL_EXSTYLE, cleanExStyle)
     }
 
-    const ncPolicy = new Int32Array([DWMNCRP_DISABLED])
-    DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, ncPolicy, 4)
+
+    // Win11 系统圆角：Mica 材质由 DWM 绘制，只有 DWM 裁角它才会跟着圆
+    const cornerPref = new Int32Array([DWMWCP_ROUND])
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, cornerPref, 4)
 
     const borderColor = new Uint32Array([DWMWA_COLOR_NONE])
     DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, borderColor, 4)

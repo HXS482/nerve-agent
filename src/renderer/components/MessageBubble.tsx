@@ -1,4 +1,5 @@
 import React, { useState, memo, useCallback } from 'react'
+import { useChatStore } from '../stores/chatStore'
 import { useImageSrc } from '../hooks/useImageSrc'
 import { ChatMessage, ContentBlock } from '../../shared/types'
 import ReactMarkdown from 'react-markdown'
@@ -268,9 +269,11 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     .map((b) => b.input?.file_path as string)
     .filter(Boolean)
 
+  const conversationWidth = useChatStore((st) => st.conversationWidth)
+
   return (
       <div className="animate-fade-in flex justify-center group/msg" style={{ marginBottom: sameRole ? 8 : 48 }}>
-        <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
+        <div style={{ maxWidth: conversationWidth > 0 ? conversationWidth : undefined, width: '100%' }}>
         {renderBlocks()}
         {fileRefs.length > 0 && (
           <div className="mt-2 flex flex-col gap-2">

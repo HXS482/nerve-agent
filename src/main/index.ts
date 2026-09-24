@@ -92,8 +92,9 @@ function createWindow(): BrowserWindow {
     title: '',
     show: false,
     frame: false,
-    transparent: true,
-    backgroundMaterial: 'mica',
+    // transparent: true 会让 Electron 加 WS_EX_LAYERED，禁用 DWM 圆角裁切和 Mica 绘制；
+    // 透明感由 backgroundMaterial: 'mica' 接管（无自定义背景时透出桌面模糊）
+    backgroundMaterial: 'acrylic',
     icon: join(__dirname, '../../resources/icons/icon_256x256.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: false,

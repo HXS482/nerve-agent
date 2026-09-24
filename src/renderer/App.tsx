@@ -35,6 +35,7 @@ export default function App() {
   const toggleRightSidebar = useChatStore((s) => s.toggleRightSidebar)
   const theme = useChatStore((s) => s.theme)
   const stageBg = useChatStore((s) => s.stageBg)
+  const stageSettingsOpen = useStageStore((s) => s.settingsOpen)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const resizing = useRef(false)
@@ -78,7 +79,7 @@ export default function App() {
         borderRadius: 'var(--app-window-radius)',
         clipPath: 'inset(0 round var(--app-window-radius))',
         border: viewMode === 'stage'
-          ? '1.5px solid rgba(255, 255, 255, 0.10)'
+          ? 'none'
           : '1.5px solid var(--border-default)',
       }}
     >
@@ -114,7 +115,7 @@ export default function App() {
 
       {/* Stage 模式：整屏独立界面（无自定义背景时透出系统 Mica 模糊桌面） */}
       {viewMode === 'stage' && (
-        <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
+        <StageShell claude={claude} />
       )}
 
       {/* Chat 模式：侧边栏 + 聊天区（不受影响） */}
@@ -257,11 +258,15 @@ export default function App() {
       {viewMode === 'chat' && <SelectionActions onAction={claude.send} />}
 
       {/* InputBar outside main so backdrop-filter blurs through the page background */}
-      <InputBar
-        onSend={claude.send}
-        onCancel={claude.cancel}
-        isLoading={claude.isLoading}
-      />
+      {/* stage 设置视图打开时隐藏：设置是独立模式，不能透出主界面元素 */}
+      {!(viewMode === 'stage' && stageSettingsOpen) && (
+        <InputBar
+          onSend={claude.send}
+          onCancel={claude.cancel}
+          isLoading={claude.isLoading}
+          onOpenSettings={viewMode === 'stage' ? () => useStageStore.getState().setSettingsOpen(true) : undefined}
+        />
+      )}
 
       {/* Settings modal */}
       {settingsOpen && (
@@ -280,7 +285,7 @@ export default function App() {
       {viewMode === 'chat' && <RightSidebar />}
 
       {/* AskUser 问答卡片（agent 结构化提问，stage/chat 通用，必须始终可回应） */}
-      <AskUserCard />
+      {!(viewMode === 'stage' && stageSettingsOpen) && <AskUserCard />}
 
       {/* Resize handles — invisible border layer for frameless window drag-resize */}
       <ResizeBorder />

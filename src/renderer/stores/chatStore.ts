@@ -43,6 +43,9 @@ interface ChatState {
   /** Stage 自定义壁纸启用开关（false = 透出系统 Mica 模糊桌面）；壁纸素材本身保留在 stageBg */
   stageBgEnabled: boolean
 
+  /** 会话宽度上限（px）：消息气泡 + 底部输入栏共享；0 = 不限制（跟随窗口） */
+  conversationWidth: number
+
   // Sessions
   sessions: Session[]
   /** 会话归属工作区的权威记录（sessionId → chat/stage），独立持久化，
@@ -105,6 +108,8 @@ interface ChatState {
   setStageBg: (bg: string | null) => void
   /** Stage 自定义壁纸启用开关（false = 透出系统 Mica 模糊桌面） */
   setStageBgEnabled: (enabled: boolean) => void
+  /** 设置会话宽度上限（px，clamp 560~1280；0 = 不限制） */
+  setConversationWidth: (width: number) => void
 
   // Session actions
   addSession: (session: Session) => void
@@ -163,6 +168,8 @@ export const useChatStore = create<ChatState>()(
       theme: 'dark',
       stageBg: null,
       stageBgEnabled: false,
+
+      conversationWidth: 0,
 
       // Sessions state
       sessions: [],
@@ -244,6 +251,7 @@ export const useChatStore = create<ChatState>()(
       },
       setStageBg: (bg) => set({ stageBg: bg }),
       setStageBgEnabled: (enabled) => set({ stageBgEnabled: enabled }),
+      setConversationWidth: (width) => set({ conversationWidth: Math.min(1280, Math.max(0, width)) }),
 
       // Session actions
       addSession: (session) =>
@@ -324,6 +332,7 @@ export const useChatStore = create<ChatState>()(
         theme: state.theme,
         stageBg: state.stageBg,
         stageBgEnabled: state.stageBgEnabled,
+        conversationWidth: state.conversationWidth,
         sessions: state.sessions,
         sessionModes: state.sessionModes,
         config: state.config,

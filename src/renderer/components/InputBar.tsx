@@ -8,6 +8,53 @@ interface Props {
   onSend: (prompt: string, files?: FileAttachment[]) => void
   onCancel: () => void
   isLoading: boolean
+  // Stage 模式注入：头像点击菜单里的「设置」入口；不传则不显示头像
+  onOpenSettings?: () => void
+}
+
+// 账号头像按钮：输入框左侧，点击弹出 账号/设置 二级菜单
+export function AvatarButton({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  return (
+    <div className="stage-avatar-root">
+      {menuOpen && (
+        <>
+          <div className="stage-fab-menu-mask" onClick={() => setMenuOpen(false)} />
+          <div className="stage-avatar-menu">
+            <button
+              className="stage-fab-menu-item"
+              onClick={() => { setMenuOpen(false) }}
+            >
+              {/* 账号图标 */}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21v-1a7 7 0 0114 0v1" />
+              </svg>
+              账号
+            </button>
+            <button
+              className="stage-fab-menu-item"
+              onClick={() => { setMenuOpen(false); onOpenSettings() }}
+            >
+              {/* 设置齿轮 */}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82.33l.06.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+              </svg>
+              设置
+            </button>
+          </div>
+        </>
+      )}
+      <button
+        className="stage-avatar-btn"
+        onClick={() => setMenuOpen((v) => !v)}
+        title="账号"
+      >
+        <img src="assets/avatar.png" alt="账号" className="w-full h-full object-cover" draggable={false} />
+      </button>
+    </div>
+  )
 }
 
 function formatDuration(sec: number): string {
@@ -29,10 +76,11 @@ function FileIcon({ mimeType }: { mimeType: string }) {
   )
 }
 
-export function InputBar({ onSend, onCancel, isLoading }: Props) {
+export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props) {
   const [input, setInput] = useState('')
   const [hasVoice, setHasVoice] = useState(false)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const setOrbState = useChatStore((s) => s.setOrbState)
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
@@ -40,6 +88,7 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const viewMode = useStageStore((s) => s.viewMode)
+  const conversationWidth = useChatStore((s) => s.conversationWidth)
   // Stage 模式下侧边栏不存在，输入栏不预留其宽度
   const effectiveSidebarOpen = viewMode === 'stage' ? false : sidebarOpen
   const effectiveRightOpen = viewMode === 'stage' ? false : rightSidebarOpen
@@ -66,15 +115,17 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
     inputRef.current?.focus()
   }, [])
 
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handlePickFiles = async () => {
+    setPlusMenuOpen(false)
     const files = await window.claude.pickAndReadFiles()
     if (files && files.length > 0) {
       setAttachments((prev) => [...prev, ...files])
+      inputRef.current?.focus()
     }
-  }
-
-  const removeAttachment = (index: number) => {
-    setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleSubmit = () => {
@@ -139,28 +190,53 @@ export function InputBar({ onSend, onCancel, isLoading }: Props) {
 
       {/* Input row */}
       <div className="flex justify-center items-center gap-3 w-full">
-        {/* Plus Action Button */}
-        <button
-          onClick={handlePickFiles}
-          className="w-9 h-9 rounded-full glass-dock flex items-center justify-center text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] hover:bg-white/10 active:scale-90 transition-all duration-150 shrink-0 cursor-pointer"
-          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" />
-            <path d="M12 5v14" />
-          </svg>
-        </button>
+        {onOpenSettings && <AvatarButton onOpenSettings={onOpenSettings} />}
 
         {/* Main Input Container */}
         <div
-          className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group flex-1 h-9 max-w-4xl"
+          className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group flex-1 h-9"
           style={{
+            maxWidth: conversationWidth > 0 ? conversationWidth : undefined,
             boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
             border: voice.isRecording ? '1px solid var(--error)' : undefined,
           }}
         >
+          {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar */}
+          <div className="inputbar-plus-root" style={{ marginLeft: 4 }}>
+            {plusMenuOpen && (
+              <>
+                <div className="stage-fab-menu-mask" onClick={() => setPlusMenuOpen(false)} />
+                <div className="inputbar-plus-menu">
+                  <button
+                    className="stage-fab-menu-item"
+                    onClick={handlePickFiles}
+                  >
+                    {/* 图片 + 文件图标（Zeron Add photo & files 同款） */}
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="3" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="M21 15l-3.5-3.5L8 16" />
+                    </svg>
+                    Add photo &amp; files
+                  </button>
+                </div>
+              </>
+            )}
+            <button
+              className="stage-icon-btn"
+              onClick={() => setPlusMenuOpen((v) => !v)}
+              title="添加文件"
+              style={{ borderRadius: 999 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'transform 0.2s', transform: plusMenuOpen ? 'rotate(45deg)' : 'none' }}>
+                <path d="M5 12h14" />
+                <path d="M12 5v14" />
+              </svg>
+            </button>
+          </div>
+
           {/* Input Field */}
-          <div className="flex-1 flex items-center" style={{ paddingLeft: '20px', paddingRight: '16px' }}>
+          <div className="flex-1 flex items-center" style={{ paddingLeft: '8px', paddingRight: '16px' }}>
             <input
               ref={inputRef}
               type="text"

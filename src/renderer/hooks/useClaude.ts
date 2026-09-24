@@ -608,7 +608,10 @@ export function useClaude() {
 
   const send = useCallback(
     async (prompt: string, files?: FileAttachment[]) => {
-      if (!prompt.trim() || isLoading) return
+      // 仅附件无文字：直接放行（选了文件但没写 prompt 的场景）
+      const hasFiles = files && files.length > 0
+      if ((!prompt || !prompt.trim()) && !hasFiles) return
+      if (isLoading) return
 
       const workspace = useStageStore.getState().viewMode
       const store = useChatStore.getState()

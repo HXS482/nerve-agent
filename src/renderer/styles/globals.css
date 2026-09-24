@@ -208,7 +208,7 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
-  --app-window-radius: 19px;
+  --app-window-radius: 8px; /* 对齐 Win11 DWM 系统圆角（DWMWCP_ROUND ≈ 8px） */
   --app-shell-radius: 16px;
 
   /* Fluid typography — scales with viewport width (min 600px, max 1400px) */
@@ -1647,28 +1647,104 @@ button, a, input, textarea, select {
   display: flex;
   min-height: 0;
 }
-/* 会话入口：与底部输入栏保持同一水平线的悬浮按钮 */
-.stage-sessions-fab {
+
+/* 输入栏 + 按钮：点击向上弹 Add photo & files bar */
+.inputbar-plus-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.inputbar-plus-menu {
   position: absolute;
-  left: 12px;
-  /* 对齐底部输入栏的 + 按钮：InputBar 距根容器底 14px */
-  bottom: 10px;
-  z-index: 55;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 999px;
-  /* 复用 CoverFlow 翻页 dock 的毛玻璃质感 */
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-on-surface-variant);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: expand-in 0.2s ease-out;
+  z-index: 60;
 }
-.stage-sessions-fab:hover {
+
+/* 顶栏头像二级菜单：复用掩膜 + 弹出动画；左下角 FAB 样式已废弃删除 */
+.stage-fab-menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+}
+.stage-fab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-on-surface-variant);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.stage-fab-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-on-surface);
-  background: rgba(255, 255, 255, 0.1);
+}
+/* 菜单项同下拉条目：无边框圆角内条 */
+.stage-fab-menu-item {
+  border-radius: 8px;
+}
+
+/* 顶栏右侧账号头像按钮（原 + 按钮位置）+ 二级下拉菜单 */
+.stage-avatar-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.stage-avatar-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  cursor: pointer;
+  /* 头像外圈：细白毛玻璃环，与顶栏图标语言一致 */
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.stage-avatar-btn:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+.stage-avatar-menu {
+  position: absolute;
+  /* 头像在底部输入栏旁：菜单向上弹 */
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  /* 顶部模型选择下拉同款：浅白毛玻璃 */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: expand-in 0.2s ease-out;
+  z-index: 60;
 }
 
 /* 会话抽屉 */
@@ -1700,6 +1776,44 @@ button, a, input, textarea, select {
 @keyframes stage-drawer-in {
   from { transform: translate(-50%, -46%) scale(0.96); opacity: 0; }
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+/* Stage 设置：全屏推开（淡入 + 轻微上移，透出底下 Stage 毛玻璃） */
+@keyframes settings-full-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* 设置滑杆：Zeron 风格（细轨 + 实心圆点，accent 色） */
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent-primary) 0%,
+    var(--accent-primary) var(--fill, 50%),
+    var(--bg-surface-container-highest) var(--fill, 50%),
+    var(--bg-surface-container-highest) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.settings-slider::-webkit-slider-thumb:active {
+  transform: scale(1.25);
 }
 /* Stage 会话列表 */
 .stage-sessions {

@@ -11,16 +11,18 @@ import { UserLogTerminal } from './UserLogTerminal'
 import { ModelIsland } from '../ModelIsland'
 import { ApprovalBar } from '../ApprovalBar'
 import { SelectionActions } from '../SelectionActions'
+import { SettingsPanel } from '../SettingsPanel'
 
 interface Props {
   claude: ReturnType<typeof useClaude>
-  onOpenSettings: () => void
 }
 
 // StageShell —— Stage 模式的独立界面骨架
 // 顶栏（交通灯 + 会话抽屉 + 小球返回 + 模型 + 设置）+ 产物空间 + 固定状态点
-export function StageShell({ claude, onOpenSettings }: Props) {
+export function StageShell({ claude }: Props) {
   const setViewMode = useStageStore((s) => s.setViewMode)
+  const settingsOpen = useStageStore((s) => s.settingsOpen)
+  const setSettingsOpen = useStageStore((s) => s.setSettingsOpen)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const stageBg = useChatStore((s) => s.stageBg)
   const stageBgEnabled = useChatStore((s) => s.stageBgEnabled)
@@ -40,6 +42,18 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
+      {/* 设置模式：进入独立设置视图（Stage 内容整体卸载，背景直接透出系统 acrylic） */}
+      {settingsOpen && (
+        <SettingsPanel
+          docked
+          config={claude.config}
+          onUpdateConfig={claude.updateConfig}
+          onPickDirectory={claude.pickDirectory}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {!settingsOpen && (
+      <>
       {/* 背景：默认透明透出 Mica 模糊桌面；启用开关开着时渲染自定义壁纸（图片/视频/HTML） */}
       <div
         className="stage-bg"
@@ -72,10 +86,15 @@ export function StageShell({ claude, onOpenSettings }: Props) {
         </div>
 
         <div className="stage-topbar-right" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <button className="stage-icon-btn stage-settings-btn" onClick={onOpenSettings} title="Settings">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82.33l.06.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+          {/* 会话按钮：点击打开会话抽屉 */}
+          <button
+            className="stage-icon-btn"
+            onClick={() => setSessionsOpen((v) => !v)}
+            title="会话"
+          >
+            {/* Archive（填色版，fill 继承 currentColor） */}
+            <svg width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor">
+              <path d="M906.838603 912.325571 143.716192 912.325571c-27.590382 0-50.036603-22.447245-50.036603-50.036603l0-520.31027c0-27.590382 22.446221-50.036603 50.036603-50.036603l763.122411 0c27.590382 0 50.036603 22.447245 50.036603 50.036603l0 520.31027C956.875207 889.87935 934.427962 912.325571 906.838603 912.325571zM143.716192 322.640258c-10.481725 0-19.337417 8.855692-19.337417 19.337417l0 520.31027c0 10.481725 8.855692 19.337417 19.337417 19.337417l763.122411 0c10.481725 0 19.337417-8.855692 19.337417-19.337417l0-520.31027c0-10.482749-8.855692-19.337417-19.337417-19.337417L143.716192 322.640258zM594.651418 481.966986 455.902354 481.966986c-9.900487 0-21.249977-0.345877-30.632671-4.472871-12.514012-5.504364-19.404955-16.674775-19.404955-31.453363 0-27.590382 22.446221-50.036603 50.036603-50.036603l138.749064 0c27.590382 0 50.036603 22.446221 50.036603 50.036603 0 14.777565-6.890944 25.947975-19.404955 31.453363C615.901395 481.621109 604.552929 481.966986 594.651418 481.966986zM436.94356 449.034946c1.073448 0.862647 4.984524 2.232854 18.959817 2.232854l138.749064 0c13.975293 0 17.886369-1.369184 18.959817-2.232854 0.094144-0.234337 0.3776-1.100054 0.3776-2.994194 0-10.482749-8.855692-19.337417-19.337417-19.337417L455.902354 426.703335c-10.482749 0-19.337417 8.855692-19.337417 19.337417C436.564937 447.934892 436.848393 448.799586 436.94356 449.034946zM941.525614 287.953248 109.029182 287.953248c-27.590382 0-50.036603-22.447245-50.036603-50.036603l0-76.204589c0-27.590382 22.446221-50.036603 50.036603-50.036603l832.496431 0c27.590382 0 50.036603 22.447245 50.036603 50.036603l0 76.204589C991.562217 265.506003 969.115995 287.953248 941.525614 287.953248zM109.029182 142.373615c-10.482749 0-19.337417 8.855692-19.337417 19.337417l0 76.204589c0 10.482749 8.855692 19.337417 19.337417 19.337417l832.496431 0c10.481725 0 19.337417-8.855692 19.337417-19.337417l0-76.204589c0-10.482749-8.855692-19.337417-19.337417-19.337417L109.029182 142.373615z" />
             </svg>
           </button>
         </div>
@@ -136,20 +155,8 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
       {/* 选中文字的上下文 AI 操作条（stage：旁白/卡片文字划选） */}
       <SelectionActions onAction={claude.send} />
-
-      {/* 会话入口：左下角悬浮按钮（挂在 stage-shell 而非 stage-main：
-          stage-main 的 z-index 层叠上下文会把 z-55 压在全宽 InputBar(z-50) 之下） */}
-      <button
-        className="stage-icon-btn stage-sessions-fab"
-        onClick={() => setSessionsOpen((v) => !v)}
-        title="会话"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
-      </button>
+      </>
+      )}
     </div>
   )
 }

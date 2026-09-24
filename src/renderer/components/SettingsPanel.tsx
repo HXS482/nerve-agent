@@ -8,6 +8,7 @@ interface Props {
   onUpdateConfig: (partial: Partial<ClaudeConfig>) => void
   onPickDirectory: () => void
   onClose: () => void
+  docked?: boolean
 }
 
 type Tab = 'general' | 'soul' | 'persona' | 'provider' | 'mcp' | 'skills' | 'voice' | 'channels' | 'plugins'
@@ -22,7 +23,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
       </svg>
     ),
   },
@@ -391,8 +392,254 @@ function PluginsTab() {
 
 // --- Main Panel ---
 
-export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose }: Props) {
-  const [tab, setTab] = useState<Tab>('general')
+export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose, docked }: Props) {
+  const [tab, setTabState] = useState<Tab>('general')
+  // Tab 导航历史（Zeron 风格的前进/后退）
+  const [history, setHistory] = useState<Tab[]>(['general'])
+  const [cursor, setCursor] = useState(0)
+  // docked 侧栏折叠（内存态）：折叠后只剩内容区，浮条可再展开
+  const [railCollapsed, setRailCollapsed] = useState(false)
+
+  const setTab = (t: Tab) => {
+    // 历史中间位置点击新 Tab：截断前进分支（浏览器行为）
+    const trimmed = history.slice(0, cursor + 1)
+    setHistory([...trimmed, t])
+    setCursor(trimmed.length)
+    setTabState(t)
+  }
+  const goBack = () => {
+    if (cursor > 0) {
+      setCursor(cursor - 1)
+      setTabState(history[cursor - 1])
+    }
+  }
+  const goForward = () => {
+    if (cursor < history.length - 1) {
+      setCursor(cursor + 1)
+      setTabState(history[cursor + 1])
+    }
+  }
+
+  // docked：Stage 独立设置视图（非叠加层）—— Stage 内容此时已整体卸载，
+  // 本视图铺满窗口，半透明背景 + 系统级 acrylic 直接透出桌面模糊
+  if (docked) {
+    return (
+      <div
+        className="absolute inset-0 z-50 flex"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          // 与 Stage 主界面观感一致：基本全透，靠系统 acrylic 透桌面；薄纱层只保证文字可读
+          background: 'rgba(10, 10, 12, 0.28)',
+          animation: 'settings-full-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both',
+          overflow: 'hidden',
+        }}
+      >
+        {/* 左侧分类栏：顶部工具条（后退/前进/折叠）+ 图标导航（Zeron 风格）；折叠时隐藏 */}
+        {!railCollapsed && (
+        <div
+          className="shrink-0 flex flex-col"
+          style={{
+            width: 190,
+            borderRight: '1px solid var(--border-subtle)',
+            background: 'rgba(255,255,255,0.02)',
+          }}
+        >
+          {/* 顶部工具条：折叠（贴左缘）+ 后退/前进（贴右缘） */}
+          <div
+            className="flex items-center gap-1 no-select shrink-0"
+            style={{
+              padding: '12px 10px 6px',
+            }}
+          >
+            <button
+              onClick={() => setRailCollapsed(true)}
+              title="折叠侧栏"
+              className="cursor-pointer transition-colors"
+              style={{
+                padding: 4,
+                borderRadius: 6,
+                color: 'var(--text-outline)',
+                background: 'transparent',
+                border: 'none',
+                display: 'flex',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text-on-surface)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
+            >
+              {/* 折叠：面板推向右侧 */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="15" y1="4" x2="15" y2="20" />
+                <path d="M9 10l-2 2 2 2" />
+              </svg>
+            </button>
+            <div className="flex-1" />
+            <button
+              onClick={goBack}
+              disabled={cursor === 0}
+              title="Back"
+              className="cursor-pointer transition-colors disabled:cursor-default"
+              style={{
+                padding: 4,
+                borderRadius: 6,
+                color: cursor > 0 ? 'var(--text-outline)' : 'var(--text-outline-variant)',
+                opacity: cursor > 0 ? 1 : 0.4,
+                background: 'transparent',
+                border: 'none',
+                display: 'flex',
+              }}
+              onMouseEnter={(e) => { if (cursor > 0) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text-on-surface)' } }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = cursor > 0 ? 'var(--text-outline)' : 'var(--text-outline-variant)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M11 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              onClick={goForward}
+              disabled={cursor >= history.length - 1}
+              title="Forward"
+              className="cursor-pointer transition-colors"
+              style={{
+                padding: 4,
+                borderRadius: 6,
+                color: cursor < history.length - 1 ? 'var(--text-outline)' : 'var(--text-outline-variant)',
+                opacity: cursor < history.length - 1 ? 1 : 0.4,
+                background: 'transparent',
+                border: 'none',
+                display: 'flex',
+              }}
+              onMouseEnter={(e) => { if (cursor < history.length - 1) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text-on-surface)' } }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = cursor < history.length - 1 ? 'var(--text-outline)' : 'var(--text-outline-variant)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 分类标题 */}
+          <div className="no-select" style={{ padding: '14px 14px 6px' }}>
+            <div className="text-[11px]" style={{ color: 'var(--text-outline)' }}>
+              Settings
+            </div>
+          </div>
+
+          {/* 图标 + 文字导航（Zeron 风格：图标在左，整行高亮） */}
+          <div className="flex flex-col overflow-y-auto scrollbar-hide" style={{ padding: '0 8px 8px', gap: 1 }}>
+            {TABS.map((t) => {
+              const active = tab === t.id
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className="flex items-center transition-colors cursor-pointer"
+                  style={{
+                    gap: 9,
+                    padding: '7px 10px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: active ? 600 : 400,
+                    background: active ? 'rgba(173, 198, 255, 0.10)' : 'transparent',
+                    color: active ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.background = 'transparent'
+                  }}
+                >
+                  <span style={{ color: active ? 'var(--accent-primary)' : 'var(--text-outline)', display: 'flex' }}>
+                    {t.icon}
+                  </span>
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* 底部 Back：退出设置视图（Zeron 风格） */}
+          <div className="shrink-0" style={{ padding: '8px 8px 10px', marginTop: 'auto' }}>
+            <button
+              onClick={onClose}
+              className="flex items-center transition-colors cursor-pointer"
+              style={{
+                gap: 7,
+                width: '100%',
+                padding: '7px 10px',
+                borderRadius: 8,
+                fontSize: 12,
+                background: 'transparent',
+                color: 'var(--text-on-surface-variant)',
+                border: 'none',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-on-surface)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-on-surface-variant)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              Back
+            </button>
+          </div>
+        </div>
+        )}
+
+        {/* 右侧大窗口：具体设置内容 */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* 顶部：拖拽区 + 折叠时的展开按钮，无标题无分割线 */}
+          <div
+            className="flex items-center shrink-0"
+            style={{ padding: '10px 16px 4px', WebkitAppRegion: 'drag' } as React.CSSProperties}
+          >
+            {railCollapsed && (
+              <button
+                onClick={() => setRailCollapsed(false)}
+                title="展开侧栏"
+                className="cursor-pointer transition-colors"
+                style={{
+                  padding: 4,
+                  marginRight: 6,
+                  borderRadius: 6,
+                  color: 'var(--text-outline)',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'flex',
+                  WebkitAppRegion: 'no-drag',
+                } as React.CSSProperties}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text-on-surface)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
+              >
+                {/* 展开：面板拉出侧栏 */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="15" y1="4" x2="15" y2="20" />
+                  <path d="M17 10l2 2-2 2" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Tab content — scrollable */}
+          <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: 24 }}>
+            {tab === 'general' && (
+              <GeneralTab config={config} onUpdateConfig={onUpdateConfig} onPickDirectory={onPickDirectory} />
+            )}
+            {tab === 'soul' && <SoulTab />}
+            {tab === 'persona' && <PersonaTab />}
+            {tab === 'provider' && <ProviderTab />}
+            {tab === 'mcp' && <McpTab />}
+            {tab === 'skills' && <SkillsTab />}
+            {tab === 'voice' && <VoiceTab />}
+            {tab === 'channels' && <ChannelsTab />}
+            {tab === 'plugins' && <PluginsTab />}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -610,9 +857,51 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
         </div>
       </Section>
 
+      <Section title="Conversation width">
+        <ConversationWidthSlider />
+      </Section>
+
       <Section title="Stage 背景">
         <StageBgPicker />
       </Section>
+    </div>
+  )
+}
+
+// 会话宽度滑杆：控制消息气泡与底部输入栏的最大宽度，即时生效（Zeron 风格：左文案右滑杆）
+function ConversationWidthSlider() {
+  const conversationWidth = useChatStore((s) => s.conversationWidth)
+  const setConversationWidth = useChatStore((s) => s.setConversationWidth)
+  // 0 = 不限制（跟随窗口），否则 560~1280px
+  const sliderValue = conversationWidth === 0 ? 560 : conversationWidth
+  const label = conversationWidth === 0
+    ? '不限制 · 适应窗口'
+    : `${conversationWidth}px`
+
+  return (
+    <div>
+      <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+        <span className="text-[12px]" style={{ color: 'var(--text-on-surface-variant)' }}>
+          消息与输入栏的最大宽度。窄窗口下自动收缩。
+        </span>
+        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-outline)', marginLeft: 12, flexShrink: 0 }}>
+          {label}
+        </span>
+      </div>
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)' }}>不限</span>
+        <input
+          type="range"
+          min={560}
+          max={1280}
+          step={20}
+          value={sliderValue}
+          onChange={(e) => setConversationWidth(Number(e.target.value))}
+          className="settings-slider flex-1"
+          style={{ '--fill': `${((sliderValue - 560) / (1280 - 560)) * 100}%` } as React.CSSProperties}
+        />
+        <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)' }}>1280</span>
+      </div>
     </div>
   )
 }
