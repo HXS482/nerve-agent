@@ -35,6 +35,7 @@ const api = {
   pickDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.PICK_DIRECTORY),
   pickAndReadFiles: (): Promise<FileAttachment[]> => ipcRenderer.invoke(IPC_CHANNELS.PICK_AND_READ_FILES),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
+  getHostname: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.GET_HOSTNAME),
   getModels: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MODELS),
   listSessions: () => ipcRenderer.invoke(IPC_CHANNELS.LIST_SESSIONS),
   getSessionMessages: (sessionId: string) =>
@@ -180,6 +181,8 @@ const api = {
   gitLog: (cwd: string, maxCount?: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, cwd, maxCount),
   gitListBranches: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_LIST, cwd),
+  gitCurrentBranches: (cwds: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_CURRENT_BRANCHES, cwds),
   gitCheckout: (branch: string, cwd: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_CHECKOUT, branch, cwd),
   gitDiff: (files: string[] | undefined, cwd: string, staged?: boolean) =>

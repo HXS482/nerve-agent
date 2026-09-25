@@ -26,6 +26,7 @@ declare global {
       pickDirectory: () => Promise<string | null>
       pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
+      getHostname: () => Promise<string>
       listSessions: () => Promise<any[]>
       getSessionMessages: (sessionId: string) => Promise<any[]>
       deleteSessionRemote: (sessionId: string) => Promise<void>
@@ -64,6 +65,7 @@ declare global {
       branchSession: (sessionId: string, fromEntryId: string, branchName?: string) => Promise<string>
       switchBranch: (sessionId: string, branchName: string) => Promise<void>
       listBranches: (sessionId: string) => Promise<Array<{ name: string; head: string; active: boolean }>>
+      gitCurrentBranches: (cwds: string[]) => Promise<Record<string, string>>
       getProviders: () => Promise<Array<{ id: string; type: string; baseURL: string }>>
       getSessionUsage: (sessionId: string) => Promise<{ inputTokens: number; outputTokens: number; totalTokens: number; maxContextTokens: number }>
       saveStageBg: (buffer: ArrayBuffer, ext: string) => Promise<string>
@@ -174,8 +176,11 @@ export function useClaude() {
       // sessionModes 是权威源（独立持久化），sessions 列表上的 mode 只是镜像
       const sessionModes = useChatStore.getState().sessionModes
       const modeMap: Record<string, 'chat' | 'stage'> = {}
+      // cwd 快照同理：远端 session 摘要里没有 cwd，靠本地列表带过去
+      const cwdMap: Record<string, string> = {}
       for (const s of currentSessions) {
         if (s.mode) modeMap[s.id] = s.mode
+        if (s.cwd) cwdMap[s.id] = s.cwd
       }
 
       const remoteMapped: Session[] = remoteSessions.map((rs) => ({
@@ -186,6 +191,7 @@ export function useClaude() {
         updatedAt: rs.lastModified,
         platform: platformMap[rs.sessionId],
         mode: sessionModes[rs.sessionId] ?? modeMap[rs.sessionId],
+        cwd: cwdMap[rs.sessionId],
       }))
 
       const remoteIds = new Set(remoteMapped.map((s) => s.id))
@@ -629,6 +635,8 @@ export function useClaude() {
           createdAt: Date.now(),
           updatedAt: Date.now(),
           mode: workspace,
+          // 工作目录快照：侧栏条目靠它显示 repo / 分支
+          cwd: store.config.cwd || undefined,
         })
         if (workspace === 'stage') useStageStore.getState().setStageSessionId(sid)
         else setSessionId(sid)

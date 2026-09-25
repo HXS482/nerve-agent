@@ -2,7 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useChatStore } from '../stores/chatStore'
 import { useStageStore } from '../stores/stageStore'
+import { useGitStore } from '../stores/gitStore'
 import type { FileAttachment } from '../../shared/types'
+import { ContextRing } from './ContextRing'
+import { ModelIsland } from './ModelIsland'
 
 interface Props {
   onSend: (prompt: string, files?: FileAttachment[]) => void
@@ -10,10 +13,14 @@ interface Props {
   isLoading: boolean
   // Stage 模式注入：头像点击菜单里的「设置」入口；不传则不显示头像
   onOpenSettings?: () => void
+  currentModel?: string
+  onSelectModel?: (model: string, providerId?: string) => void
+  workingDirectory?: string
 }
 
-// 账号头像按钮：输入框左侧，点击弹出 账号/设置 二级菜单
-export function AvatarButton({ onOpenSettings }: { onOpenSettings: () => void }) {
+// 账号头像按钮：输入框/侧栏左下角，点击弹出 账号/设置 二级菜单
+// matchInput：尺寸对齐输入胶囊（h-9 = 2.25rem），用于输入栏左侧那枚
+export function AvatarButton({ onOpenSettings, matchInput }: { onOpenSettings: () => void; matchInput?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div className="stage-avatar-root">
@@ -47,11 +54,13 @@ export function AvatarButton({ onOpenSettings }: { onOpenSettings: () => void })
         </>
       )}
       <button
-        className="stage-avatar-btn"
+        className={`stage-avatar-btn${matchInput ? ' stage-avatar-btn-lg' : ''}`}
         onClick={() => setMenuOpen((v) => !v)}
         title="账号"
       >
-        <img src="assets/avatar.png" alt="账号" className="w-full h-full object-cover" draggable={false} />
+        {/* rounded-full 必须给图片本身：只靠父级 overflow:hidden 的话，图片被裁到的是
+            内边距圆的边界而不是它自己的轮廓，会露出方角 */}
+        <img src="assets/avatar.png" alt="账号" className="w-full h-full rounded-full object-cover" draggable={false} />
       </button>
     </div>
   )
@@ -76,7 +85,7 @@ function FileIcon({ mimeType }: { mimeType: string }) {
   )
 }
 
-export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props) {
+export function InputBar({ onSend, onCancel, isLoading, onOpenSettings, currentModel, onSelectModel, workingDirectory }: Props) {
   const [input, setInput] = useState('')
   const [hasVoice, setHasVoice] = useState(false)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
@@ -89,9 +98,51 @@ export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const viewMode = useStageStore((s) => s.viewMode)
   const conversationWidth = useChatStore((s) => s.conversationWidth)
-  // Stage 模式下侧边栏不存在，输入栏不预留其宽度
-  const effectiveSidebarOpen = viewMode === 'stage' ? false : sidebarOpen
+  const gitCwd = useGitStore((s) => s.cwd)
+  const gitStatus = useGitStore((s) => s.status)
+  const gitBranches = useGitStore((s) => s.branches)
+  const setGitCwd = useGitStore((s) => s.setCwd)
+  const fetchGitStatus = useGitStore((s) => s.fetchStatus)
+  const fetchGitBranches = useGitStore((s) => s.fetchBranches)
+  // stage 侧栏与 chat 侧栏机制不同：stage 侧栏宽度可拖拽，输入栏按实际宽度让位
+  const stageSidebarOpen = useStageStore((s) => s.sidebarOpen)
+  const stageSidebarWidth = useStageStore((s) => s.sidebarWidth)
+  const effectiveSidebarInset = viewMode === 'stage'
+    ? (stageSidebarOpen ? stageSidebarWidth : 0)
+    : (sidebarOpen ? sidebarWidth + 8 : 0)
   const effectiveRightOpen = viewMode === 'stage' ? false : rightSidebarOpen
+  const currentBranch = gitCwd === workingDirectory
+    ? gitStatus?.current || gitBranches.find((branch) => branch.current)?.name || ''
+    : ''
+
+  // 输入栏是 absolute 浮层，不占布局高度，靠写死数值避让它的浮层（右下角时间轴等）会撞上。
+  // 这里把「离底距离 + 实际高度」发布成 CSS 变量：附件撑高、窗口缩放都会自动跟着变。
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const publish = () =>
+      document.documentElement.style.setProperty('--input-bar-reserve', `${el.offsetHeight + 14}px`)
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      document.documentElement.style.removeProperty('--input-bar-reserve')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (viewMode === 'stage' && workingDirectory && gitCwd !== workingDirectory) {
+      setGitCwd(workingDirectory)
+    }
+  }, [viewMode, workingDirectory, gitCwd, setGitCwd])
+
+  useEffect(() => {
+    if (viewMode === 'stage' && workingDirectory && gitCwd === workingDirectory) {
+      void Promise.all([fetchGitStatus(), fetchGitBranches()])
+    }
+  }, [viewMode, workingDirectory, gitCwd, fetchGitStatus, fetchGitBranches])
 
   const voice = useVoiceInput((text) => {
     setHasVoice(true)
@@ -154,12 +205,13 @@ export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props)
 
   return (
     <div
+      ref={rootRef}
       className="absolute left-0 right-0 z-50 flex flex-col items-center gap-2"
       style={{
         paddingLeft: '11px',
         paddingRight: '11px',
         bottom: '14px',
-        marginLeft: effectiveSidebarOpen ? `${sidebarWidth + 8}px` : '4px',
+        marginLeft: effectiveSidebarInset ? `${effectiveSidebarInset}px` : '4px',
         marginRight: effectiveRightOpen ? `${rightSidebarWidth + 8}px` : '4px',
         transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
       }}
@@ -188,19 +240,25 @@ export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props)
         </div>
       )}
 
-      {/* Input row */}
-      <div className="flex justify-center items-center gap-3 w-full">
-        {onOpenSettings && <AvatarButton onOpenSettings={onOpenSettings} />}
+      {/* Input row：items-start —— stage 下输入框那列还要带一条状态行，
+          居中会让头像相对整列对齐、比输入胶囊低一截；顶对齐才能和胶囊等高重合 */}
+      <div className="flex justify-center items-start gap-3 w-full">
+        {onOpenSettings && !stageSidebarOpen && (
+          <AvatarButton onOpenSettings={onOpenSettings} matchInput />
+        )}
 
         {/* Main Input Container */}
         <div
-          className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group flex-1 h-9"
-          style={{
-            maxWidth: conversationWidth > 0 ? conversationWidth : undefined,
-            boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
-            border: voice.isRecording ? '1px solid var(--error)' : undefined,
-          }}
+          className="flex flex-col gap-1 flex-1 min-w-0"
+          style={{ maxWidth: conversationWidth > 0 ? conversationWidth : undefined }}
         >
+          <div
+            className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group w-full h-9"
+            style={{
+              boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
+              border: voice.isRecording ? '1px solid var(--error)' : undefined,
+            }}
+          >
           {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar */}
           <div className="inputbar-plus-root" style={{ marginLeft: 4 }}>
             {plusMenuOpen && (
@@ -252,6 +310,14 @@ export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props)
 
           {/* Right Actions */}
           <div className="flex items-center gap-1.5" style={{ paddingRight: '10px', paddingLeft: '4px' }}>
+            {currentModel && onSelectModel && (
+              <ModelIsland
+                currentModel={currentModel}
+                onSelectModel={onSelectModel}
+                dropdownAlign="right"
+                dropDirection="up"
+              />
+            )}
             {isLoading ? (
               <button
                 onClick={onCancel}
@@ -290,6 +356,40 @@ export function InputBar({ onSend, onCancel, isLoading, onOpenSettings }: Props)
               </button>
             )}
           </div>
+          </div>
+          {viewMode === 'stage' && (
+            <div
+              className="flex items-center justify-between"
+              style={{ minHeight: 20, width: 'calc(100% - 24px)', margin: '0 12px' }}
+            >
+              <div
+                className="flex min-w-0 items-center gap-2 overflow-hidden text-[10px]"
+                style={{ color: 'var(--text-on-surface-variant)' }}
+              >
+                <span className="inline-flex shrink-0 items-center gap-1.5" title={workingDirectory || 'Local checkout'}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7.5A2.5 2.5 0 015.5 5H9l2 2h7.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
+                  </svg>
+                  <span>Local checkout</span>
+                </span>
+                <span className="h-3 w-px shrink-0" style={{ background: 'var(--border-default)' }} />
+                <span
+                  className="inline-flex min-w-0 items-center gap-1.5"
+                  title={`Current branch: ${currentBranch || 'unknown'}`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <circle cx="6" cy="5" r="2" />
+                    <circle cx="18" cy="6" r="2" />
+                    <circle cx="6" cy="19" r="2" />
+                    <path d="M6 7v10" />
+                    <path d="M8 6h4a4 4 0 014 4v2a4 4 0 01-4 4H8" />
+                  </svg>
+                  <span className="truncate">{currentBranch || 'unknown'}</span>
+                </span>
+              </div>
+              <ContextRing compact />
+            </div>
+          )}
         </div>
       </div>
 

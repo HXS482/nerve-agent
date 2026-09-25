@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore } from '../stores/chatStore'
 import { isVideoBg, isHtmlBg, htmlFromDataUrl } from './Stage/StageBgMedia'
+import { SidebarToggleIcon } from './SidebarToggleIcon'
 
 interface Props {
   config: ClaudeConfig
@@ -456,22 +457,22 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
               title="折叠侧栏"
               className="cursor-pointer transition-colors"
               style={{
-                padding: 4,
+                width: 22,
+                height: 22,
+                padding: 0,
                 borderRadius: 6,
                 color: 'var(--text-outline)',
                 background: 'transparent',
                 border: 'none',
                 display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text-on-surface)' }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
             >
               {/* 折叠：面板推向右侧 */}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <line x1="15" y1="4" x2="15" y2="20" />
-                <path d="M9 10l-2 2 2 2" />
-              </svg>
+              <SidebarToggleIcon />
             </button>
             <div className="flex-1" />
             <button
@@ -592,7 +593,7 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
           {/* 顶部：拖拽区 + 折叠时的展开按钮，无标题无分割线 */}
           <div
             className="flex items-center shrink-0"
-            style={{ padding: '10px 16px 4px', WebkitAppRegion: 'drag' } as React.CSSProperties}
+            style={{ padding: '12px 10px 6px', WebkitAppRegion: 'drag' } as React.CSSProperties}
           >
             {railCollapsed && (
               <button
@@ -600,24 +601,24 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
                 title="展开侧栏"
                 className="cursor-pointer transition-colors"
                 style={{
-                  padding: 4,
+                  width: 22,
+                  height: 22,
+                  padding: 0,
                   marginRight: 6,
                   borderRadius: 6,
                   color: 'var(--text-outline)',
                   background: 'transparent',
                   border: 'none',
                   display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   WebkitAppRegion: 'no-drag',
                 } as React.CSSProperties}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text-on-surface)' }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-outline)' }}
               >
                 {/* 展开：面板拉出侧栏 */}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <line x1="15" y1="4" x2="15" y2="20" />
-                  <path d="M17 10l2 2-2 2" />
-                </svg>
+                <SidebarToggleIcon expanded />
               </button>
             )}
           </div>

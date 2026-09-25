@@ -9,6 +9,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useChatStore } from '../stores/chatStore'
+import { useStageStore } from '../stores/stageStore'
 import type { AskUserAnswers, AskUserRequest } from '../../shared/types'
 
 const ROLL_MS = 400
@@ -107,6 +108,8 @@ export function AskUserCard() {
 
 function AskUserCardInner({ ask }: { ask: AskUserRequest }) {
   const removeAsk = useChatStore((s) => s.removeAsk)
+  // stage 侧栏展开时卡片跟随 stage 主区居中，不压到侧栏上
+  const stageInset = useStageStore((s) => s.viewMode === 'stage' && s.sidebarOpen)
   // IPC 边界防御：畸形 questions（如对象嵌在 options 里）若直接渲染会崩掉整棵 React 树
   const questions = (Array.isArray(ask.questions) ? ask.questions : []).map((raw: any) => ({
     q: typeof raw?.q === 'string' ? raw.q : String(raw?.q ?? ''),
@@ -228,7 +231,7 @@ function AskUserCardInner({ ask }: { ask: AskUserRequest }) {
 
   if (sent) {
     return (
-      <div className="ask-card-wrap">
+      <div className={`ask-card-wrap${stageInset ? ' is-stage-inset' : ''}`}>
         <div className="ask-card ask-card-sent">
           <span className="ask-card-sent-badge">
             <span className="ask-card-sent-ico">
@@ -242,7 +245,7 @@ function AskUserCardInner({ ask }: { ask: AskUserRequest }) {
   }
 
   return (
-    <div className="ask-card-wrap">
+    <div className={`ask-card-wrap${stageInset ? ' is-stage-inset' : ''}`}>
       <div className="ask-card">
         <button type="button" aria-label="关闭" onClick={dismiss} className="ask-card-x">
           <Ico size={14} sw={2.2} path={<path d="M18 6L6 18M6 6l12 12" />} />

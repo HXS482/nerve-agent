@@ -91,6 +91,7 @@ export class AgentCore {
     this.settings = config.settings || loadSettings()
     this.sourceDir = config.sourceDir
     this.projectDir = this.settings.cwd || config.projectDir
+    this.config.cwd = this.projectDir
 
     // Initialize config from settings
     if (this.settings.model) this.config.model = this.settings.model
@@ -470,6 +471,12 @@ export class AgentCore {
     // Write 工具纪律：仅当用户明确要求保存/创建/修改文件时才落盘；
     // 文稿、文章、草稿等阅读型内容默认直接输出正文，不写文件
     systemPrompt += '\n\n## File Writing Discipline\nUse the `Write` tool ONLY when the user explicitly asks to save, create, or modify a file (or when doing coding work on files in the project). For essays, drafts, articles, plans, letters, and other readable content, output the full text directly in your reply as the response — do NOT write it to a file unless the user asks. Temporary or one-off content lives in the conversation, not on disk. When unsure whether to save, just reply with the content; the user can ask you to save it afterwards.'
+
+    // 图片上下文规则：用户附带图片提问时，优先理解图片内容并回答文字问题，
+    // 除非用户明确要求生成图片，否则不要调用 GenerateImage
+    if (payload.files?.some(f => f.isImage)) {
+      systemPrompt += '\n\n## Image Context Rule\nThe user has attached an image as context for their question. Read and understand the image, then answer their question with text. Do NOT call GenerateImage unless the user explicitly asks to create or generate an image.'
+    }
 
     return { messages, systemPrompt, mcpTools }
   }

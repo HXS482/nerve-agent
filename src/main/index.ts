@@ -121,9 +121,13 @@ function createWindow(): BrowserWindow {
   })
 
   // DWM can redraw the inactive frame on focus changes, so keep the HWND style clean.
+  // Also force background material re-render when unfocused — Windows DWM stops painting it on blur.
   const syncWindowChrome = () => {
     applyDwmFix(window)
+    window.setBackgroundMaterial('acrylic')
   }
+
+  window.webContents.setBackgroundThrottling(false)
 
   window.on('focus', syncWindowChrome)
   window.on('blur', syncWindowChrome)

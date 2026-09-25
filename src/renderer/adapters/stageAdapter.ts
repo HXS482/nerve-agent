@@ -214,7 +214,6 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
         .join(' ')
       const r = newRound(msg.id, msg.timestamp, userText, true)
       msg.content.forEach((b, i) => {
-        if (b.type === 'image' && b.src) r.artifactCards.push({ id: `${msg.id}:im${i}`, kind: 'image', block: b, timestamp: msg.timestamp })
         if (b.type === 'file') r.artifactCards.push({ id: `${msg.id}:fl${i}`, kind: 'file', block: b, timestamp: msg.timestamp })
       })
       continue

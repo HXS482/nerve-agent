@@ -69,6 +69,12 @@ export class GitService {
     }))
   }
 
+  /** 当前所在分支名（detached HEAD 时为 'HEAD'）；非 git 目录会抛错，调用方自行兜底 */
+  async getCurrentBranch(cwd: string): Promise<string> {
+    const git = simpleGit({ baseDir: cwd })
+    return (await git.revparse(['--abbrev-ref', 'HEAD'])).trim()
+  }
+
   async checkout(cwd: string, branch: string): Promise<void> {
     const git = simpleGit({ baseDir: cwd })
     await git.checkout(branch)

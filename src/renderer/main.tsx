@@ -18,7 +18,7 @@ function loadHighlightTheme(theme: string) {
   document.head.appendChild(link)
 }
 
-// Load initial theme
+// Load initial theme from localStorage
 const savedTheme = (() => {
   try {
     const raw = localStorage.getItem('nerve-state')

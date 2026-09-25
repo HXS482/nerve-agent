@@ -14,6 +14,8 @@ export interface Session {
   platform?: string
   /** 会话所属界面模式；旧会话无此字段 → 归 chat */
   mode?: 'chat' | 'stage'
+  /** 创建该会话时的工作目录快照；旧会话无此字段 → 回落到全局 config.cwd */
+  cwd?: string
 }
 
 export interface FlowItem {

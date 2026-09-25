@@ -460,13 +460,16 @@ button, a, input, textarea, select {
   min-height: 0;
 }
 
-/* Stage 背景层 —— 默认透明（透出系统 Mica 模糊桌面），自定义壁纸时由内联样式覆盖 */
+/* Stage 背景层 —— 自定义壁纸时由内联样式覆盖。
+   实验：与侧栏对调色调，这里拿原侧栏的暗板 + 模糊 */
 .stage-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: transparent;
+  background: rgba(20, 20, 24, 0.55);
+  backdrop-filter: blur(30px) saturate(140%);
+  -webkit-backdrop-filter: blur(30px) saturate(140%);
 }
 /* 默认动态背景：Predictive Arc 点阵弧光（PredictiveArcBg.tsx） */
 .stage-bg-predictive {
@@ -525,7 +528,8 @@ button, a, input, textarea, select {
 .stage-coverflow {
   position: absolute;
   left: -32px;
-  bottom: 48px;
+  /* 同时间轴：避让输入栏的实际占位 */
+  bottom: calc(var(--input-bar-reserve, 78px) + 12px);
   width: 240px;
   height: 200px;
   z-index: 30;
@@ -1236,7 +1240,12 @@ button, a, input, textarea, select {
   justify-content: center;
   pointer-events: none;
   z-index: 15;
-  padding: 56px 0 72px;
+  /* 居中优先：窗口够宽时左右内边距都是 0，正文严格居中、和改动前一致；
+     只有「居中的 620px 正文会压到左侧面板」时才右移，且只移刚刚够的距离。
+       2*gutter - (100% - 620px) = 让居中后的正文左缘正好落在 gutter 上的内边距，
+       负值代表本来就够宽 → 钳到 0；上限 gutter，极窄窗退化为整块让位 */
+  padding: 56px 0 72px
+    min(var(--stage-think-gutter), max(0px, calc(2 * var(--stage-think-gutter) - 100% + 620px)));
 }
 .narration-scroll {
   width: 100%;
@@ -1316,7 +1325,10 @@ button, a, input, textarea, select {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  padding: 56px 24px 90px;
+  /* 同 .narration-layer 的居中优先策略；常量用 504px = 卡片 480 + 右边距 24，
+     这样钳位后的呼吸间隙和旁白层一致 */
+  padding: 56px 24px 90px
+    min(var(--stage-think-gutter), max(0px, calc(2 * var(--stage-think-gutter) - 100% + 504px)));
 }
 .writing-card {
   width: min(480px, 100%);
@@ -1569,17 +1581,20 @@ button, a, input, textarea, select {
   background: transparent;
   border-radius: var(--app-window-radius);
 }
-/* Stage 模式全局隐藏滚动条（壁纸悬浮美学，滚动功能保留） */
-.stage-shell * {
+/* Stage 模式全局隐藏滚动条（壁纸悬浮美学，滚动功能保留）；
+   侧栏是 .stage-shell 的兄弟节点，得单独列一条 */
+.stage-shell *,
+.stage-sidebar * {
   scrollbar-width: none;
 }
-.stage-shell *::-webkit-scrollbar {
+.stage-shell *::-webkit-scrollbar,
+.stage-sidebar *::-webkit-scrollbar {
   display: none;
 }
 .stage-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 3px 12px 8px;
   position: absolute;
   top: 0;
@@ -1588,12 +1603,6 @@ button, a, input, textarea, select {
   background: transparent;
   z-index: 30;
   flex-shrink: 0;
-}
-.stage-topbar-left,
-.stage-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 /* 小球按钮化（chat 进 / stage 出） */
 .task-orb-btn {
@@ -1646,6 +1655,11 @@ button, a, input, textarea, select {
   z-index: 1;
   display: flex;
   min-height: 0;
+  /* 左侧思考面板的宽度 + 它占用的横向安全带。主内容列（旁白 / 写作卡）拿 gutter
+     做左右留白，两边同源：窗口变窄时先收窄居中列，而不是让它钻到面板底下。
+     38% 上限是防呆，避免极窄窗口把内容区压成 0 */
+  --stage-think-width: min(200px, 26vw);
+  --stage-think-gutter: min(calc(20px + var(--stage-think-width) + 16px), 40%);
 }
 
 /* 输入栏 + 按钮：点击向上弹 Add photo & files bar */
@@ -1710,9 +1724,10 @@ button, a, input, textarea, select {
   align-items: center;
 }
 .stage-avatar-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  width: 26px;
+  height: 26px;
+  /* 内缩出环缝：照片与边框之间留一圈，缝隙里露的是按钮自己的毛玻璃底 */
+  padding: 2px;
   border-radius: 999px;
   overflow: hidden;
   cursor: pointer;
@@ -1722,10 +1737,16 @@ button, a, input, textarea, select {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+/* 输入栏左侧那枚：直径跟输入胶囊的 h-9 对齐（2.25rem，同样吃根字号） */
+.stage-avatar-btn.stage-avatar-btn-lg {
+  width: 2.25rem;
+  height: 2.25rem;
+}
 .stage-avatar-btn:hover {
   border-color: rgba(255, 255, 255, 0.5);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
 }
+/* 设置齿轮：与头像同款圆形玻璃按钮 */
 .stage-avatar-menu {
   position: absolute;
   /* 头像在底部输入栏旁：菜单向上弹 */
@@ -1747,35 +1768,88 @@ button, a, input, textarea, select {
   z-index: 60;
 }
 
-/* 会话抽屉 */
-.stage-drawer-mask {
-  position: absolute;
-  inset: 0;
-  z-index: 39;
-  background: rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  animation: fade-in-simple 0.15s ease-out;
-}
-.stage-drawer {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(380px, calc(100% - 48px));
-  height: min(460px, calc(100% - 96px));
-  z-index: 40;
-  overflow: hidden;
-  background: var(--dynamic-island-bg);
-  backdrop-filter: var(--dynamic-island-blur);
-  -webkit-backdrop-filter: var(--dynamic-island-blur);
-  border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48), 0 2px 10px rgba(0, 0, 0, 0.22);
-  animation: stage-drawer-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
+/* 弹层入场关键帧（ask-card 等复用） */
 @keyframes stage-drawer-in {
   from { transform: translate(-50%, -46%) scale(0.96); opacity: 0; }
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+/* Stage 独立侧栏：半透明暗板 + 模糊，底下仍透出系统 Mica */
+.stage-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--stage-sidebar-width, 360px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* 实验：与 .stage-bg 对调色调，这里退回全透明（直接透出 Mica） */
+  background: transparent;
+  /* 与主区的分界线做成右边框：和背景块同属一个元素，物理上不可能出现缝隙 */
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  /* 入场：与主表面的 margin-left 过渡共用 0.3s ease，右缘和主区左缘锁在一起。
+     不设 fill-mode —— 结束即回到 transform: none，不给 fixed 后代（头像菜单遮罩）建包含块 */
+  animation: stage-sidebar-in 0.3s ease;
+}
+@keyframes stage-sidebar-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+/* 顶部留出固定层红绿灯那一行的高度 */
+.stage-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  padding-top: 44px;
+}
+.stage-sidebar-body .stage-sessions {
+  flex: 1;
+  min-height: 0;
+}
+/* 账号/设置入口：侧栏展开时钉在侧栏左下角 */
+.stage-sidebar-avatar {
+  position: absolute;
+  left: 12px;
+  bottom: 14px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+}
+/* 调宽手柄：分界线上的竖向命中区（顶部让开红绿灯那一行），本身不画线 */
+.stage-sidebar-resizer {
+  position: fixed;
+  top: 30px;
+  bottom: 0;
+  width: 9px;
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+/* 窗口级固定层：红绿灯 + 侧栏折叠按钮，位置不随应用表面右移 */
+.stage-window-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0 0;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+.stage-window-controls > * {
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+/* 侧栏展开：应用表面整体右移（宽度由 stageStore 的 sidebarWidth 决定） */
+.stage-shell {
+  transition: margin-left 0.3s ease;
 }
 /* Stage 设置：全屏推开（淡入 + 轻微上移，透出底下 Stage 毛玻璃） */
 @keyframes settings-full-in {
@@ -1815,120 +1889,255 @@ button, a, input, textarea, select {
 .settings-slider::-webkit-slider-thumb:active {
   transform: scale(1.25);
 }
-/* Stage 会话列表 */
+/* Stage 会话列表：项目头 + 三段式条目
+   容器查询上下文：下面所有字号/间距用 cqw（1% 容器宽）随侧栏拖拽连续缩放 */
 .stage-sessions {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px 10px;
+  padding: 0 6px;
+  container-type: inline-size;
+  container-name: stagebar;
 }
-.stage-sessions-header {
+
+/* 项目头：📁 repo @ host ⌄   ＋ */
+.stage-project-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 2px 4px 10px;
+  gap: 2px;
+  height: clamp(30px, 9.5cqw, 36px);
+  flex-shrink: 0;
+  margin-bottom: 8px;
 }
-.stage-sessions-title {
-  font-size: 10px;
+.stage-project-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-on-surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.stage-project-pick:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.stage-project-icon {
+  flex-shrink: 0;
+  width: clamp(14px, 4.7cqw, 17px);
+  height: clamp(14px, 4.7cqw, 17px);
+  /* 实心图形比同级描边图标视觉更重，提亮到与项目名同色 */
+  color: var(--text-on-surface);
+}
+/* 名字与机器名同基线：小字自然落在名字的右下角（图标各自居中，不参与基线对齐） */
+.stage-project-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.stage-project-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: clamp(12px, 4.3cqw, 15px);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-outline-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.stage-sessions-new {
+.stage-project-host {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: clamp(8px, 2.5cqw, 9px);
+  color: var(--text-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 靠右：与参考图一致，折叠箭头贴项目头右缘而非紧贴机器名 */
+.stage-project-chevron {
+  flex-shrink: 0;
+  width: clamp(11px, 3.5cqw, 14px);
+  height: clamp(11px, 3.5cqw, 14px);
+  margin-left: auto;
+  color: var(--text-on-surface-variant);
+}
+.stage-project-new {
+  flex-shrink: 0;
+  width: clamp(24px, 7.5cqw, 28px);
+  height: clamp(24px, 7.5cqw, 28px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  border: 1px dashed var(--border-default);
+  border: none;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-on-surface-variant);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
-.stage-sessions-new:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+.stage-project-new:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-on-surface);
 }
+.stage-project-new > svg {
+  width: clamp(12px, 3.8cqw, 15px);
+  height: clamp(12px, 3.8cqw, 15px);
+}
+
 .stage-sessions-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: clamp(2px, 1.2cqw, 4px);
+  /* 底部给左下角账号头像让位（头像高 26 + 距底 14） */
+  padding-bottom: 46px;
 }
 .stage-sessions-empty {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-outline-variant);
   text-align: center;
   padding: 24px 0;
 }
+
+/* 条目：仓库 @ 机器 + 时间 / 标题 / 分支 */
 .stage-session-item {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 9px;
+  flex-direction: column;
+  gap: clamp(1px, 0.5cqw, 2px);
+  padding: clamp(5px, 1.9cqw, 7px) clamp(8px, 2.9cqw, 11px);
+  border-radius: clamp(9px, 3.4cqw, 12px);
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
 .stage-session-item:hover {
-  background: var(--bg-surface-container);
+  background: rgba(255, 255, 255, 0.05);
 }
 .stage-session-item.is-active {
-  background: var(--bg-surface-container);
-  border-color: var(--border-default);
+  background: rgba(255, 255, 255, 0.07);
 }
-.stage-session-main {
+.stage-session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stage-session-scope {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.stage-session-title {
-  font-size: 12px;
-  color: var(--text-on-surface);
+  font-size: clamp(10px, 3cqw, 11px);
+  line-height: 1.4;
+  color: var(--text-outline);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.stage-session-time {
-  font-size: 10px;
-  color: var(--text-outline-variant);
-}
-.stage-session-del {
+/* 时间与操作同格：hover 时时间淡出、操作浮出 */
+.stage-session-aside {
+  position: relative;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  display: flex;
+  align-items: center;
+}
+.stage-session-time {
+  font-size: clamp(10px, 3cqw, 11px);
+  line-height: 1.4;
+  color: var(--text-outline);
+  transition: opacity 0.12s;
+}
+.stage-session-actions {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.stage-session-item:hover .stage-session-time {
+  opacity: 0;
+}
+.stage-session-item:hover .stage-session-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.stage-session-act {
+  width: clamp(14px, 4.5cqw, 17px);
+  height: clamp(14px, 4.5cqw, 17px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-outline);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
-.stage-session-item:hover .stage-session-del {
-  opacity: 1;
+.stage-session-act:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-on-surface);
 }
-.stage-session-del:hover {
+.stage-session-act.is-danger:hover {
   color: var(--error);
 }
 
+.stage-session-title {
+  font-size: clamp(12px, 4.2cqw, 14.5px);
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--text-on-surface);
+  /* 未选中压暗：和选中底一起构成选中态，选中/悬停回全亮 */
+  opacity: 0.68;
+  transition: opacity 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-session-item:hover .stage-session-title,
+.stage-session-item.is-active .stage-session-title {
+  opacity: 1;
+}
+/* 无分支时用 min-height 保行高，条目高度统一 */
+.stage-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.4em;
+  font-size: clamp(10px, 3cqw, 11px);
+  line-height: 1.4;
+  color: var(--text-outline);
+}
+.stage-session-branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 分支图标跟着字号缩（覆盖 SVG 上的 width/height 属性） */
+.stage-session-meta > svg {
+  flex-shrink: 0;
+  width: clamp(9px, 2.7cqw, 11px);
+  height: clamp(9px, 2.7cqw, 11px);
+}
+
 /* ===== 用户消息时间轴（右下角）：Hook Sidebar 钩轨导航 =====
-   左缘一根常驻导轨（焦点=绿色实线+圆角钩子；悬停=灰色虚线预览），
+   左缘一根常驻导轨（焦点=绿色实线+圆角钩子；悬停灰色虚线预览），
    钩子按行中心独立定位（ResizeObserver 测量），行文本右贴。 */
 .user-log-timeline {
   position: absolute;
   right: 40px;
-  bottom: 52px;
+  /* 输入栏是 absolute 浮层（不占布局高度），这里按它的实际占位避让：
+     数值由 InputBar 的 ResizeObserver 发布，附件撑高 / 窗口缩放都会跟着变 */
+  bottom: calc(var(--input-bar-reserve, 78px) + 12px);
   z-index: 35;
   display: flex;
   flex-direction: column;
@@ -2066,10 +2275,9 @@ button, a, input, textarea, select {
   position: absolute;
   top: 100%;
   left: 0;
-  /* 限宽：不侵占主内容区（参照视口宽度，.think-spot 自身只有图标宽，不能用 %）；
-     限高：不压下方工具 dock */
-  width: 260px;
-  max-width: 40vw;
+  /* 宽度取自 --stage-think-width（见 .stage-main）：与主内容列的安全带同源，
+     改一处两个一起动 */
+  width: var(--stage-think-width);
   pointer-events: auto;
   /* 无边框无底卡：思考文本直接悬浮在壁纸上；滚动由内容区自己承担 */
   margin-top: 6px;
@@ -3248,6 +3456,11 @@ pre.hljs {
   inset: 0;
   z-index: 60;
   pointer-events: none;
+}
+/* stage 侧栏展开：居中基准右移半个侧栏，卡片落在 stage 主区内 */
+.ask-card-wrap.is-stage-inset .ask-card {
+  left: calc(50% + var(--stage-sidebar-width, 360px) / 2);
+  transition: left 0.3s ease;
 }
 .ask-card {
   position: absolute;

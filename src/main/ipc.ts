@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { readdirSync, statSync, readFileSync } from 'fs'
 import { join, relative, extname, basename, resolve } from 'path'
-import { homedir } from 'os'
+import { homedir, hostname } from 'os'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
@@ -320,6 +320,9 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     return readMemoryContent(type, id)
   })
 
+  // System
+  ipcMain.handle(IPC_CHANNELS.GET_HOSTNAME, () => hostname())
+
   // File explorer
   ipcMain.handle(IPC_CHANNELS.LIST_DIR, async (_event, dirPath: string) => {
     try {
@@ -402,6 +405,19 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_event, cwd: string) => {
     return gitService.listBranches(cwd)
+  })
+
+  // 批量取当前分支（侧栏会话条目）：非 git 目录 / 无权限各自兜底成空串
+  ipcMain.handle(IPC_CHANNELS.GIT_CURRENT_BRANCHES, async (_event, cwds: string[]) => {
+    const branches: Record<string, string> = {}
+    await Promise.all(cwds.map(async (cwd) => {
+      try {
+        branches[cwd] = await gitService.getCurrentBranch(cwd)
+      } catch {
+        branches[cwd] = ''
+      }
+    }))
+    return branches
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_CHECKOUT, async (_event, branch: string, cwd: string) => {
