@@ -460,16 +460,13 @@ button, a, input, textarea, select {
   min-height: 0;
 }
 
-/* Stage 背景层 —— 自定义壁纸时由内联样式覆盖。
-   实验：与侧栏对调色调，这里拿原侧栏的暗板 + 模糊 */
+/* Stage 背景层 —— 默认透明（透出系统 Mica 模糊桌面），自定义壁纸时由内联样式覆盖 */
 .stage-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: rgba(20, 20, 24, 0.55);
-  backdrop-filter: blur(30px) saturate(140%);
-  -webkit-backdrop-filter: blur(30px) saturate(140%);
+  background: transparent;
 }
 /* 默认动态背景：Predictive Arc 点阵弧光（PredictiveArcBg.tsx） */
 .stage-bg-predictive {
@@ -1784,8 +1781,9 @@ button, a, input, textarea, select {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* 实验：与 .stage-bg 对调色调，这里退回全透明（直接透出 Mica） */
-  background: transparent;
+  background: rgba(20, 20, 24, 0.55);
+  backdrop-filter: blur(30px) saturate(140%);
+  -webkit-backdrop-filter: blur(30px) saturate(140%);
   /* 与主区的分界线做成右边框：和背景块同属一个元素，物理上不可能出现缝隙 */
   border-right: 1px solid rgba(255, 255, 255, 0.18);
   /* 入场：与主表面的 margin-left 过渡共用 0.3s ease，右缘和主区左缘锁在一起。
