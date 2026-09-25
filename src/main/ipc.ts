@@ -5,7 +5,7 @@ import { homedir } from 'os'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig } from './settings'
+import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig, isRemoteMcpConfig, type McpServerConfig } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath, getImagesDir } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
@@ -228,7 +228,12 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return
     for (const [name, config] of Object.entries(servers)) {
       if (typeof name !== 'string' || !config || typeof config !== 'object') return
-      const c = config as any
+      const c = config as McpServerConfig
+      // 远端 MCP：给了 url 就走 HTTP，不要求 command
+      if (isRemoteMcpConfig(c)) {
+        if (c.headers !== undefined && (typeof c.headers !== 'object' || Array.isArray(c.headers))) return
+        continue
+      }
       if (typeof c.command !== 'string' || c.command.length === 0) return
       if (c.args !== undefined && !Array.isArray(c.args)) return
       if (c.env !== undefined && (typeof c.env !== 'object' || Array.isArray(c.env))) return

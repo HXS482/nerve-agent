@@ -195,6 +195,35 @@ function TextInput({ value, onChange, placeholder, type = 'text', mono, rightSlo
   )
 }
 
+/** 多行键值输入：TextInput 的 textarea 版（env / headers 共用） */
+function MultilineInput({ value, onChange, placeholder, rows = 3 }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  rows?: number
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full outline-none transition-colors resize-none"
+      style={{
+        padding: '7px 10px',
+        borderRadius: 8,
+        fontSize: 11,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        background: 'var(--bg-surface-container-high)',
+        color: 'var(--text-on-surface)',
+        border: '1px solid var(--border-subtle)',
+      }}
+      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-primary)' }}
+      onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
+    />
+  )
+}
+
 function PrimaryButton({ children, onClick, disabled }: {
   children: React.ReactNode
   onClick: () => void
@@ -1270,8 +1299,31 @@ function ProviderTab() {
 
 interface McpServerConfig {
   type: string
-  command: string
+  /** 本地 stdio 的命令；远端（配了 url）时不需要 */
+  command?: string
+  args?: string[]
   env?: Record<string, string>
+  /** 远端 MCP 地址：有 url 就走 HTTP，不起本地进程 */
+  url?: string
+  headers?: Record<string, string>
+}
+
+/** 键名像凭证的，展示时打码（env 与 headers 共用） */
+const isSecretKey = (k: string) => /key|token|auth|secret/i.test(k)
+
+/** 解析 KEY=VALUE 逐行 / JSON 两种写法（env 与 headers 共用） */
+function parseKeyValues(raw: string): Record<string, string> | undefined {
+  if (!raw.trim()) return undefined
+  try {
+    return JSON.parse(raw)
+  } catch {
+    const out: Record<string, string> = {}
+    for (const line of raw.split('\n')) {
+      const [k, ...rest] = line.split('=')
+      if (k.trim()) out[k.trim()] = rest.join('=').trim()
+    }
+    return out
+  }
 }
 
 interface McpServerStatus {
@@ -1291,8 +1343,11 @@ function McpTab() {
   const [statusMap, setStatusMap] = useState<Record<string, McpServerStatus>>({})
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newMode, setNewMode] = useState<'stdio' | 'remote'>('stdio')
   const [newCommand, setNewCommand] = useState('')
   const [newEnv, setNewEnv] = useState('')
+  const [newUrl, setNewUrl] = useState('')
+  const [newHeaders, setNewHeaders] = useState('')
   const [saved, setSaved] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -1319,23 +1374,19 @@ function McpTab() {
   }
 
   const handleAdd = () => {
-    if (!newName.trim() || !newCommand.trim()) return
-    let env: Record<string, string> | undefined
-    if (newEnv.trim()) {
-      try {
-        env = JSON.parse(newEnv)
-      } catch {
-        env = {}
-        for (const line of newEnv.split('\n')) {
-          const [k, ...rest] = line.split('=')
-          if (k.trim()) env[k.trim()] = rest.join('=').trim()
-        }
-      }
-    }
-    setServers({ ...servers, [newName.trim()]: { type: 'stdio', command: newCommand.trim(), env } })
+    const name = newName.trim()
+    if (!name) return
+    const next: McpServerConfig = newMode === 'remote'
+      ? { type: 'http', url: newUrl.trim(), headers: parseKeyValues(newHeaders) }
+      : { type: 'stdio', command: newCommand.trim(), env: parseKeyValues(newEnv) }
+    // 必填项：远端要 url，本地要 command
+    if (newMode === 'remote' ? !next.url : !next.command) return
+    setServers({ ...servers, [name]: next })
     setNewName('')
     setNewCommand('')
     setNewEnv('')
+    setNewUrl('')
+    setNewHeaders('')
     setAdding(false)
   }
 
@@ -1383,7 +1434,7 @@ function McpTab() {
                   {MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].label}
                 </span>
                 <span className="text-[10px] truncate" style={{ color: 'var(--text-outline)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', maxWidth: 200 }}>
-                  {cfg.command}
+                  {cfg.url || cfg.command}
                 </span>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(name) }}
@@ -1420,7 +1471,9 @@ function McpTab() {
                   }}
                 >
                   <div><span style={{ color: 'var(--text-outline)' }}>type:</span> {cfg.type}</div>
-                  <div><span style={{ color: 'var(--text-outline)' }}>command:</span> {cfg.command}</div>
+                  {cfg.url
+                    ? <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>url:</span> {cfg.url}</div>
+                    : <div><span style={{ color: 'var(--text-outline)' }}>command:</span> {cfg.command}</div>}
                   {statusMap[name]?.status === 'connected' && (
                     <div><span style={{ color: 'var(--text-outline)' }}>tools:</span> {statusMap[name].toolCount} 个可用</div>
                   )}
@@ -1429,15 +1482,18 @@ function McpTab() {
                       <span style={{ color: 'var(--text-outline)' }}>error:</span> {statusMap[name].error}
                     </div>
                   )}
-                  {cfg.env && Object.keys(cfg.env).length > 0 && (
-                    <div>
-                      <span style={{ color: 'var(--text-outline)' }}>env:</span>
-                      {Object.entries(cfg.env).map(([k, v]) => (
-                        <div key={k} style={{ paddingLeft: 12 }}>
-                          {k} = {k.toLowerCase().includes('key') || k.toLowerCase().includes('token') ? '***' : v}
-                        </div>
-                      ))}
-                    </div>
+                  {/* env / headers 都是键值对，凭证打码后展示 */}
+                  {([['env', cfg.env], ['headers', cfg.headers]] as const).map(([label, map]) =>
+                    map && Object.keys(map).length > 0 ? (
+                      <div key={label}>
+                        <span style={{ color: 'var(--text-outline)' }}>{label}:</span>
+                        {Object.entries(map).map(([k, v]) => (
+                          <div key={k} style={{ paddingLeft: 12 }}>
+                            {k} = {isSecretKey(k) ? '***' : v}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null,
                   )}
                 </div>
               )}
@@ -1467,27 +1523,39 @@ function McpTab() {
             }}
           >
             <TextInput value={newName} onChange={setNewName} placeholder="Server name" />
-            <TextInput value={newCommand} onChange={setNewCommand} placeholder="Command (e.g. npx obsidian-mcp-server)" />
-            <div>
-              <textarea
-                value={newEnv}
-                onChange={(e) => setNewEnv(e.target.value)}
-                placeholder="Environment variables (KEY=VALUE, one per line)"
-                rows={3}
-                className="w-full outline-none transition-colors resize-none"
-                style={{
-                  padding: '7px 10px',
-                  borderRadius: 8,
-                  fontSize: 11,
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                  background: 'var(--bg-surface-container)',
-                  color: 'var(--text-on-surface)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-primary)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
-              />
+
+            {/* 传输方式：本地起进程 / 直连远端 URL */}
+            <div className="flex items-center" style={{ gap: 6 }}>
+              {([['stdio', '本地 (stdio)'], ['remote', '远端 (HTTP)']] as const).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setNewMode(m)}
+                  className="cursor-pointer transition-colors"
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    border: '1px solid var(--border-subtle)',
+                    background: newMode === m ? 'var(--bg-surface-container-highest)' : 'transparent',
+                    color: newMode === m ? 'var(--text-on-surface)' : 'var(--text-outline)',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {newMode === 'remote' ? (
+              <>
+                <TextInput value={newUrl} onChange={setNewUrl} placeholder="URL (e.g. https://example.com/mcp)" />
+                <MultilineInput value={newHeaders} onChange={setNewHeaders} placeholder="Headers (KEY=VALUE, one per line)" />
+              </>
+            ) : (
+              <>
+                <TextInput value={newCommand} onChange={setNewCommand} placeholder="Command (e.g. npx obsidian-mcp-server)" />
+                <MultilineInput value={newEnv} onChange={setNewEnv} placeholder="Environment variables (KEY=VALUE, one per line)" />
+              </>
+            )}
             <div className="flex items-center" style={{ gap: 8 }}>
               <PrimaryButton onClick={handleAdd}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
