@@ -141,9 +141,19 @@ export function injectSettingsEnv(): void {
 
 export interface McpServerConfig {
   type: string
-  command: string
+  /** 本地 stdio 要启动的可执行文件；远端（配了 url）时不需要 */
+  command?: string
   args?: string[]
   env?: Record<string, string>
+  /** 远端 MCP 地址：有 url 就直接连 HTTP，不起本地进程 */
+  url?: string
+  /** 远端 MCP 的请求头（如 Authorization），原样透传 */
+  headers?: Record<string, string>
+}
+
+/** 是否是远端（HTTP）MCP：以「有没有 url」为准，不看 type 字符串 —— 各家写法不一（http / sse / streamablehttp） */
+export function isRemoteMcpConfig(config: McpServerConfig): boolean {
+  return typeof config.url === 'string' && config.url.length > 0
 }
 
 export async function loadMcpServerConfigs(): Promise<Record<string, McpServerConfig>> {

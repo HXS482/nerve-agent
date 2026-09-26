@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { loadMcpServerConfigs, McpServerConfig } from './settings'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { loadMcpServerConfigs, isRemoteMcpConfig, McpServerConfig } from './settings'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -94,7 +95,7 @@ export class McpPool {
 
   private async connectAll(): Promise<void> {
     const configs = await loadMcpServerConfigs()
-    const entries = Object.entries(configs).filter(([, c]) => c.type === 'stdio')
+    const entries = Object.entries(configs).filter(([, c]) => isRemoteMcpConfig(c) || c.type === 'stdio')
 
     // Connect to all servers in parallel with per-server timeout
     await Promise.allSettled(
@@ -142,6 +143,20 @@ export class McpPool {
   }
 
   private async connectServer(name: string, config: McpServerConfig) {
+    const client = new Client({ name: `nerve-${name}`, version: '1.0.0' })
+
+    // 远端 MCP：直连 URL，不起本地进程；headers 里的凭证原样带走
+    if (isRemoteMcpConfig(config)) {
+      const transport = new StreamableHTTPClientTransport(new URL(config.url!), {
+        requestInit: { headers: config.headers },
+      })
+      await client.connect(transport)
+      return client
+    }
+
+    // 类型放宽后 command 变可选，这里补运行时守卫（也是给下面的类型收窄）
+    if (!config.command) throw new Error('MCP 配置既没有 url 也没有 command')
+
     const isWin = process.platform === 'win32'
     const transport = new StdioClientTransport({
       command: isWin ? 'cmd' : config.command,
@@ -151,7 +166,6 @@ export class McpPool {
         ...config.env,
       } as Record<string, string>,
     })
-    const client = new Client({ name: `nerve-${name}`, version: '1.0.0' })
     await client.connect(transport)
     return client
   }
