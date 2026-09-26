@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 import { SessionList } from './SessionList'
+import { SidebarToggleIcon } from './SidebarToggleIcon'
 import { PetPixelArt, ColorScheme } from './PetPixelArt'
 import { PetSkin } from '../../shared/types'
 import { GradientButtonGroup } from './GradientButtonGroup'
@@ -110,10 +111,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
               className="p-1.5 rounded-md text-[var(--text-on-surface-variant)] hover:bg-[var(--bg-surface-container-high)] hover:text-[var(--text-on-surface)] transition-colors cursor-pointer"
               title="Collapse sidebar"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
+              <SidebarToggleIcon />
             </button>
           </div>
         </div>

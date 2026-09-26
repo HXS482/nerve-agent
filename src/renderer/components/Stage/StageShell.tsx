@@ -4,6 +4,7 @@ import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
+import { SidebarToggleIcon } from '../SidebarToggleIcon'
 import { StageAvatar } from './StageAvatar'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
 import { PredictiveArcBg } from './PredictiveArcBg'
@@ -62,6 +63,14 @@ export function StageShell({ claude, onOpenSettings }: Props) {
               <svg className="w-2 h-2 opacity-0 group-hover/tl:opacity-100 transition-opacity duration-150" viewBox="0 0 12 12" fill="none" stroke="#003a00" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8l4-4 4 4M2 4l4 4 4-4" /></svg>
             </div>
           </div>
+          {/* 会话入口：紧贴交通灯右侧（与参考分支 .stage-window-controls 的排布一致） */}
+          <button
+            className="stage-icon-btn"
+            onClick={() => setSessionsOpen((v) => !v)}
+            title="会话"
+          >
+            <SidebarToggleIcon />
+          </button>
         </div>
 
         <div className="stage-topbar-right" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -125,20 +134,6 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
       {/* 选中文字的上下文 AI 操作条（stage：旁白/卡片文字划选） */}
       <SelectionActions onAction={claude.send} />
-
-      {/* 会话入口：左下角悬浮按钮（挂在 stage-shell 而非 stage-main：
-          stage-main 的 z-index 层叠上下文会把 z-55 压在全宽 InputBar(z-50) 之下） */}
-      <button
-        className="stage-icon-btn stage-sessions-fab"
-        onClick={() => setSessionsOpen((v) => !v)}
-        title="会话"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
-      </button>
     </div>
   )
 }

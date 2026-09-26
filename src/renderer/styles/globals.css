@@ -1041,7 +1041,7 @@ button, a, input, textarea, select {
   max-width: 30vw;
   pointer-events: auto;
 }
-/* todo 卡毛玻璃容器（stage-sessions-fab 同款：浅白底 + blur(12px) + 细白边） */
+/* todo 卡毛玻璃容器：浅白底 + blur(12px) + 细白边 */
 .stage-todo-glass {
   border-radius: 12px;
   padding: 4px;
@@ -1765,31 +1765,6 @@ button, a, input, textarea, select {
   display: flex;
   min-height: 0;
 }
-/* 会话入口：与底部输入栏保持同一水平线的悬浮按钮 */
-.stage-sessions-fab {
-  position: absolute;
-  left: 12px;
-  /* 对齐底部输入栏的 + 按钮：InputBar 距根容器底 14px；
-     本按钮相对 .stage-main 定位，需扣除 shell 的 margin 2px + border 1px */
-  bottom: 10px;
-  z-index: 55;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 999px;
-  /* 复用 CoverFlow 翻页 dock 的毛玻璃质感 */
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-on-surface-variant);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-.stage-sessions-fab:hover {
-  color: var(--text-on-surface);
-  background: rgba(255, 255, 255, 0.1);
-}
-
 /* 会话抽屉 */
 .stage-drawer-mask {
   position: absolute;
