@@ -1,11 +1,11 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
-import { readdirSync, statSync, readFileSync } from 'fs'
+import { readdirSync, statSync, readFileSync, existsSync } from 'fs'
 import { join, relative, extname, basename, resolve } from 'path'
 import { homedir, hostname } from 'os'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig, isRemoteMcpConfig, type McpServerConfig } from './settings'
+import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig, isRemoteMcpConfig, getRecentProjects, type McpServerConfig } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath, getImagesDir } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
@@ -54,17 +54,6 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   ipcMain.handle(IPC_CHANNELS.ASK_USER_RESPONSE, (_event, response: { askId: string; answers: import('../shared/types').AskUserAnswers }) => {
     claude.handleAskUserResponse(response)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PICK_DIRECTORY, async () => {
-    const result = await dialog.showOpenDialog(window, {
-      properties: ['openDirectory'],
-    })
-    if (!result.canceled && result.filePaths.length > 0) {
-      await claude.setCwd(result.filePaths[0])
-      return result.filePaths[0]
-    }
-    return null
   })
 
   ipcMain.handle(IPC_CHANNELS.PICK_AND_READ_FILES, async () => {
@@ -329,6 +318,19 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   ipcMain.handle(IPC_CHANNELS.GET_HOSTNAME, () => hostname())
 
   // File explorer
+  // 磁盘根：Windows 逐个盘符探测（fs 不接受空串当根），其余平台只有 /
+  ipcMain.handle(IPC_CHANNELS.LIST_ROOTS, () => {
+    if (process.platform !== 'win32') return ['/']
+    const roots: string[] = []
+    for (let code = 65; code <= 90; code++) {
+      const root = `${String.fromCharCode(code)}:\\`
+      if (existsSync(root)) roots.push(root)
+    }
+    return roots
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GET_RECENT_PROJECTS, () => getRecentProjects())
+
   ipcMain.handle(IPC_CHANNELS.LIST_DIR, async (_event, dirPath: string) => {
     try {
       const entries = readdirSync(dirPath, { withFileTypes: true })

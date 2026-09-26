@@ -4,6 +4,7 @@ import { useCallback, useRef, useEffect, useState } from 'react'
 import { useImageSrc } from '../hooks/useImageSrc'
 import { GitView } from './GitView'
 import { GatewayView } from './GatewayView'
+import type { DirEntry } from '../../shared/types'
 
 const VIEW_TRANSITION = {
   initial: { opacity: 0, x: 20, filter: 'blur(4px)' },
@@ -37,14 +38,6 @@ declare global {
 }
 
 type RightSidebarView = 'flow' | 'folder' | 'git' | 'gateway'
-
-interface DirEntry {
-  name: string
-  path: string
-  isDirectory: boolean
-  size: number
-  mtimeMs: number
-}
 
 const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
   {
@@ -242,10 +235,10 @@ function FolderView() {
     setLoading(true)
     setError('')
     try {
-      const res = await (window as any).claude.listDir(dir)
+      const res = await window.claude.listDir(dir)
       if (res.success) {
         const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.next', '.venv', 'venv', '__pycache__', '.idea', '.vscode', 'coverage', '.turbo', '.nx', 'out', 'target', '.gradle', 'build', '.cache'])
-        setEntries(res.entries.filter((e: DirEntry) => !e.isDirectory || !SKIP_DIRS.has(e.name)))
+        setEntries(res.entries.filter((e) => !e.isDirectory || !SKIP_DIRS.has(e.name)))
       } else {
         setError(res.error || 'Failed to read directory')
         setEntries([])

@@ -23,8 +23,10 @@ declare global {
       onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => () => void
       respondAskUser: (response: import('../../shared/types').AskUserResponse) => Promise<void>
       onAskUserRequest: (callback: (data: import('../../shared/types').AskUserRequest) => void) => () => void
-      pickDirectory: () => Promise<string | null>
       getHostname: () => Promise<string>
+      listDir: (dirPath: string) => Promise<import('../../shared/types').DirListResult>
+      listRoots: () => Promise<string[]>
+      getRecentProjects: () => Promise<string[]>
       gitCurrentBranches: (cwds: string[]) => Promise<Record<string, string>>
       pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
@@ -722,11 +724,11 @@ export function useClaude() {
     setConfig(partial)
   }, [setConfig])
 
-  const pickDirectory = useCallback(async () => {
-    const path = await window.claude.pickDirectory()
-    if (path) setConfig({ cwd: path })
-    return path
-  }, [setConfig])
+  // 切换项目：主进程 setCwd 会换掉会话存储目录，所以要跟着重列会话
+  const selectProject = useCallback(async (cwd: string) => {
+    await updateConfig({ cwd })
+    await syncSessions()
+  }, [updateConfig, syncSessions])
 
   const listBranches = useCallback(async (sessionId: string) => {
     return window.claude.listBranches(sessionId)
@@ -753,7 +755,7 @@ export function useClaude() {
     cancel,
     clearMessages,
     updateConfig,
-    pickDirectory,
+    selectProject,
     syncSessions,
     loadSessionMessages,
     loadStageSession,

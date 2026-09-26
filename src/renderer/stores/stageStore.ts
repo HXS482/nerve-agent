@@ -16,6 +16,9 @@ interface StageState {
   cardHeights: Record<string, number>
   // 从当前画布关闭的卡片（内存态，不删除会话内容）
   hiddenCardIds: Record<string, true>
+  // 应用内项目选择面板（内存态）
+  projectPickerOpen: boolean
+  setProjectPickerOpen: (open: boolean) => void
   setViewMode: (mode: ViewMode) => void
   setStageSessionId: (sessionId: string | null) => void
   setSelectedRoundId: (roundId: string | null) => void
@@ -36,6 +39,8 @@ export const useStageStore = create<StageState>()(
       cardSizes: {},
       cardHeights: {},
       hiddenCardIds: {},
+      projectPickerOpen: false,
+      setProjectPickerOpen: (projectPickerOpen) => set({ projectPickerOpen }),
       setViewMode: (viewMode) => set({ viewMode }),
       // 切会话清掉回看选中，避免残留高亮
       setStageSessionId: (stageSessionId) => set({ stageSessionId, selectedRoundId: null }),

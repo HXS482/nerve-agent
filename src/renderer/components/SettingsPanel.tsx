@@ -6,7 +6,7 @@ import { isVideoBg, isHtmlBg, htmlFromDataUrl } from './Stage/StageBgMedia'
 interface Props {
   config: ClaudeConfig
   onUpdateConfig: (partial: Partial<ClaudeConfig>) => void
-  onPickDirectory: () => void
+  onOpenProjectPicker: () => void
   onClose: () => void
 }
 
@@ -420,7 +420,7 @@ function PluginsTab() {
 
 // --- Main Panel ---
 
-export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose }: Props) {
+export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('general')
 
   return (
@@ -551,7 +551,7 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
           {/* Tab content — scrollable */}
           <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: 20 }}>
             {tab === 'general' && (
-              <GeneralTab config={config} onUpdateConfig={onUpdateConfig} onPickDirectory={onPickDirectory} />
+              <GeneralTab config={config} onUpdateConfig={onUpdateConfig} onOpenProjectPicker={onOpenProjectPicker} />
             )}
             {tab === 'soul' && <SoulTab />}
             {tab === 'persona' && <PersonaTab />}
@@ -570,10 +570,10 @@ export function SettingsPanel({ config, onUpdateConfig, onPickDirectory, onClose
 
 // --- General Tab ---
 
-function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
+function GeneralTab({ config, onUpdateConfig, onOpenProjectPicker }: {
   config: ClaudeConfig
   onUpdateConfig: (partial: Partial<ClaudeConfig>) => void
-  onPickDirectory: () => void
+  onOpenProjectPicker: () => void
 }) {
   const providers = useChatStore((s) => s.providers)
   const providerModels = useChatStore((s) => s.providerModels)
@@ -635,7 +635,7 @@ function GeneralTab({ config, onUpdateConfig, onPickDirectory }: {
           <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface-variant)', maxWidth: 340 }}>
             {config.cwd || 'Not set'}
           </span>
-          <SecondaryButton onClick={onPickDirectory}>Change</SecondaryButton>
+          <SecondaryButton onClick={onOpenProjectPicker}>Change</SecondaryButton>
         </div>
       </Section>
 

@@ -866,6 +866,9 @@ export class AgentCore {
     try {
       const existing = existsSync(nerveSettingsPath) ? JSON.parse(readFileSync(nerveSettingsPath, 'utf-8')) : {}
       existing.cwd = cwd
+      // 最近项目：去重后置顶，最多留 20 条（项目选择器读这个列表）
+      const recents: string[] = Array.isArray(existing.recentProjects) ? existing.recentProjects : []
+      existing.recentProjects = [cwd, ...recents.filter((p) => p !== cwd)].slice(0, 20)
       writeFileSync(nerveSettingsPath, JSON.stringify(existing, null, 2), 'utf-8')
     } catch { /* ignore */ }
   }

@@ -7,7 +7,6 @@ export const IPC_CHANNELS = {
   SET_EFFORT: 'claude:set-effort',
   SET_PROVIDER: 'claude:set-provider',
   SET_PERMISSION_MODE: 'claude:set-permission-mode',
-  PICK_DIRECTORY: 'claude:pick-directory',
   GET_CONFIG: 'claude:get-config',
   GET_MODELS: 'claude:get-models',
   LIST_SESSIONS: 'claude:list-sessions',
@@ -85,6 +84,9 @@ export const IPC_CHANNELS = {
   OPEN_IN_BROWSER: 'nerve:open-in-browser',
   // File explorer
   LIST_DIR: 'nerve:list-dir',
+  LIST_ROOTS: 'nerve:list-roots',
+  // 项目选择器：最近打开过的项目目录
+  GET_RECENT_PROJECTS: 'nerve:get-recent-projects',
   // System
   GET_HOSTNAME: 'nerve:get-hostname',
   // Git
@@ -211,6 +213,22 @@ export interface SendMessagePayload {
   prompt: string
   sessionId?: string
   files?: FileAttachment[]
+}
+
+/** 单层目录条目（隐藏文件已在主进程过滤） */
+export interface DirEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  mtimeMs: number
+}
+
+export interface DirListResult {
+  success: boolean
+  error?: string
+  entries: DirEntry[]
+  cwd: string
 }
 
 export interface SessionInfo {

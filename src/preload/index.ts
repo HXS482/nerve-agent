@@ -32,7 +32,6 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.ASK_USER_REQUEST, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ASK_USER_REQUEST, handler)
   },
-  pickDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.PICK_DIRECTORY),
   pickAndReadFiles: (): Promise<FileAttachment[]> => ipcRenderer.invoke(IPC_CHANNELS.PICK_AND_READ_FILES),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
   getModels: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MODELS),
@@ -166,7 +165,10 @@ const api = {
     ipcRenderer.send(IPC_CHANNELS.FLOW_ITEM, { type, content, meta }),
   openInBrowser: (type: string, content: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_IN_BROWSER, { type, content }),
-  listDir: (dirPath: string) => ipcRenderer.invoke(IPC_CHANNELS.LIST_DIR, dirPath),
+  listDir: (dirPath: string): Promise<import('../shared/types').DirListResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.LIST_DIR, dirPath),
+  listRoots: (): Promise<string[]> => ipcRenderer.invoke(IPC_CHANNELS.LIST_ROOTS),
+  getRecentProjects: (): Promise<string[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_RECENT_PROJECTS),
   // System
   getHostname: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.GET_HOSTNAME),
   // Git

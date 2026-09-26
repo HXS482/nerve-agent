@@ -117,7 +117,15 @@ export function StageShell({ claude, onOpenSettings }: Props) {
                 claude.clearStageSession()
                 setSessionsOpen(false)
               }}
-              onPickDirectory={claude.pickDirectory}
+              onSelectProject={(path) => {
+                claude.selectProject(path)
+                setSessionsOpen(false)
+              }}
+              onNewProject={() => {
+                // 抽屉让位给居中面板：先收起抽屉再开项目选择器
+                setSessionsOpen(false)
+                useStageStore.getState().setProjectPickerOpen(true)
+              }}
             />
           </div>
         </>

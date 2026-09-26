@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useStageStore } from '../../stores/stageStore'
-
-// 路径末段：兼容 win/posix 分隔符与结尾斜杠
-function baseName(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/, '')
-  return trimmed.split(/[\\/]/).pop() || trimmed
-}
+import { baseName } from '../../utils/projectPaths'
+import { ProjectMenu } from './ProjectMenu'
 
 function formatSessionTime(ts: number): string {
   const diff = Date.now() - ts
@@ -21,15 +17,17 @@ function formatSessionTime(ts: number): string {
 interface Props {
   onSelectSession: (sessionId: string) => void
   onNewSession: () => void
-  onPickDirectory: () => void
+  onSelectProject: (path: string) => void
+  onNewProject: () => void
 }
 
 // Stage 模式的会话抽屉：项目头 + 三段式条目（仓库 / 标题 / 分支）
-export function StageSessions({ onSelectSession, onNewSession, onPickDirectory }: Props) {
+export function StageSessions({ onSelectSession, onNewSession, onSelectProject, onNewProject }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const configCwd = useChatStore((s) => s.config.cwd)
   const currentSessionId = useStageStore((s) => s.stageSessionId)
   const deleteSession = useChatStore((s) => s.deleteSession)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const stageSessions = useMemo(
     () =>
@@ -72,9 +70,11 @@ export function StageSessions({ onSelectSession, onNewSession, onPickDirectory }
 
   return (
     <div className="stage-sessions">
-      {/* 项目头：当前工作目录 + 机器名；点开切目录，右侧 + 新建会话 */}
+      {/* 关闭遮罩：铺满抽屉（stage-sessions 未定位，包含块是 .stage-drawer），点别处收起菜单 */}
+      {menuOpen && <div className="project-menu-mask" onClick={() => setMenuOpen(false)} />}
+      {/* 项目头：当前工作目录 + 机器名；点开应用内项目下拉，右侧 + 新建会话 */}
       <div className="stage-project-head">
-        <button className="stage-project-pick" onClick={onPickDirectory} title="切换工作目录">
+        <button className="stage-project-pick" onClick={() => setMenuOpen((v) => !v)} title="切换项目">
           {/* 实心填充（单 path 三段子路径：外轮廓 + 内挖空 + 顶部横条），尺寸由 CSS 的 clamp 控制。
               线宽烤在几何里（墙厚 64/1024），没有 stroke 可调；叠一层同色描边等比加粗：
               外缘外扩、内孔内缩，线宽净增一个 stroke-width（64 → 96，+50%） */}
@@ -102,6 +102,13 @@ export function StageSessions({ onSelectSession, onNewSession, onPickDirectory }
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
+        {menuOpen && (
+          <ProjectMenu
+            onSelectProject={onSelectProject}
+            onNewProject={onNewProject}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
       </div>
 
       <div className="stage-sessions-list">

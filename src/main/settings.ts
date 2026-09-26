@@ -1,6 +1,6 @@
 import { join } from 'path'
 import { homedir } from 'os'
-import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync } from 'fs'
+import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync, statSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { ModelInfo, GatewayChannel, GatewayProxy } from '../shared/types'
 import type { McpBridgeConfig } from './mcp-bridge/types'
@@ -12,6 +12,10 @@ async function atomicWriteFile(filePath: string, data: string, encoding: BufferE
 }
 
 export const NERVE_DIR = join(homedir(), '.nerve')
+
+function isDirectory(path: string): boolean {
+  try { return statSync(path).isDirectory() } catch { return false }
+}
 
 function ensureNerveDirSync() {
   mkdirSync(NERVE_DIR, { recursive: true })
@@ -275,6 +279,20 @@ export async function saveNerveSettings(settings: { baseURL?: string; authToken?
   if (settings.persona !== undefined) existing.persona = settings.persona
 
   await atomicWriteFile(nerveSettingsPath, JSON.stringify(existing, null, 2))
+}
+
+// 最近项目：由 agent-core.setCwd 写入。只在读取时过滤已不存在的目录（不落盘回写），
+// 临时离线的盘/目录在恢复后仍会出现在列表里。
+export async function getRecentProjects(): Promise<string[]> {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return []
+  try {
+    const stored = JSON.parse(await readFile(nerveSettingsPath, 'utf-8')).recentProjects
+    if (!Array.isArray(stored)) return []
+    return stored.filter((p): p is string => typeof p === 'string' && isDirectory(p))
+  } catch {
+    return []
+  }
 }
 
 export async function saveRuntimeConfig(config: { model?: string; provider?: string; effort?: string; permissionMode?: string }) {

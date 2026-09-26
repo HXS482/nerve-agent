@@ -8,6 +8,7 @@ import { isVideoBg, isHtmlBg } from './components/Stage/StageBgMedia'
 import { useStageStore } from './stores/stageStore'
 import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
+import { ProjectPalette } from './components/ProjectPalette'
 import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
@@ -283,10 +284,13 @@ export default function App() {
         <SettingsPanel
           config={claude.config}
           onUpdateConfig={claude.updateConfig}
-          onPickDirectory={claude.pickDirectory}
+          onOpenProjectPicker={() => useStageStore.getState().setProjectPickerOpen(true)}
           onClose={() => setSettingsOpen(false)}
         />
       )}
+
+      {/* 项目选择器（应用内目录浏览，stage / chat 通用，居中面板） */}
+      <ProjectPalette onSelect={claude.selectProject} />
 
       {/* Gallery modal */}
       {galleryOpen && <Gallery onClose={() => setGalleryOpen(false)} />}
