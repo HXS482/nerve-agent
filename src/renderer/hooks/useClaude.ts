@@ -8,11 +8,15 @@ import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment, ToolApprovalRe
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
 type Workspace = 'chat' | 'stage'
 
+// 主进程心跳每 5s 一次；连续 STALL_MS 收不到才算卡死（12 次心跳的余量，跑得久不会被误杀）
+const HEARTBEAT_CHECK_MS = 5000
+const STALL_MS = 60000
+
 declare global {
   interface Window {
     claude: {
-      sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) => Promise<void>
-      cancel: () => Promise<void>
+      sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[], runId?: string) => Promise<void>
+      cancel: (sessionId?: string) => Promise<void>
       getConfig: () => Promise<ClaudeConfig>
       setModel: (model: string) => Promise<void>
       setEffort: (effort: string) => Promise<void>
@@ -53,8 +57,9 @@ declare global {
       windowMaximize: () => void
       windowClose: () => void
       onMessage: (callback: (data: any) => void) => () => void
-      onError: (callback: (data: { message: string }) => void) => () => void
-      onDone: (callback: (data: { sessionId: string; cost: number; maxContextTokens: number }) => void) => () => void
+      onError: (callback: (data: { message: string; runId?: string }) => void) => () => void
+      onDone: (callback: (data: { sessionId: string; cost: number; maxContextTokens: number; reason: import('../../shared/types').DoneReason; runId?: string }) => void) => () => void
+      onHeartbeat: (callback: () => void) => () => void
       getNerveSettings: () => Promise<any>
       saveNerveSettings: (settings: any) => Promise<{ ok: boolean; error?: string; models?: { alias: string; name: string }[] }>
       testConnection: (baseURL: string, authToken: string) => Promise<{ ok: boolean; error?: string }>
@@ -95,11 +100,23 @@ export function useClaude() {
 
   // Debounce ref for stream events
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 长任务看门狗：最后一次心跳时间 + 检查定时器
+  const lastHeartbeat = useRef(0)
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pendingText = useRef('')
   const pendingThinking = useRef('')
   // Capture temp session ID at send() time for DONE handler
   const pendingTempSessionId = useRef<string | null>(null)
   const pendingWorkspace = useRef<Workspace>('chat')
+  // 本次 run 的关联 id：被取消/被顶掉的旧 run 迟到的 DONE/ERROR 靠它丢弃
+  const runIdRef = useRef('')
+
+  const clearWatchdog = useCallback(() => {
+    if (watchdogRef.current) {
+      clearInterval(watchdogRef.current)
+      watchdogRef.current = null
+    }
+  }, [])
 
   const getWorkspaceSessionId = useCallback((workspace: Workspace) => (
     workspace === 'stage'
@@ -427,7 +444,14 @@ export function useClaude() {
       }
     })
 
+    const unsubHeartbeat = window.claude.onHeartbeat(() => {
+      lastHeartbeat.current = Date.now()
+    })
+
     const unsubError = window.claude.onError((data) => {
+      // 旧 run 迟到的 ERROR（通常是它被取消时抛的）不该影响当前这一轮
+      if (data.runId && data.runId !== runIdRef.current) return
+      clearWatchdog()
       flushPendingText()
       useSubagentTracker.getState().completeAll()
       addMessage({
@@ -442,6 +466,10 @@ export function useClaude() {
     })
 
     const unsubDone = window.claude.onDone((data) => {
+      // 被取消/被顶掉的旧 run 迟到的 DONE：它的 sessionId 是上一轮的，这里若照单全收
+      // 会把当前这轮的 loading、todo、临时 id 迁移全搞乱，直接丢
+      if (data.runId && data.runId !== runIdRef.current) return
+      clearWatchdog()
       flushPendingText()
       useSubagentTracker.getState().completeAll()
       const store = useChatStore.getState()
@@ -513,6 +541,11 @@ export function useClaude() {
         }).catch(() => {})
       }
 
+      // 被中断收尾（用户取消 / 调用超时 / 同会话重发顶掉）：别当成跑完，todo 归一为 pending
+      if (data.reason === 'cancelled') demoteInProgressTodos(pendingWorkspace.current)
+      // 审批卡片是"这一轮在等你回答"的提示，轮次结束了就不该继续挂着
+      // （主进程侧超时按拒绝处理时，卡片会被留在这里）
+      if (store.pendingApprovals.length > 0) useChatStore.setState({ pendingApprovals: [] })
       setLoading(false)
     })
 
@@ -607,8 +640,10 @@ export function useClaude() {
       unsubFlowItem()
       unsubApproval()
       unsubAskUser()
+      unsubHeartbeat()
+      clearWatchdog()
     }
-  }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId, demoteInProgressTodos])
+  }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId, demoteInProgressTodos, clearWatchdog])
 
   const send = useCallback(
     async (prompt: string, files?: FileAttachment[]) => {
@@ -617,8 +652,12 @@ export function useClaude() {
       const workspace = useStageStore.getState().viewMode
       const store = useChatStore.getState()
       let sid = getWorkspaceSessionId(workspace)
-      let isRealSession = !!sid
+      // 临时 id（session-<ts>）只存在于渲染层，后端不认识：传过去会让它当真实会话 id
+      // 用（cancelSession 取消不到真正在跑的那个，还会落一份孤儿会话文件）
+      let isRealSession = !!sid && !sid.startsWith('session-')
       pendingWorkspace.current = workspace
+      const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      runIdRef.current = runId
 
       // Create a temp session if none exists (first message of the active workspace)
       if (!sid) {
@@ -680,21 +719,31 @@ export function useClaude() {
       })
 
       setLoading(true)
-      // Safety timeout: auto-reset isLoading if DONE/ERROR never arrives (e.g. backend crash)
-      const safetyTimer = setTimeout(() => {
-        const state = useChatStore.getState()
-        if (state.isLoading) {
-          console.warn('[useClaude] safety timeout — resetting isLoading')
-          demoteInProgressTodos(pendingWorkspace.current)
-          setLoading(false)
-        }
-      }, 180000)
+      // 看门狗：主进程每 5s 一次心跳，只有连续 STALL_MS 收不到才判定卡死并真取消。
+      // 不再拿固定时长猜——之前那个 180s 定时器会在任何超过 3 分钟的任务中途
+      // 把 UI 翻成空闲（invoke 要等整轮跑完才 resolve，定时器必然悬满全程）。
+      lastHeartbeat.current = Date.now()
+      clearWatchdog()
+      watchdogRef.current = setInterval(() => {
+        if (Date.now() - lastHeartbeat.current <= STALL_MS) return
+        console.warn('[useClaude] heartbeat lost — run treated as stalled, cancelling')
+        clearWatchdog()
+        window.claude.cancel(getWorkspaceSessionId(pendingWorkspace.current) ?? undefined)
+        addMessage({
+          id: `stall-${Date.now()}`,
+          role: 'system',
+          content: [{ type: 'text', text: '主进程心跳中断，本轮已按卡死处理并取消。' }],
+          timestamp: Date.now(),
+        })
+        demoteInProgressTodos(pendingWorkspace.current)
+        setLoading(false)
+      }, HEARTBEAT_CHECK_MS)
       try {
         // Only pass sessionId to backend if it's a real (persisted) session
-        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files)
-        clearTimeout(safetyTimer)
+        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files, runId)
+        clearWatchdog()
       } catch (err: unknown) {
-        clearTimeout(safetyTimer)
+        clearWatchdog()
         const msg = err instanceof Error ? err.message : 'Failed to send message'
         addMessage({
           id: `err-${Date.now()}`,
@@ -705,15 +754,18 @@ export function useClaude() {
         setLoading(false)
       }
     },
-    [isLoading, addMessage, setLoading, addSession, setSessionId, demoteInProgressTodos]
+    [isLoading, addMessage, setLoading, addSession, setSessionId, demoteInProgressTodos, clearWatchdog, getWorkspaceSessionId]
   )
 
   const cancel = useCallback(async () => {
-    await window.claude.cancel()
+    clearWatchdog()
+    // 带上会话 id：只停这一个会话，别把别的会话的长任务一起 abort 掉
+    // （首轮的临时 id 后端不认识，会退回全量取消，停止按钮照常有效）
+    await window.claude.cancel(getWorkspaceSessionId(pendingWorkspace.current) ?? undefined)
     setLoading(false)
     // 中断运行 → 当前会话的 in_progress 归一为 pending（completed 保留）
     demoteInProgressTodos(pendingWorkspace.current)
-  }, [setLoading, demoteInProgressTodos])
+  }, [setLoading, demoteInProgressTodos, clearWatchdog, getWorkspaceSessionId])
 
   const updateConfig = useCallback(async (partial: Partial<ClaudeConfig>) => {
     if (partial.model) await window.claude.setModel(partial.model)

@@ -30,7 +30,7 @@ export interface AgenticLoopParams {
 }
 
 export interface AgenticLoopResult {
-  stopReason: 'end_turn' | 'tool_use' | 'max_steps'
+  stopReason: 'end_turn' | 'tool_use' | 'max_steps' | 'max_tokens'
   usage: { inputTokens: number; outputTokens: number }
 }
 
@@ -48,6 +48,43 @@ export async function runAgenticLoop(params: AgenticLoopParams): Promise<Agentic
 const API_TIMEOUT_MS = 180_000 // 3 min per API call
 const TOOL_TIMEOUT_MS = 120_000 // 2 min per tool execution
 const MAX_RETRIES = 2
+
+// 单轮输出撞上 max_tokens 上限时的续跑次数。推理模型（deepseek 之类）光 thinking
+// 就能吃满 16K，不续跑的话整轮可能一个字都吐不出来就"完成"了。
+const MAX_CONTINUATIONS = 3
+const CONTINUE_PROMPT = '（上一轮输出达到 max_tokens 上限被截断。请从中断处继续，直接接着写或继续调用工具，不要重复已完成的部分。）'
+
+/** 截断那一轮里没拿到 tool_result 的 tool_use 会被 API 拒绝，续跑前剔掉 */
+function withoutUnfinishedToolUse(content: any[]): any[] {
+  return content.filter((b) => b?.type !== 'tool_use')
+}
+
+// 「清单开了头就不再更新」是这个模型的通病：全历史 4 个带 TodoWrite 的运行，
+// 0 个按步更新，最长那次 16 次工具调用中间隔了 14 次零更新，卡片一直停在第一项。
+// 提示词里虽有要求但只是软约束，这里按步数兜底提醒一次（只提醒已经建过清单的运行，
+// 免得去打扰本来就不需要清单的简单任务）。
+const TODO_NUDGE_AFTER = 5
+const TODO_NUDGE = '（系统提醒：任务清单该更新了 —— 已完成的项立刻用 TodoWrite 标 completed，下一项设为 in_progress，别把状态攒到最后一起改。）'
+
+interface TodoNudgeState {
+  used: boolean
+  since: number
+}
+
+/** 每轮工具执行后调用：返回 true 表示该在工具结果后附一句清单提醒 */
+function tickTodoNudge(state: TodoNudgeState, toolNames: string[]): boolean {
+  if (toolNames.includes('TodoWrite')) {
+    state.used = true
+    state.since = 0
+    return false
+  }
+  state.since += toolNames.length
+  if (state.used && state.since >= TODO_NUDGE_AFTER) {
+    state.since = 0
+    return true
+  }
+  return false
+}
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -79,6 +116,8 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
 
   let totalInput = 0
   let totalOutput = 0
+  let continuations = 0
+  const todoNudge: TodoNudgeState = { used: false, since: 0 }
 
   for (let step = 0; step < maxSteps; step++) {
     if (abortSignal?.aborted) break
@@ -129,8 +168,34 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
     totalOutput += result.usage.outputTokens
 
     // Append assistant message to history
-    if (result.content.length > 0) {
+    const pushedAssistant = result.content.length > 0
+    if (pushedAssistant) {
       messages.push({ role: 'assistant', content: result.content })
+    }
+
+    // 撞上 max_tokens：别当"正常说完"收工，接着往下跑
+    if (result.stopReason === 'max_tokens') {
+      if (continuations >= MAX_CONTINUATIONS) {
+        return { stopReason: 'max_tokens', usage: { inputTokens: totalInput, outputTokens: totalOutput } }
+      }
+      continuations++
+      // 截断轮里没拿到 tool_result 的 tool_use 留着会被 API 拒；其余内容（含只有 thinking 的）保留，
+      // 因为 Anthropic 要求 user/assistant 严格交替，不能整条消息丢掉
+      const kept = withoutUnfinishedToolUse(result.content)
+      if (pushedAssistant && kept.length > 0) {
+        messages[messages.length - 1] = { role: 'assistant', content: kept }
+      }
+      const last = messages[messages.length - 1] as any
+      if (last?.role === 'user') {
+        // 截断轮什么都没产出：把续写提示并进上一条 user，别出现连续两条 user
+        const blocks = Array.isArray(last.content) ? [...last.content] : [{ type: 'text', text: String(last.content ?? '') }]
+        blocks.push({ type: 'text', text: CONTINUE_PROMPT })
+        messages[messages.length - 1] = { role: 'user', content: blocks }
+      } else {
+        messages.push({ role: 'user', content: [{ type: 'text', text: CONTINUE_PROMPT }] })
+      }
+      console.warn('[AgenticLoop] output truncated (max_tokens), continuing', continuations)
+      continue
     }
 
     // If not tool_use, we're done
@@ -223,6 +288,9 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
       }
     }
 
+    if (tickTodoNudge(todoNudge, toolUseBlocks.map((b: any) => b.name))) {
+      toolResults.push({ type: 'text', text: TODO_NUDGE })
+    }
     messages.push({ role: 'user', content: toolResults })
   }
 
@@ -261,6 +329,8 @@ async function callWithRetry(
       return await callStreaming(anthropic, apiParams, abortSignal, callbacks)
     } catch (streamErr: any) {
       if (streamErr?.name === 'AbortError' || abortSignal?.aborted) {
+        // 父级取消 → 静默收尾；单次调用被我们自己的 180s 掐断 → 不能假装说完了
+        if (!abortSignal?.aborted) throw streamErr
         return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
       }
 
@@ -283,6 +353,7 @@ async function callWithRetry(
         lastError = nonStreamErr
 
         if (nonStreamErr?.name === 'AbortError' || abortSignal?.aborted) {
+          if (!abortSignal?.aborted) throw nonStreamErr
           return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
         }
 
@@ -402,6 +473,10 @@ async function callStreaming(
       }
       currentBlock = null
     }
+    // 流是被我们自己的 180s 超时掐断的（父级没取消）：当错误上抛，别悄悄收工
+    if (callAbort.signal.aborted && !abortSignal?.aborted) {
+      throw Object.assign(new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`), { name: 'AbortError' })
+    }
   } finally {
     clearTimeout(timeout)
     abortSignal?.removeEventListener('abort', onParentAbort)
@@ -444,6 +519,12 @@ async function callNonStreaming(
     }
 
     return { content, stopReason, usage: { inputTokens, outputTokens } }
+  } catch (err: any) {
+    // 同 callStreaming：自家超时掐断的调用不能当正常返回
+    if (!abortSignal?.aborted && (err?.name === 'AbortError' || callAbort.signal.aborted)) {
+      throw Object.assign(new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`), { name: 'AbortError' })
+    }
+    throw err
   } finally {
     clearTimeout(timeout)
     abortSignal?.removeEventListener('abort', onParentAbort)
@@ -459,6 +540,8 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
   let totalInput = 0
   let totalOutput = 0
+  let continuations = 0
+  const todoNudge: TodoNudgeState = { used: false, since: 0 }
 
   for (let step = 0; step < maxSteps; step++) {
     if (abortSignal?.aborted) break
@@ -527,6 +610,8 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       clearTimeout(timeout)
       abortSignal?.removeEventListener('abort', onParentAbort)
       if (err?.name === 'AbortError' || abortSignal?.aborted) {
+        // 父级取消照旧；自家 180s 超时掐断的调用不能当正常说完
+        if (!abortSignal?.aborted) throw new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`)
         return { stopReason: 'end_turn', usage: { inputTokens: totalInput, outputTokens: totalOutput } }
       }
       throw err
@@ -582,11 +667,27 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       abortSignal?.removeEventListener('abort', onParentAbort)
     }
 
+    // 流是被我们自己的 180s 超时掐断的（父级没取消）：当错误上抛，别拿半截内容当正常收尾
+    if (callAbort.signal.aborted && !abortSignal?.aborted) {
+      throw new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`)
+    }
+
     // Build assistant message for history
     const assistantMsg: any = { role: 'assistant' }
     if (fullContent) assistantMsg.content = fullContent
     // 思考文本单独携带（不进 content，OpenAI 历史格式不认），仅用于上层收集展示
     if (fullReasoning) (assistantMsg as any).reasoning = fullReasoning
+
+    // 撞上 max_tokens：丢掉残缺的 tool_call，把已产出的正文留着续跑，别当"正常说完"收工
+    if (finishReason === 'length' && !abortSignal?.aborted && continuations < MAX_CONTINUATIONS) {
+      continuations++
+      if (fullContent) {
+        messages.push({ role: 'assistant', content: fullContent, ...(fullReasoning ? { reasoning: fullReasoning } : {}) })
+      }
+      messages.push({ role: 'user', content: CONTINUE_PROMPT })
+      console.warn('[AgenticLoop] output truncated (max_tokens), continuing', continuations)
+      continue
+    }
 
     if (toolCallAccumulators.size === 0) {
       messages.push({ role: 'assistant', content: fullContent || '', ...(fullReasoning ? { reasoning: fullReasoning } : {}) })
@@ -694,6 +795,9 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
     messages.push(assistantMsg)
     messages.push(...toolMessages)
+    if (tickTodoNudge(todoNudge, [...toolCallAccumulators.values()].map((a) => a.name))) {
+      messages.push({ role: 'user', content: TODO_NUDGE })
+    }
   }
 
   return {

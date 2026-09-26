@@ -248,7 +248,7 @@ export function Stage({ messages, onSend }: { messages: ChatMessage[]; onSend?: 
       {activeTodos.length > 0 && (
         <div className="stage-todo-fixed">
           <div className="stage-todo-glass">
-            <TaskRows todos={activeTodos} />
+            <TaskRows todos={activeTodos} running={isLoading} />
           </div>
         </div>
       )}

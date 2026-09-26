@@ -60,14 +60,16 @@ function TodoHeaderIcon({ complete }: { complete: boolean }) {
   )
 }
 
-function TodoStatusIcon({ status }: { status: Status }) {
+function TodoStatusIcon({ status, running }: { status: Status; running: boolean }) {
   const reduce = useReducedMotion() ?? false
+  // 只有本轮真的在跑才转圈：轮次结束后残留的 in_progress 是"当前步骤"，不是"正在执行"
+  const spinning = status === 'in_progress' && running
   return (
     <motion.svg
       aria-hidden="true"
       viewBox="0 0 24 24"
       initial={false}
-      className={`stage-task-sicon${status === 'in_progress' ? ' is-run' : ''}`}
+      className={`stage-task-sicon${spinning ? ' is-run' : ''}`}
     >
       {/* 底圈：pending 虚线环；completed 时淡填充 */}
       <motion.circle
@@ -94,10 +96,10 @@ function TodoStatusIcon({ status }: { status: Status }) {
         animate={{
           pathLength: status === 'in_progress' ? 0.68 : 0,
           opacity: status === 'in_progress' ? 1 : 0,
-          rotate: status === 'in_progress' && !reduce ? 360 : -90,
+          rotate: spinning && !reduce ? 360 : -90,
         }}
         transition={
-          status === 'in_progress' && !reduce
+          spinning && !reduce
             ? { rotate: { duration: 1.1, repeat: Infinity, ease: 'linear' } }
             : reduce
               ? { duration: 0 }
@@ -128,10 +130,13 @@ export const TaskRows = memo(function TaskRows({
   todos,
   title = 'To-dos',
   maxHeight = 220,
+  running = false,
 }: {
   todos: TodoItem[]
   title?: string
   maxHeight?: number
+  /** 本轮是否正在执行：决定 in_progress 行是否转圈 */
+  running?: boolean
 }) {
   const reduce = useReducedMotion() ?? false
   const baseId = useId()
@@ -235,7 +240,7 @@ export const TaskRows = memo(function TaskRows({
                       className="stage-task-row"
                       data-status={t.status}
                     >
-                      <TodoStatusIcon status={t.status} />
+                      <TodoStatusIcon status={t.status} running={running} />
                       <span className="stage-task-label">
                         <span className="stage-task-label-inner">
                           {t.content}

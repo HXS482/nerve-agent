@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
   STREAM_CLEAR: 'claude:stream-clear',
   ERROR: 'claude:error',
   DONE: 'claude:done',
+  HEARTBEAT: 'claude:heartbeat',
   PET_STATE_CHANGE: 'pet:state-change',
   PET_DRAG_START: 'pet:drag-start',
   PET_DRAG_MOVE: 'pet:drag-move',
@@ -213,7 +214,12 @@ export interface SendMessagePayload {
   prompt: string
   sessionId?: string
   files?: FileAttachment[]
+  /** 渲染层为本次 run 生成的关联 id，主进程在 DONE/ERROR 里原样带回 */
+  runId?: string
 }
+
+/** 一轮 run 的结束原因：abort 收尾不能报成 complete，否则中断和跑完在 UI 上同形 */
+export type DoneReason = 'complete' | 'cancelled'
 
 /** 单层目录条目（隐藏文件已在主进程过滤） */
 export interface DirEntry {

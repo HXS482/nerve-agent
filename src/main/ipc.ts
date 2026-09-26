@@ -24,8 +24,8 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     await claude.sendMessage(payload)
   })
 
-  ipcMain.handle(IPC_CHANNELS.CANCEL, () => {
-    claude.cancel()
+  ipcMain.handle(IPC_CHANNELS.CANCEL, (_event, sessionId?: string) => {
+    claude.cancel(sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SET_MODEL, async (_event, model: string) => {

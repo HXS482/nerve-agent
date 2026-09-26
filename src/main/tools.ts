@@ -720,7 +720,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       })
       return {
         TodoWrite: {
-          description: 'Write/update the task list for a long-running task. Break multi-step work (multi-file edits, refactors, batch operations) into 3-10 concrete todos, mark exactly one as in_progress while working, and flip each to completed as you finish it. Send the FULL list every time (it replaces the previous one). Skip this for simple single-step requests.',
+          description: 'Write/update the task list for a long-running task. Break multi-step work (multi-file edits, refactors, batch operations) into 3-10 concrete todos, mark exactly one as in_progress while working, and flip each to completed AS SOON AS you finish it — do NOT batch updates to the end of the task. Send the FULL list every time (it replaces the previous one). Skip this for simple single-step requests.',
           input_schema: zodToInputSchema(todoSchema),
           execute: async ({ todos }: { todos: { content: string; status: string; note?: string }[] }) => {
             // 宽容畸形输入：content 非字符串的项丢弃，status 非法值归一 pending

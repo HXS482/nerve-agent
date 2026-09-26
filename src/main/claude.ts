@@ -88,8 +88,8 @@ export class ClaudeService {
     await this.core.sendMessage(payload, this.channel)
   }
 
-  cancel() {
-    this.core.cancel()
+  cancel(sessionId?: string) {
+    this.core.cancel(sessionId)
     this.sendPetState('idle')
   }
 

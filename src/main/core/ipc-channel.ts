@@ -6,6 +6,7 @@
 
 import { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../shared/types'
+import type { DoneReason } from '../../shared/types'
 import type { OutputChannel } from './output-channel'
 
 export class IPCChannel implements OutputChannel {
@@ -54,12 +55,16 @@ export class IPCChannel implements OutputChannel {
     })
   }
 
-  sendDone(sessionId: string, cost: number, maxContextTokens: number): void {
-    this.send(IPC_CHANNELS.DONE, { sessionId, cost, maxContextTokens })
+  sendDone(sessionId: string, cost: number, maxContextTokens: number, reason: DoneReason = 'complete', runId?: string): void {
+    this.send(IPC_CHANNELS.DONE, { sessionId, cost, maxContextTokens, reason, runId })
   }
 
-  sendError(message: string): void {
-    this.send(IPC_CHANNELS.ERROR, { message })
+  sendHeartbeat(): void {
+    this.send(IPC_CHANNELS.HEARTBEAT, { at: Date.now() })
+  }
+
+  sendError(message: string, runId?: string): void {
+    this.send(IPC_CHANNELS.ERROR, { message, runId })
   }
 
   sendImage(pathOrBuffer: string | Buffer, caption?: string): void {

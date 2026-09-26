@@ -30,6 +30,12 @@ import { CONTEXT_WINDOWS, COST_PER_TOKEN } from './model-constants'
 // 前向声明，避免循环依赖
 export type { OutputChannel }
 
+// 长任务心跳间隔：渲染层按"连续多个间隔没心跳"判定卡死，而不是拿固定时长猜
+const HEARTBEAT_MS = 5000
+
+// 工具审批等待上限：超过就按拒绝处理，别让整轮永久挂起（人不在 / 窗口卡住）
+const APPROVAL_TIMEOUT_MS = 300_000
+
 function buildUserContentBlocks(files: FileAttachment[], prompt: string): ContentBlock[] {
   const blocks: ContentBlock[] = []
   for (const file of files) {
@@ -321,6 +327,11 @@ export class AgentCore {
       }
       routeImagesRef.fn = routeImages
 
+      // 心跳：run 期间定期告诉渲染层"主进程还活着"，跑得久 ≠ 卡死
+      const heartbeat = isElectronChannel(channel)
+        ? setInterval(() => { try { channel.sendHeartbeat() } catch { /* 窗口关了就算了 */ } }, HEARTBEAT_MS)
+        : null
+
       try {
         // 运行 Agent 循环
         const result = await this.runAgentLoop(
@@ -331,17 +342,19 @@ export class AgentCore {
         // 处理结果
         await this.handleResult(result, sessionId, payload, channel, ctx, sentImages)
       } finally {
+        if (heartbeat) clearInterval(heartbeat)
         pluginSnapshot.unref()
       }
     } catch (err: unknown) {
       if (ctx.abort.signal.aborted) {
-        channel.sendDone(sessionId, 0, 0)
+        // 被中断（用户取消 / 超时 / 同会话重发顶掉）≠ 跑完，收尾原因要如实上报
+        channel.sendDone(sessionId, 0, 0, 'cancelled', payload.runId)
         if (isElectronChannel(channel)) channel.sendPetState('idle')
         return
       }
       const errorMsg = err instanceof Error ? err.message : String(err)
       console.error('[AgentCore] sendMessage error:', errorMsg)
-      channel.sendError(errorMsg)
+      channel.sendError(errorMsg, payload.runId)
       if (isElectronChannel(channel)) channel.sendPetState('error')
     } finally {
       // 清理会话上下文（如果不再需要）
@@ -464,8 +477,10 @@ export class AgentCore {
       }
     }
 
-    // TodoWrite 指引：长任务先拆解清单，逐项推进并实时更新状态
-    systemPrompt += '\n\n## Task List (TodoWrite)\nFor long-running work (multi-file edits, refactors, batch operations, anything with 3+ steps), first call `TodoWrite` with a breakdown of 3-10 concrete todos, mark exactly one as `in_progress` while you work on it, and re-send the full list each time a task\'s status changes (flip to `completed` immediately when done). Skip it for simple single-step requests.'
+    // TodoWrite 指引：长任务先拆解清单，逐项推进并实时更新状态。
+    // 实测模型会攒批（16 次工具调用只更新 2 次，卡片长时间停在第一项），
+    // 所以这里用硬措辞明确禁止攒到最后一起标。
+    systemPrompt += '\n\n## Task List (TodoWrite)\nFor long-running work (multi-file edits, refactors, batch operations, anything with 3+ steps), first call `TodoWrite` with a breakdown of 3-10 concrete todos and mark exactly one as `in_progress`. Then keep the list current as you work: the moment a step is finished, call `TodoWrite` again with that item flipped to `completed` and the next one set to `in_progress`. Do NOT batch status updates — never let several finished steps pile up, and never leave the list showing the first item while you are actually working on later ones. Skip it for simple single-step requests.'
 
     // Write 工具纪律：仅当用户明确要求保存/创建/修改文件时才落盘；
     // 文稿、文章、草稿等阅读型内容默认直接输出正文，不写文件
@@ -667,7 +682,15 @@ export class AgentCore {
               channel.sendToolApprovalRequest(approvalId, name, input, id)
             }
             return new Promise<boolean>((resolve) => {
-              pendingApprovals.set(approvalId, { resolve })
+              // 渲染层一直不响应（窗口卡住/人不在）时不能把整轮挂死：超时当拒绝，让模型自己决定下一步
+              const timer = setTimeout(() => {
+                if (!pendingApprovals.delete(approvalId)) return
+                console.warn('[AgentCore] tool approval timed out, denying:', name)
+                resolve(false)
+              }, APPROVAL_TIMEOUT_MS)
+              pendingApprovals.set(approvalId, {
+                resolve: (approved) => { clearTimeout(timer); resolve(approved) },
+              })
             })
           },
       onToolResult: (id, content, isError) => {
@@ -695,6 +718,7 @@ export class AgentCore {
 
     return {
       usage: result.usage,
+      stopReason: result.stopReason,
       textDeltas,
       fullThinkingParts,
       allToolCalls,
@@ -706,7 +730,7 @@ export class AgentCore {
    * 处理结果和保存
    */
   private async handleResult(
-    result: { usage: { inputTokens: number; outputTokens: number }; textDeltas: string[]; fullThinkingParts: string[]; allToolCalls: Array<{ id: string; name: string; input: unknown }>; allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> },
+    result: { usage: { inputTokens: number; outputTokens: number }; stopReason: string; textDeltas: string[]; fullThinkingParts: string[]; allToolCalls: Array<{ id: string; name: string; input: unknown }>; allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> },
     sessionId: string,
     payload: SendMessagePayload,
     channel: OutputChannel,
@@ -714,12 +738,22 @@ export class AgentCore {
     sentImages?: Set<string>
   ) {
     const store = await this.ensureSessionStore()
-    const { usage, textDeltas, fullThinkingParts, allToolCalls, allToolResults } = result
+    const { usage, stopReason, textDeltas, fullThinkingParts, allToolCalls, allToolResults } = result
 
     const content: Array<Record<string, unknown>> = []
     const fullThinking = fullThinkingParts.join('')
     if (fullThinking) content.push({ type: 'thinking', thinking: fullThinking })
     let fullText = textDeltas.join('')
+
+    // 被截断 / 撞步数上限：必须让用户看见，否则和"正常说完"长得一模一样
+    // （下面还会伪造一句 "Done. ... completed."，不标出来就是明着骗人）。
+    // 单独成块，不混进 fullText（记忆捕获读的是 fullText）
+    const incompleteNote = stopReason === 'max_tokens'
+      ? '\n\n> ⚠️ 本轮输出达到 max_tokens 上限被截断（自动续跑后仍截断），任务可能没做完 —— 回一句「继续」可以接着往下做。'
+      : stopReason === 'max_steps'
+        ? '\n\n> ⚠️ 已达到单轮步数上限（50 步），任务可能没做完 —— 回一句「继续」可以接着往下做。'
+        : ''
+    if (incompleteNote) channel.sendStreamDelta(incompleteNote)
 
     if (!fullText && allToolCalls.length > 0) {
       const toolNames = [...new Set(allToolCalls.map((t) => t.name))]
@@ -734,6 +768,7 @@ export class AgentCore {
       }
     }
     if (fullText) content.push({ type: 'text', text: fullText })
+    if (incompleteNote) content.push({ type: 'text', text: incompleteNote })
     for (const tc of allToolCalls) {
       content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input })
     }
@@ -771,16 +806,20 @@ export class AgentCore {
     const cost = ((usage.inputTokens) * pricing.input + (usage.outputTokens) * pricing.output) / 1000
     const maxContextTokens = CONTEXT_WINDOWS[this.resolveModel(this.config.model)] || 200000
 
-    channel.sendDone(sessionId, cost, maxContextTokens)
-    if (isElectronChannel(channel)) channel.sendPetState('happy')
+    // 循环在步边界被 break（用户取消）也会走到这里：别报成 complete
+    const cancelled = ctx.abort.signal.aborted
+    channel.sendDone(sessionId, cost, maxContextTokens, cancelled ? 'cancelled' : 'complete', payload.runId)
+    if (isElectronChannel(channel)) channel.sendPetState(cancelled ? 'idle' : 'happy')
   }
 
   /**
-   * 取消所有会话
+   * 取消会话：给了后端认识的 sessionId 就只取消它；否则（没给 / 给的是渲染层
+   * 临时 id session-<ts>）退回全量取消 —— 否则"停止"按钮在首轮会失效。
    */
-  cancel() {
-    for (const sessionId of this.sessionContextManager.getSessionIds()) {
-      this.cancelSession(sessionId)
+  cancel(sessionId?: string) {
+    if (sessionId && this.sessionContextManager.cancel(sessionId)) return
+    for (const id of this.sessionContextManager.getSessionIds()) {
+      this.cancelSession(id)
     }
   }
 

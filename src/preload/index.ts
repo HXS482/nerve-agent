@@ -9,9 +9,9 @@ export interface SaveNerveSettingsResult {
 }
 
 const api = {
-  sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files }),
-  cancel: () => ipcRenderer.invoke(IPC_CHANNELS.CANCEL),
+  sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[], runId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files, runId }),
+  cancel: (sessionId?: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL, sessionId),
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_MODEL, model),
   setEffort: (effort: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_EFFORT, effort),
   setProvider: (providerId: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_PROVIDER, providerId),
@@ -50,15 +50,20 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.MESSAGE, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MESSAGE, handler)
   },
-  onError: (callback: (data: { message: string }) => void) => {
+  onError: (callback: (data: { message: string; runId?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data)
     ipcRenderer.on(IPC_CHANNELS.ERROR, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ERROR, handler)
   },
-  onDone: (callback: (data: { sessionId: string; cost: number; maxContextTokens: number }) => void) => {
+  onDone: (callback: (data: { sessionId: string; cost: number; maxContextTokens: number; reason: 'complete' | 'cancelled'; runId?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data)
     ipcRenderer.on(IPC_CHANNELS.DONE, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.DONE, handler)
+  },
+  onHeartbeat: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.HEARTBEAT, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.HEARTBEAT, handler)
   },
   onStreamClear: (callback: () => void) => {
     const handler = () => callback()
