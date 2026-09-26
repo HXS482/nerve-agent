@@ -273,6 +273,9 @@ export default function App() {
         onSend={claude.send}
         onCancel={claude.cancel}
         isLoading={claude.isLoading}
+        currentModel={viewMode === 'stage' ? claude.config.model || 'sonnet' : undefined}
+        onSelectModel={viewMode === 'stage' ? (model, providerId) => claude.updateConfig({ model, ...(providerId ? { provider: providerId } : {}) }) : undefined}
+        workingDirectory={viewMode === 'stage' ? claude.config.cwd : undefined}
       />
 
       {/* Settings modal */}

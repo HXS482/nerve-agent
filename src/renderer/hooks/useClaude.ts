@@ -24,6 +24,8 @@ declare global {
       respondAskUser: (response: import('../../shared/types').AskUserResponse) => Promise<void>
       onAskUserRequest: (callback: (data: import('../../shared/types').AskUserRequest) => void) => () => void
       pickDirectory: () => Promise<string | null>
+      getHostname: () => Promise<string>
+      gitCurrentBranches: (cwds: string[]) => Promise<Record<string, string>>
       pickAndReadFiles: () => Promise<FileAttachment[]>
       getModels: () => Promise<{ alias: string; name: string }[]>
       listSessions: () => Promise<any[]>
@@ -626,6 +628,7 @@ export function useClaude() {
           createdAt: Date.now(),
           updatedAt: Date.now(),
           mode: workspace,
+          cwd: store.config.cwd,
         })
         if (workspace === 'stage') useStageStore.getState().setStageSessionId(sid)
         else setSessionId(sid)

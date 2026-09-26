@@ -6,9 +6,13 @@ interface Props {
   onSelectModel: (model: string, providerId?: string) => void
   sidebarOpen?: boolean
   onToggleSidebar?: () => void
+  // 下拉贴哪一侧：输入胶囊里靠右边缘，要右对齐；顶栏里靠左缘，保持左对齐
+  dropdownAlign?: 'left' | 'right'
+  // 下拉朝哪边弹：输入框在窗口底部，向上弹才不出屏
+  dropDirection?: 'down' | 'up'
 }
 
-export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggleSidebar }: Props) {
+export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggleSidebar, dropdownAlign = 'left', dropDirection = 'down' }: Props) {
   const providers = useChatStore((s) => s.providers)
   const availableModels = useChatStore((s) => s.availableModels)
   const providerModels = useChatStore((s) => s.providerModels)
@@ -94,7 +98,7 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
         )}
         <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#27C93F', display: 'block', flexShrink: 0 }} />
         {label}
-        <span style={{ color: 'var(--text-outline)', fontSize: 9 }}>▾</span>
+        <span style={{ color: 'var(--text-outline)', fontSize: 9 }}>{dropDirection === 'up' ? '▴' : '▾'}</span>
       </button>
 
       {/* Dropdown */}
@@ -102,7 +106,11 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
         <div
           className="animate-expand-in"
           style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4,
+            position: 'absolute',
+            ...(dropDirection === 'up'
+              ? { bottom: '100%', marginBottom: 4 }
+              : { top: '100%', marginTop: 4 }),
+            ...(dropdownAlign === 'right' ? { right: 0 } : { left: 0 }),
             minWidth: 220, zIndex: 100, padding: 4,
             borderRadius: 12,
             background: 'rgba(255, 255, 255, 0.05)',

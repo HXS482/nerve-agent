@@ -4,12 +4,12 @@ import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
+import { StageAvatar } from './StageAvatar'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
 import { PredictiveArcBg } from './PredictiveArcBg'
 import { ThinkSpot } from './ThinkSpot'
 import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
-import { ModelIsland } from '../ModelIsland'
 import { ApprovalBar } from '../ApprovalBar'
 import { SelectionActions } from '../SelectionActions'
 
@@ -50,7 +50,7 @@ export function StageShell({ claude, onOpenSettings }: Props) {
       {/* 顶栏 */}
       <div className="stage-topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="stage-topbar-left" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          {/* 交通灯（chat 模式它们在侧边栏，Stage 需要自己的） */}
+          {/* 交通灯（chat 模式它们在侧边栏，Stage 需要自己的）。模型岛已移到底部输入胶囊内 */}
           <div className="flex gap-2 group/tl" style={{ marginRight: '4px' }}>
             <div className="w-3 h-3 rounded-full bg-[#FF5F56] cursor-pointer flex items-center justify-center" onClick={() => window.claude.windowClose()}>
               <svg className="w-2 h-2 opacity-0 group-hover/tl:opacity-100 transition-opacity duration-150" viewBox="0 0 12 12" fill="none" stroke="#4a0002" strokeWidth="2" strokeLinecap="round"><path d="M3 3l6 6M9 3l-6 6" /></svg>
@@ -62,21 +62,10 @@ export function StageShell({ claude, onOpenSettings }: Props) {
               <svg className="w-2 h-2 opacity-0 group-hover/tl:opacity-100 transition-opacity duration-150" viewBox="0 0 12 12" fill="none" stroke="#003a00" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8l4-4 4 4M2 4l4 4 4-4" /></svg>
             </div>
           </div>
-          <ModelIsland
-            currentModel={claude.config.model || 'sonnet'}
-            onSelectModel={(model, providerId) => claude.updateConfig({ model, ...(providerId ? { provider: providerId } : {}) })}
-            sidebarOpen={true}
-            onToggleSidebar={() => {}}
-          />
         </div>
 
         <div className="stage-topbar-right" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <button className="stage-icon-btn stage-settings-btn" onClick={onOpenSettings} title="Settings">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82.33l.06.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-            </svg>
-          </button>
+          <StageAvatar onOpenSettings={onOpenSettings} />
         </div>
       </div>
 
@@ -119,6 +108,7 @@ export function StageShell({ claude, onOpenSettings }: Props) {
                 claude.clearStageSession()
                 setSessionsOpen(false)
               }}
+              onPickDirectory={claude.pickDirectory}
             />
           </div>
         </>
