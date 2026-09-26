@@ -85,6 +85,8 @@ export const IPC_CHANNELS = {
   OPEN_IN_BROWSER: 'nerve:open-in-browser',
   // File explorer
   LIST_DIR: 'nerve:list-dir',
+  // System
+  GET_HOSTNAME: 'nerve:get-hostname',
   // Git
   GIT_STATUS: 'git:status',
   GIT_STAGE: 'git:stage',
@@ -107,6 +109,7 @@ export const IPC_CHANNELS = {
   GIT_DISCARD: 'git:discard',
   GIT_SHOW_DIFF: 'git:show-diff',
   GIT_FETCH: 'git:fetch',
+  GIT_CURRENT_BRANCHES: 'git:current-branches',
   // Git UI refresh notification (main → renderer)
   GIT_REFRESH: 'git:refresh',
   // Gateway

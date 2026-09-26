@@ -1649,22 +1649,114 @@ button, a, input, textarea, select {
   background: var(--bg-surface-container-high);
   color: var(--text-on-surface);
 }
-/* 顶栏设置按钮：圆形 glass-dock 容器 */
-.stage-settings-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
+
+/* ===== 输入栏 + 按钮：点击向上弹 Add photo & files bar ===== */
+.inputbar-plus-root {
   position: relative;
-  top: 6px; /* 相对定位下移，不影响 flex 布局（margin 会把整行撑高） */
-  right: -4px;
-  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.inputbar-plus-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: expand-in 0.2s ease-out;
+  z-index: 60;
 }
-.stage-settings-btn:hover {
+/* 菜单关闭遮罩：铺满视口，z 54 压在胶囊之上、菜单（60）之下 */
+.fab-menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+}
+.fab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-on-surface-variant);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fab-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-on-surface);
+}
+/* Stage 顶栏账号头像 + 二级菜单（菜单项样式复用 .fab-menu-item） */
+.stage-avatar-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* 相对定位偏移沿用被替换的 .stage-settings-btn：只影响视觉位置，不占布局
+     （用 margin 会把顶栏这行撑高）。挂在 root 上而非按钮上，二级菜单才会跟着一起偏移 */
+  top: 6px;
+  right: -4px;
+}
+.stage-avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  /* 内缩出环缝：照片与边框之间留一圈，缝里露的是按钮自己的毛玻璃底 */
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+/* rounded-full 必须给图片本身：只靠父级 overflow:hidden 的话，图片被裁到的是
+   内边距圆的边界而不是它自己的轮廓，会露出方角 */
+.stage-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+  display: block;
+}
+.stage-avatar-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+.stage-avatar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: expand-in 0.2s ease-out;
+  z-index: 60;
 }
 .stage-main {
   flex: 1;
@@ -1728,111 +1820,243 @@ button, a, input, textarea, select {
   from { transform: translate(-50%, -46%) scale(0.96); opacity: 0; }
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
-/* Stage 会话列表 */
+/* Stage 会话列表：项目头（repo @ host）+ 三段式条目（仓库 / 标题 / 分支） */
 .stage-sessions {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px 10px;
+  padding: 12px 6px 8px;
+  /* cqw 自适应：条目尺寸跟容器宽度缩放。抽屉定宽时恒在 clamp 上限，等价于参考侧栏的宽态 */
+  container-type: inline-size;
+  container-name: stagebar;
 }
-.stage-sessions-header {
+
+/* 项目头：实心仓库图标 + repo @ host ⌄  |  + */
+.stage-project-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 2px 4px 10px;
+  gap: 2px;
+  height: clamp(30px, 9.5cqw, 36px);
+  flex-shrink: 0;
+  margin-bottom: 8px;
 }
-.stage-sessions-title {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-outline-variant);
-}
-.stage-sessions-new {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  border: 1px dashed var(--border-default);
-  background: transparent;
-  color: var(--text-on-surface-variant);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.stage-sessions-new:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-.stage-sessions-list {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.stage-sessions-empty {
-  font-size: 11px;
-  color: var(--text-outline-variant);
-  text-align: center;
-  padding: 24px 0;
-}
-.stage-session-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
-}
-.stage-session-item:hover {
-  background: var(--bg-surface-container);
-}
-.stage-session-item.is-active {
-  background: var(--bg-surface-container);
-  border-color: var(--border-default);
-}
-.stage-session-main {
+.stage-project-pick {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.stage-session-title {
-  font-size: 12px;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
   color: var(--text-on-surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.stage-project-pick:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.stage-project-icon {
+  flex-shrink: 0;
+  width: clamp(14px, 4.7cqw, 17px);
+  height: clamp(14px, 4.7cqw, 17px);
+  /* 实心图标与细线轮廓视觉重量相当，提亮与项目名同色 */
+  color: var(--text-on-surface);
+}
+/* 名字与机器名同基线：小字自然落在名字的右下角（图标各自居中，不参与基线对齐） */
+.stage-project-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.stage-project-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: clamp(12px, 4.3cqw, 15px);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.stage-session-time {
-  font-size: 10px;
-  color: var(--text-outline-variant);
+.stage-project-host {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: clamp(8px, 2.5cqw, 9px);
+  color: var(--text-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.stage-session-del {
+/* 靠右：推到项目名右缘而非紧邻机器名 */
+.stage-project-chevron {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: clamp(11px, 3.5cqw, 14px);
+  height: clamp(11px, 3.5cqw, 14px);
+  margin-left: auto;
+  color: var(--text-on-surface-variant);
+}
+.stage-project-new {
+  flex-shrink: 0;
+  width: clamp(24px, 7.5cqw, 28px);
+  height: clamp(24px, 7.5cqw, 28px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.stage-project-new:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-on-surface);
+}
+.stage-project-new > svg {
+  width: clamp(12px, 3.8cqw, 15px);
+  height: clamp(12px, 3.8cqw, 15px);
+}
+
+.stage-sessions-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2px, 1.2cqw, 4px);
+}
+.stage-sessions-empty {
+  font-size: 12px;
+  color: var(--text-outline-variant);
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* 条目：仓库@机器 + 时间/操作 / 标题 / 分支 */
+.stage-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1px, 0.5cqw, 2px);
+  padding: clamp(5px, 1.9cqw, 7px) clamp(8px, 2.9cqw, 11px);
+  border-radius: clamp(9px, 3.4cqw, 12px);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.stage-session-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.stage-session-item.is-active {
+  background: rgba(255, 255, 255, 0.07);
+}
+.stage-session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stage-session-scope {
+  flex: 1;
+  min-width: 0;
+  font-size: clamp(10px, 3cqw, 11px);
+  line-height: 1.4;
+  color: var(--text-outline);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 时间与操作同格：hover 时时间淡出、操作浮出 */
+.stage-session-aside {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.stage-session-time {
+  font-size: clamp(10px, 3cqw, 11px);
+  line-height: 1.4;
+  color: var(--text-outline);
+  transition: opacity 0.12s;
+}
+.stage-session-actions {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.stage-session-item:hover .stage-session-time {
+  opacity: 0;
+}
+.stage-session-item:hover .stage-session-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.stage-session-act {
+  width: clamp(14px, 4.5cqw, 17px);
+  height: clamp(14px, 4.5cqw, 17px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-outline);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
-.stage-session-item:hover .stage-session-del {
+.stage-session-act:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-on-surface);
+}
+.stage-session-act.is-danger:hover {
+  color: var(--error);
+}
+
+.stage-session-title {
+  font-size: clamp(12px, 4.2cqw, 14.5px);
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--text-on-surface);
+  /* 未选中压暗：和选中底一起构成选中态，悬停/选中回全亮 */
+  opacity: 0.68;
+  transition: opacity 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-session-item:hover .stage-session-title,
+.stage-session-item.is-active .stage-session-title {
   opacity: 1;
 }
-.stage-session-del:hover {
-  color: var(--error);
+/* 无分支时用 min-height 留行槽，条目高度统一 */
+.stage-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.4em;
+  font-size: clamp(10px, 3cqw, 11px);
+  line-height: 1.4;
+  color: var(--text-outline);
+}
+.stage-session-branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 分支图标跟字号走（覆盖 SVG 上的 width/height 属性） */
+.stage-session-meta > svg {
+  flex-shrink: 0;
+  width: clamp(9px, 2.7cqw, 11px);
+  height: clamp(9px, 2.7cqw, 11px);
 }
 
 /* ===== 用户消息时间轴（右下角）：Hook Sidebar 钩轨导航 =====

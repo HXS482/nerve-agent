@@ -167,6 +167,8 @@ const api = {
   openInBrowser: (type: string, content: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_IN_BROWSER, { type, content }),
   listDir: (dirPath: string) => ipcRenderer.invoke(IPC_CHANNELS.LIST_DIR, dirPath),
+  // System
+  getHostname: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.GET_HOSTNAME),
   // Git
   gitStatus: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, cwd),
   gitStage: (files: string[], cwd: string) =>
@@ -203,6 +205,8 @@ const api = {
   gitShowDiff: (cwd: string, hash: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GIT_SHOW_DIFF, cwd, hash),
   gitFetch: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_FETCH, cwd),
+  gitCurrentBranches: (cwds: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GIT_CURRENT_BRANCHES, cwds),
   onGitRefresh: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.GIT_REFRESH, handler)
