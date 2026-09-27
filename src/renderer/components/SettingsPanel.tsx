@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
+import {
+  Settings as SettingsIcon, Heart, User, Activity, Server, Sparkles, Mic, MessageSquare,
+  Package, Plus, X, Eye, EyeOff,
+} from 'lucide-react'
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore } from '../stores/chatStore'
-import { isVideoBg, isHtmlBg, htmlFromDataUrl } from './Stage/StageBgMedia'
+import { isVideoBg, isHtmlBg, htmlForIframe } from './Stage/StageBgMedia'
 
 interface Props {
   config: ClaudeConfig
@@ -15,112 +19,69 @@ type Tab = 'general' | 'soul' | 'persona' | 'provider' | 'mcp' | 'skills' | 'voi
 const EFFORTS: ClaudeConfig['effort'][] = ['low', 'medium', 'high', 'xhigh', 'max']
 const PERMISSION_MODES: ClaudeConfig['permissionMode'][] = ['default', 'acceptEdits', 'auto', 'bypassPermissions']
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  {
-    id: 'general',
-    label: 'General',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'soul',
-    label: 'Soul',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'persona',
-    label: 'Persona',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21v-1a7 7 0 0114 0v1" />
-      </svg>
-    ),
-  },
-  {
-    id: 'provider',
-    label: 'Provider',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-      </svg>
-    ),
-  },
-  {
-    id: 'mcp',
-    label: 'MCP Servers',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-        <line x1="6" y1="6" x2="6.01" y2="6" />
-        <line x1="6" y1="18" x2="6.01" y2="18" />
-      </svg>
-    ),
-  },
-  {
-    id: 'skills',
-    label: 'Skills',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-      </svg>
-    ),
-  },
-  {
-    id: 'voice',
-    label: 'Voice',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-        <path d="M19 10v2a7 7 0 01-14 0v-2" />
-        <line x1="12" y1="19" x2="12" y2="23" />
-        <line x1="8" y1="23" x2="16" y2="23" />
-      </svg>
-    ),
-  },
-  {
-    id: 'channels',
-    label: 'Channels',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'plugins',
-    label: 'Plugins',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-        <path d="M2 17l10 5 10-5" />
-        <path d="M2 12l10 5 10-5" />
-      </svg>
-    ),
-  },
+// 存的是 API enum，界面说人话
+const EFFORT_LABELS: Record<string, string> = {
+  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max',
+}
+const PERMISSION_LABELS: Record<string, string> = {
+  default: 'Ask each time',
+  acceptEdits: 'Accept edits',
+  auto: 'Auto',
+  bypassPermissions: 'Skip all checks',
+}
+const PERMISSION_HINTS: Record<string, string> = {
+  default: 'Every write waits for your confirmation.',
+  acceptEdits: 'File edits go through; commands still ask.',
+  auto: 'Reads and edits run unattended.',
+  bypassPermissions: 'Nothing is checked. Sandboxed environments only.',
+}
+
+const TABS: { id: Tab; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
+  { id: 'general', label: 'General', icon: SettingsIcon },
+  { id: 'soul', label: 'Soul', icon: Heart },
+  { id: 'persona', label: 'Persona', icon: User },
+  { id: 'provider', label: 'Provider', icon: Activity },
+  { id: 'mcp', label: 'MCP Servers', icon: Server },
+  { id: 'skills', label: 'Skills', icon: Sparkles },
+  { id: 'voice', label: 'Voice', icon: Mic },
+  { id: 'channels', label: 'Channels', icon: MessageSquare },
+  { id: 'plugins', label: 'Plugins', icon: Package },
 ]
 
 // --- Shared UI Primitives ---
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** 设置区：真标题（13/600）+ 可选说明，靠发丝线分段，不靠等距留白 */
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div
-        className="text-[11px] font-medium uppercase tracking-wider"
-        style={{ color: 'var(--text-outline)', marginBottom: 10 }}
-      >
-        {title}
+    <section style={{ paddingTop: 22, marginTop: 22, borderTop: '1px solid var(--border-subtle)' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)' }}>{title}</div>
+      {hint && (
+        <div style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--text-outline)', marginTop: 5, maxWidth: 460 }}>
+          {hint}
+        </div>
+      )}
+      <div style={{ marginTop: 14 }}>{children}</div>
+    </section>
+  )
+}
+
+/** 标签在左、控件在右：右侧面板的主要排版单位，左列可扫读 */
+function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '124px minmax(0, 1fr)',
+        gap: 16,
+        alignItems: 'start',
+        padding: '9px 0',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-on-surface-variant)' }}>{label}</div>
+        {hint && <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-outline)', marginTop: 3 }}>{hint}</div>}
       </div>
-      {children}
+      <div style={{ minWidth: 0 }}>{children}</div>
     </div>
   )
 }
@@ -141,13 +102,13 @@ function PillGroup({ options, value, onChange, renderLabel }: {
             onClick={() => onChange(opt)}
             className="transition-colors cursor-pointer"
             style={{
-              padding: '5px 12px',
-              borderRadius: 8,
-              fontSize: 11,
+              padding: '5px 11px',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 12,
               fontWeight: active ? 600 : 400,
-              background: active ? 'rgba(173, 198, 255, 0.12)' : 'var(--bg-surface-container-high)',
+              background: active ? 'var(--accent-soft)' : 'var(--bg-surface-container-high)',
               color: active ? 'var(--accent-primary)' : 'var(--text-on-surface-variant)',
-              border: `1px solid ${active ? 'rgba(173, 198, 255, 0.25)' : 'transparent'}`,
+              border: `1px solid ${active ? 'var(--accent-line)' : 'transparent'}`,
             }}
           >
             {renderLabel ? renderLabel(opt) : opt}
@@ -175,15 +136,15 @@ function TextInput({ value, onChange, placeholder, type = 'text', mono, rightSlo
         placeholder={placeholder}
         className="w-full outline-none transition-colors"
         style={{
-          padding: rightSlot ? '7px 36px 7px 10px' : '7px 10px',
-          borderRadius: 8,
+          padding: rightSlot ? '7px 34px 7px 10px' : '7px 10px',
+          borderRadius: 'var(--radius-md)',
           fontSize: 12,
-          fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
+          fontFamily: mono ? 'var(--font-mono)' : undefined,
           background: 'var(--bg-surface-container-high)',
           color: 'var(--text-on-surface)',
           border: '1px solid var(--border-subtle)',
         }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-primary)' }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-line)' }}
         onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
       />
       {rightSlot && (
@@ -211,14 +172,14 @@ function MultilineInput({ value, onChange, placeholder, rows = 3 }: {
       className="w-full outline-none transition-colors resize-none"
       style={{
         padding: '7px 10px',
-        borderRadius: 8,
-        fontSize: 11,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 12,
+        fontFamily: 'var(--font-mono)',
         background: 'var(--bg-surface-container-high)',
         color: 'var(--text-on-surface)',
         border: '1px solid var(--border-subtle)',
       }}
-      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-primary)' }}
+      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-line)' }}
       onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
     />
   )
@@ -235,12 +196,12 @@ function PrimaryButton({ children, onClick, disabled }: {
       disabled={disabled}
       className="cursor-pointer transition-colors"
       style={{
-        padding: '6px 16px',
-        borderRadius: 8,
-        fontSize: 11,
+        padding: '7px 16px',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 12,
         fontWeight: 600,
         background: 'var(--accent-primary)',
-        color: '#fff',
+        color: 'var(--accent-on-primary)',
         opacity: disabled ? 0.5 : 1,
         border: 'none',
       }}
@@ -261,9 +222,9 @@ function SecondaryButton({ children, onClick, disabled }: {
       disabled={disabled}
       className="cursor-pointer transition-colors"
       style={{
-        padding: '6px 16px',
-        borderRadius: 8,
-        fontSize: 11,
+        padding: '7px 16px',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 12,
         fontWeight: 500,
         background: 'var(--bg-surface-container-high)',
         color: 'var(--text-on-surface)',
@@ -278,25 +239,76 @@ function SecondaryButton({ children, onClick, disabled }: {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] font-medium" style={{ color: 'var(--text-on-surface-variant)', marginBottom: 6 }}>
+    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-on-surface-variant)', marginBottom: 5 }}>
       {children}
     </div>
   )
 }
 
-function StatusBadge({ ok, text }: { ok: boolean; text: string }) {
+function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <div
+    <div style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--text-outline)', marginTop: 6 }}>
+      {children}
+    </div>
+  )
+}
+
+/** 开关：状态由位置和 On/Off 承担，不用发光点也不用等宽大写 */
+function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
+  return (
+    <button
+      onClick={onChange}
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      className="cursor-pointer transition-colors"
       style={{
-        padding: '6px 12px',
-        borderRadius: 8,
-        fontSize: 11,
-        background: ok ? 'rgba(39, 201, 63, 0.1)' : 'rgba(255, 95, 86, 0.1)',
-        border: `1px solid ${ok ? 'rgba(39, 201, 63, 0.25)' : 'rgba(255, 95, 86, 0.25)'}`,
-        color: ok ? '#27c93f' : '#ff5f56',
+        width: 30, height: 17, borderRadius: 9, padding: 2,
+        background: on ? 'var(--accent-primary)' : 'var(--bg-surface-container-highest)',
+        border: '1px solid var(--border-subtle)',
+        display: 'flex', alignItems: 'center',
+        justifyContent: on ? 'flex-end' : 'flex-start',
+        flexShrink: 0,
       }}
     >
-      {text}
+      <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#fff' }} />
+    </button>
+  )
+}
+
+/** 纯图标按钮：删除、显隐等无文字动作 */
+function IconButton({ onClick, label, children, danger }: {
+  onClick: () => void
+  label: string
+  children: React.ReactNode
+  danger?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="cursor-pointer transition-colors"
+      style={{
+        padding: 4, borderRadius: 'var(--radius-sm)', color: 'var(--text-outline)',
+        background: 'transparent', border: 'none', display: 'flex',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = danger ? 'var(--text-danger)' : 'var(--text-on-surface)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** 状态靠字承载，颜色只做辅助；不再是一个同色系染满的盒子 */
+function StatusBadge({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 12 }}>
+      <span style={{ fontWeight: 600, color: ok ? 'var(--text-success)' : 'var(--text-danger)' }}>
+        {ok ? 'Passed' : 'Failed'}
+      </span>
+      <span style={{ color: 'var(--text-on-surface-variant)' }}>{text}</span>
     </div>
   )
 }
@@ -315,7 +327,6 @@ interface PluginInfo {
 function PluginsTab() {
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<string | null>(null)
 
   const loadPlugins = async () => {
     setLoading(true)
@@ -339,74 +350,45 @@ function PluginsTab() {
   }
 
   if (loading) {
-    return <div className="text-[12px]" style={{ color: 'var(--text-outline-variant)', padding: '20px 0', textAlign: 'center' }}>Loading plugins...</div>
+    return <div style={{ fontSize: 12, color: 'var(--text-outline)', padding: '20px 0' }}>Loading plugins…</div>
   }
 
   return (
-    <div className="flex flex-col" style={{ gap: 10 }}>
-      <Section title="Installed Plugins">
+    <div>
+      <Section title="Plugins" hint="Drop a plugin folder into ~/.nerve/plugins/ to install it.">
         {plugins.length === 0 ? (
-          <div className="text-[12px]" style={{ color: 'var(--text-outline-variant)', padding: '12px 0' }}>
-            No plugins installed. Place plugins in <code style={{ color: 'var(--text-on-surface-variant)', background: 'var(--bg-surface-container-high)', padding: '1px 5px', borderRadius: 4 }}>~/.nerve/plugins/</code>
+          <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
+            None installed.
           </div>
         ) : (
-          <div className="flex flex-col" style={{ gap: 8 }}>
+          <div className="flex flex-col" style={{ gap: 4 }}>
             {plugins.map(plugin => (
-              <div key={plugin.id} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container)' }}>
+              <div key={plugin.id} style={{ padding: '9px 10px', borderRadius: 'var(--radius-sm)' }}>
                 {/* Header row */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center" style={{ gap: 8 }}>
-                    {/* Toggle switch */}
-                    <button
-                      onClick={() => handleToggle(plugin.id, !plugin.enabled)}
-                      className="cursor-pointer transition-colors"
-                      style={{
-                        width: 32, height: 18, borderRadius: 9, border: 'none', position: 'relative', flexShrink: 0,
-                        background: plugin.enabled ? 'var(--accent-primary)' : 'var(--bg-surface-container-highest)',
-                      }}
-                    >
-                      <div style={{
-                        width: 14, height: 14, borderRadius: 7, background: '#fff',
-                        position: 'absolute', top: 2, left: plugin.enabled ? 16 : 2,
-                        transition: 'left 0.15s',
-                      }} />
-                    </button>
-                    <span className="text-[12px] font-medium" style={{ color: plugin.enabled ? 'var(--text-on-surface)' : 'var(--text-outline)' }}>
+                  <div className="flex items-center" style={{ gap: 10 }}>
+                    <Toggle
+                      on={plugin.enabled}
+                      onChange={() => handleToggle(plugin.id, !plugin.enabled)}
+                      label={`Toggle ${plugin.id}`}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: plugin.enabled ? 'var(--text-on-surface)' : 'var(--text-outline)' }}>
                       {plugin.id}
                     </span>
-                    <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)' }}>v{plugin.version}</span>
-                    <span className="text-[10px]" style={{ color: 'var(--text-outline-variant)', background: 'var(--bg-surface-container-high)', padding: '1px 6px', borderRadius: 4 }}>
-                      {plugin.trust}
-                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>{plugin.version}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>{plugin.trust}</span>
                   </div>
-                  <button
-                    onClick={() => handleReload(plugin.id)}
-                    className="text-[11px] cursor-pointer transition-colors"
-                    style={{ padding: '3px 10px', borderRadius: 6, background: 'var(--bg-surface-container-high)', color: 'var(--text-on-surface-variant)', border: '1px solid var(--border-subtle)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-highest)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
-                  >
-                    Reload
-                  </button>
+                  <SecondaryButton onClick={() => handleReload(plugin.id)}>Reload</SecondaryButton>
                 </div>
 
                 {/* Description */}
                 {plugin.description && (
-                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-on-surface-variant)' }}>{plugin.description}</p>
+                  <p style={{ fontSize: 11, marginTop: 4, marginBottom: 0, lineHeight: 1.5, color: 'var(--text-outline)' }}>{plugin.description}</p>
                 )}
 
-                {/* Expandable details */}
-                <button
-                  onClick={() => setExpanded(expanded === plugin.id ? null : plugin.id)}
-                  className="text-[10px] mt-2 cursor-pointer"
-                  style={{ color: 'var(--text-outline)', background: 'none', border: 'none', padding: 0 }}
-                >
-                  {expanded === plugin.id ? '▾' : '▸'} Tools ({plugin.toolCount})
-                </button>
-
-                {expanded === plugin.id && (
-                  <div className="mt-1 text-[10px]" style={{ color: 'var(--text-outline-variant)', paddingLeft: 8 }}>
-                    <div>Tools: {plugin.toolCount} registered</div>
+                {plugin.toolCount > 0 && (
+                  <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-outline)' }}>
+                    {plugin.toolCount} {plugin.toolCount === 1 ? 'tool' : 'tools'}
                   </div>
                 )}
               </div>
@@ -440,15 +422,15 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: 'min(680px, calc(100vw - 48px))',
-          height: 'min(520px, calc(100vh - 48px))',
+          width: 'min(720px, calc(100vw - 48px))',
+          height: 'min(560px, calc(100vh - 48px))',
           display: 'flex',
           background: 'var(--dynamic-island-bg)',
           backdropFilter: 'var(--dynamic-island-blur)',
           WebkitBackdropFilter: 'var(--dynamic-island-blur)',
           border: '1px solid var(--dynamic-island-border)',
-          borderRadius: 20,
-          boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset',
+          borderRadius: 'var(--radius-xl)',
+          boxShadow: 'var(--shadow-pop)',
           overflow: 'hidden',
         }}
       >
@@ -456,28 +438,26 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
         <div
           className="shrink-0 flex flex-col"
           style={{
-            width: 164,
+            width: 172,
             borderRight: '1px solid var(--border-subtle)',
-            background: 'rgba(255,255,255,0.02)',
+            background: 'var(--bg-mica-sidebar)',
           }}
         >
           {/* Sidebar header */}
           <div
             className="no-select"
-            style={{
-              padding: '18px 18px 14px',
-              borderBottom: '1px solid var(--border-subtle)',
-            }}
+            style={{ padding: '18px 18px 12px' }}
           >
-            <div className="text-[13px] font-semibold" style={{ color: 'var(--text-on-surface)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)' }}>
               Settings
             </div>
           </div>
 
           {/* Tab buttons */}
-          <div className="flex flex-col" style={{ padding: '8px 8px', gap: 2 }}>
+          <div className="flex flex-col" style={{ padding: '0 8px 10px', gap: 1 }}>
             {TABS.map((t) => {
               const active = tab === t.id
+              const Icon = t.icon
               return (
                 <button
                   key={t.id}
@@ -485,21 +465,21 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
                   className="flex items-center transition-colors cursor-pointer"
                   style={{
                     gap: 9,
-                    padding: '8px 10px',
-                    borderRadius: 10,
+                    padding: '7px 10px',
+                    borderRadius: 'var(--radius-md)',
                     fontSize: 12,
                     fontWeight: active ? 600 : 400,
-                    background: active ? 'rgba(173, 198, 255, 0.08)' : 'transparent',
+                    background: active ? 'var(--accent-soft)' : 'transparent',
                     color: active ? 'var(--accent-primary)' : 'var(--text-on-surface-variant)',
                   }}
                   onMouseEnter={(e) => {
-                    if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                    if (!active) e.currentTarget.style.background = 'var(--bg-surface-container-high)'
                   }}
                   onMouseLeave={(e) => {
                     if (!active) e.currentTarget.style.background = 'transparent'
                   }}
                 >
-                  {t.icon}
+                  <Icon size={15} strokeWidth={1.5} />
                   {t.label}
                 </button>
               )
@@ -509,47 +489,18 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
 
         {/* Right content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
+          {/* Header — 只放关闭键，tab 名由侧栏高亮项承担，不重复印两遍 */}
           <div
-            className="flex items-center justify-between shrink-0"
-            style={{
-              padding: '14px 20px',
-              borderBottom: '1px solid var(--border-subtle)',
-            }}
+            className="flex items-center justify-end shrink-0"
+            style={{ padding: '12px 14px 12px 20px' }}
           >
-            <span className="text-[13px] font-semibold" style={{ color: 'var(--text-on-surface)' }}>
-              {TABS.find((t) => t.id === tab)?.label}
-            </span>
-            <button
-              onClick={onClose}
-              className="cursor-pointer transition-colors"
-              style={{
-                padding: 5,
-                borderRadius: 8,
-                color: 'var(--text-outline)',
-                background: 'transparent',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-                e.currentTarget.style.color = 'var(--text-on-surface)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.color = 'var(--text-outline)'
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
+            <IconButton onClick={onClose} label="Close settings">
+              <X size={15} strokeWidth={1.5} />
+            </IconButton>
           </div>
 
           {/* Tab content — scrollable */}
-          <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ padding: 20 }}>
+          <div className="settings-body flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 24px 24px' }}>
             {tab === 'general' && (
               <GeneralTab config={config} onUpdateConfig={onUpdateConfig} onOpenProjectPicker={onOpenProjectPicker} />
             )}
@@ -588,59 +539,66 @@ function GeneralTab({ config, onUpdateConfig, onOpenProjectPicker }: {
 
   return (
     <div>
-      <Section title="Provider Group">
-        <div className="text-[11px] mb-2" style={{ color: 'var(--text-outline)' }}>
-          Select which provider group to use. Models are grouped by provider in the top bar.
-        </div>
-        <PillGroup
-          options={allProviderIds}
-          value={activeProvider}
-          onChange={(id) => {
-            const newModels = providerModels[id] || []
-            const currentModel = config.model
-            const modelExistsInNewProvider = newModels.some((m) => m === currentModel)
-            if (newModels.length > 0 && !modelExistsInNewProvider) {
-              // Current model is not in the new provider's list — switch to first available
-              onUpdateConfig({ provider: id, model: newModels[0] })
-            } else {
-              onUpdateConfig({ provider: id })
-            }
-          }}
-        />
-        {hasModels && (
-          <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
-            {activeModels.length} model{activeModels.length > 1 ? 's' : ''} in this group
+      <Section
+        title="Model"
+        hint="Provider picks the endpoint and credentials; the top bar switches between its models."
+      >
+        <Row label="Provider group">
+          <PillGroup
+            options={allProviderIds}
+            value={activeProvider}
+            onChange={(id) => {
+              const newModels = providerModels[id] || []
+              const currentModel = config.model
+              const modelExistsInNewProvider = newModels.some((m) => m === currentModel)
+              if (newModels.length > 0 && !modelExistsInNewProvider) {
+                // Current model is not in the new provider's list — switch to first available
+                onUpdateConfig({ provider: id, model: newModels[0] })
+              } else {
+                onUpdateConfig({ provider: id })
+              }
+            }}
+          />
+        </Row>
+
+        <Row
+          label="Effort"
+          hint={hasModels ? undefined : 'No models fetched for this group yet.'}
+        >
+          <PillGroup
+            options={EFFORTS}
+            value={config.effort}
+            onChange={(e) => onUpdateConfig({ effort: e as ClaudeConfig['effort'] })}
+            renderLabel={(e) => EFFORT_LABELS[e] ?? e}
+          />
+        </Row>
+
+        <Row label="Permission mode" hint={PERMISSION_HINTS[config.permissionMode]}>
+          <PillGroup
+            options={PERMISSION_MODES}
+            value={config.permissionMode}
+            onChange={(pm) => onUpdateConfig({ permissionMode: pm as ClaudeConfig['permissionMode'] })}
+            renderLabel={(pm) => PERMISSION_LABELS[pm] ?? pm}
+          />
+        </Row>
+      </Section>
+
+      <Section title="Workspace">
+        <Row label="Working directory">
+          <div className="flex items-center" style={{ gap: 10 }}>
+            <span
+              className="truncate"
+              style={{ fontSize: 12, color: 'var(--text-on-surface-variant)', fontFamily: 'var(--font-mono)' }}
+            >
+              {config.cwd || 'Not set'}
+            </span>
+            <SecondaryButton onClick={onOpenProjectPicker}>Change</SecondaryButton>
           </div>
-        )}
-      </Section>
+        </Row>
 
-      <Section title="Effort">
-        <PillGroup
-          options={EFFORTS}
-          value={config.effort}
-          onChange={(e) => onUpdateConfig({ effort: e as ClaudeConfig['effort'] })}
-        />
-      </Section>
-
-      <Section title="Permission Mode">
-        <PillGroup
-          options={PERMISSION_MODES}
-          value={config.permissionMode}
-          onChange={(pm) => onUpdateConfig({ permissionMode: pm as ClaudeConfig['permissionMode'] })}
-        />
-      </Section>
-
-      <Section title="Working Directory">
-        <div className="flex items-center" style={{ gap: 10 }}>
-          <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface-variant)', maxWidth: 340 }}>
-            {config.cwd || 'Not set'}
-          </span>
-          <SecondaryButton onClick={onOpenProjectPicker}>Change</SecondaryButton>
-        </div>
-      </Section>
-
-      <Section title="Stage 背景">
-        <StageBgPicker />
+        <Row label="Stage background" hint="Shown behind the Stage view.">
+          <StageBgPicker />
+        </Row>
       </Section>
     </div>
   )
@@ -693,13 +651,23 @@ function StageBgPicker() {
     <div>
       <div
         style={{
-          width: 240, aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
+          width: 260, aspectRatio: '16/10', borderRadius: 'var(--radius-md)', overflow: 'hidden',
           border: '1px solid var(--border-subtle)',
-          background: video ? '#0a0a0a' : html ? '#0a0a0a' : stageBg ? `#0a0a0a url("${stageBg}") center / cover no-repeat` : '#030303',
-          marginBottom: 8,
+          background: stageBg ? '#0a0a0a' : 'var(--bg-surface-container-high)',
+          marginBottom: 10,
           position: 'relative',
         }}
       >
+        {!stageBg && (
+          <div
+            style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, color: 'var(--text-outline)',
+            }}
+          >
+            No background
+          </div>
+        )}
         {video && (
           <video
             src={stageBg}
@@ -712,7 +680,7 @@ function StageBgPicker() {
         )}
         {html && stageBg && (
           <iframe
-            srcDoc={htmlFromDataUrl(stageBg)}
+            srcDoc={htmlForIframe(stageBg)}
             sandbox="allow-scripts"
             title="Stage background preview"
             style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
@@ -720,9 +688,9 @@ function StageBgPicker() {
         )}
       </div>
       <div className="flex items-center" style={{ gap: 8 }}>
-        <SecondaryButton onClick={() => fileRef.current?.click()}>选择图片/视频/HTML</SecondaryButton>
+        <SecondaryButton onClick={() => fileRef.current?.click()}>Choose file</SecondaryButton>
         {stageBg && (
-          <SecondaryButton onClick={() => setStageBg(null)}>恢复默认</SecondaryButton>
+          <SecondaryButton onClick={() => setStageBg(null)}>Reset</SecondaryButton>
         )}
         <input
           ref={fileRef}
@@ -736,9 +704,10 @@ function StageBgPicker() {
           }}
         />
       </div>
-      <div className="text-[10px] mt-2" style={{ color: 'var(--text-outline)' }}>
-        支持图片（自动压缩到 1920 宽）、视频（mp4/webm，循环静音播放）和 HTML 动态背景（沙箱渲染，不可交互）；即时生效并本地持久化
-      </div>
+      <Hint>
+        Images are re-encoded to 1920px wide JPEG. Video (mp4/webm) loops muted. HTML runs in a
+        sandboxed, non-interactive frame. Saved locally, applied immediately.
+      </Hint>
     </div>
   )
 }
@@ -768,10 +737,7 @@ function PromptEditorTab({ field, description }: { field: 'soul' | 'persona'; de
 
   return (
     <div>
-      <Section title={field === 'soul' ? 'Soul' : 'Persona'}>
-        <div className="text-[11px] mb-2" style={{ color: 'var(--text-outline)' }}>
-          {description}
-        </div>
+      <Section title={field === 'soul' ? 'Soul' : 'Persona'} hint={description}>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -781,7 +747,7 @@ function PromptEditorTab({ field, description }: { field: 'soul' | 'persona'; de
             minHeight: 320,
             resize: 'vertical',
             padding: '10px 12px',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-sm)',
             background: 'var(--bg-surface-container)',
             border: '1px solid var(--border-subtle)',
             color: 'var(--text-on-surface)',
@@ -794,10 +760,10 @@ function PromptEditorTab({ field, description }: { field: 'soul' | 'persona'; de
         />
         <div className="flex items-center justify-end" style={{ gap: 10, marginTop: 10 }}>
           {saveError && (
-            <span className="text-[11px]" style={{ color: 'var(--error)' }}>{saveError}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-danger)' }}>{saveError}</span>
           )}
           {saved && (
-            <span className="text-[11px]" style={{ color: 'var(--accent-primary)' }}>Saved</span>
+            <span style={{ fontSize: 12, color: 'var(--text-on-surface-variant)' }}>Saved</span>
           )}
           <PrimaryButton onClick={handleSave}>Save</PrimaryButton>
         </div>
@@ -855,7 +821,6 @@ function ProviderTab() {
   const [newModelId, setNewModelId] = useState('')
   const [fetchingModels, setFetchingModels] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [fetchSuccess, setFetchSuccess] = useState<string | null>(null)
   const [savedProvider, setSavedProvider] = useState<string | null>(null)
   const [selectedModels, setSelectedModels] = useState<Record<string, Set<string>>>({})
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
@@ -911,7 +876,6 @@ function ProviderTab() {
     if (!p) return
     setFetchingModels(providerId)
     setFetchError(null)
-    setFetchSuccess(null)
     try {
       const result = await window.claude.fetchModels(p.baseURL, p.authToken)
       if (result.ok && result.models) {
@@ -923,8 +887,6 @@ function ProviderTab() {
         }
         // Select all by default
         setSelectedModels({ ...selectedModels, [providerId]: new Set(result.models) })
-        setFetchSuccess(providerId)
-        setTimeout(() => setFetchSuccess(null), 3000)
       } else {
         setFetchError(result.error || 'No models returned')
       }
@@ -1015,22 +977,9 @@ function ProviderTab() {
     ...Object.entries(providers).filter(([id]) => id !== 'anthropic').map(([id, cfg]) => ({ id, ...cfg })),
   ]
 
-  const EyeIcon = (props: { show: boolean }) => props.show ? (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  ) : (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
-
   return (
     <div>
-      <Section title="Providers">
+      <Section title="Providers" hint="Endpoints and credentials. Fetch pulls the live model list; only checked models get saved.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {allProviders.map((p) => {
             const isDefault = p.id === (defaultProvider || 'anthropic')
@@ -1041,45 +990,37 @@ function ProviderTab() {
               <div
                 key={p.id}
                 style={{
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-md)',
                   overflow: 'hidden',
                   background: 'var(--bg-surface-container-high)',
-                  border: `1px solid ${isDefault ? 'rgba(173, 198, 255, 0.25)' : 'var(--border-subtle)'}`,
+                  border: `1px solid ${isDefault ? 'var(--accent-line)' : 'var(--border-subtle)'}`,
                 }}
               >
                 {/* Provider row */}
                 <div
                   className="flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 10, padding: '10px 12px' }}
+                  style={{ gap: 10, padding: '9px 12px' }}
                   onClick={() => setExpanded(isExpanded ? null : p.id)}
                 >
-                  <div style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: isDefault ? '#27c93f' : 'var(--text-outline-variant)',
-                    flexShrink: 0,
-                  }} />
-                  <span className="text-[12px] font-medium flex-1" style={{ color: 'var(--text-on-surface)' }}>
+                  <span
+                    style={{
+                      fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1,
+                    }}
+                  >
                     {p.id}
                   </span>
-                  <span className="text-[10px] shrink-0" style={{
-                    padding: '1px 6px', borderRadius: 4,
-                    background: isDefault ? 'rgba(39, 201, 63, 0.1)' : 'rgba(255,255,255,0.06)',
-                    color: isDefault ? '#27c93f' : 'var(--text-outline)',
-                  }}>
-                    {isDefault ? 'default' : p.type}
+                  {isDefault && (
+                    <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>default</span>
+                  )}
+                  <span className="shrink-0" style={{ fontSize: 11, color: 'var(--text-outline)' }}>
+                    {p.type}
                   </span>
                   {!isBase && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteProvider(p.id) }}
-                      className="cursor-pointer transition-colors"
-                      style={{ padding: 3, borderRadius: 6, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5f56' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <path d="M4 4l8 8M12 4l-8 8" />
-                      </svg>
-                    </button>
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <IconButton onClick={() => handleDeleteProvider(p.id)} label={`Remove ${p.id}`} danger>
+                        <X size={13} strokeWidth={1.5} />
+                      </IconButton>
+                    </span>
                   )}
                 </div>
 
@@ -1097,9 +1038,14 @@ function ProviderTab() {
                           <TextInput
                             value={authToken} onChange={setAuthToken} placeholder="sk-ant-..." type={showKeys['anthropic'] ? 'text' : 'password'} mono
                             rightSlot={
-                              <button onClick={() => setShowKeys({ ...showKeys, 'anthropic': !showKeys['anthropic'] })} className="cursor-pointer" style={{ padding: 3, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }}>
-                                <EyeIcon show={!!showKeys['anthropic']} />
-                              </button>
+                              <IconButton
+                                onClick={() => setShowKeys({ ...showKeys, 'anthropic': !showKeys['anthropic'] })}
+                                label={showKeys['anthropic'] ? 'Hide key' : 'Show key'}
+                              >
+                                {showKeys['anthropic']
+                                  ? <EyeOff size={14} strokeWidth={1.5} />
+                                  : <Eye size={14} strokeWidth={1.5} />}
+                              </IconButton>
                             }
                           />
                         </div>
@@ -1124,9 +1070,14 @@ function ProviderTab() {
                             value={p.authToken} onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], authToken: v }})}
                             placeholder="sk-..." type={showKeys[p.id] ? 'text' : 'password'} mono
                             rightSlot={
-                              <button onClick={() => setShowKeys({ ...showKeys, [p.id]: !showKeys[p.id] })} className="cursor-pointer" style={{ padding: 3, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }}>
-                                <EyeIcon show={!!showKeys[p.id]} />
-                              </button>
+                              <IconButton
+                                onClick={() => setShowKeys({ ...showKeys, [p.id]: !showKeys[p.id] })}
+                                label={showKeys[p.id] ? 'Hide key' : 'Show key'}
+                              >
+                                {showKeys[p.id]
+                                  ? <EyeOff size={14} strokeWidth={1.5} />
+                                  : <Eye size={14} strokeWidth={1.5} />}
+                              </IconButton>
                             }
                           />
                         </div>
@@ -1139,23 +1090,24 @@ function ProviderTab() {
                     )}
 
                     {/* Fetch Models */}
-                    <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8, marginTop: 4 }}>
+                    <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 4 }}>
                       <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
                         <FieldLabel>Models</FieldLabel>
                         <div className="flex items-center" style={{ gap: 4 }}>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleFetchModels(p.id) }}
                             disabled={fetchingModels === p.id}
-                            className="cursor-pointer transition-colors text-[10px] font-medium"
+                            className="cursor-pointer transition-colors"
                             style={{
-                              padding: '3px 8px', borderRadius: 6,
-                              background: fetchingModels === p.id ? 'rgba(255,255,255,0.06)' : 'rgba(173, 198, 255, 0.12)',
-                              color: fetchingModels === p.id ? 'var(--text-outline)' : 'var(--accent-primary)',
+                              padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+                              fontSize: 12, fontWeight: 500,
+                              background: 'var(--accent-soft)',
+                              color: 'var(--accent-primary)',
                               border: 'none',
                               opacity: fetchingModels === p.id ? 0.6 : 1,
                             }}
                           >
-                            {fetchingModels === p.id ? 'Fetching...' : 'Fetch'}
+                            {fetchingModels === p.id ? 'Fetching…' : 'Fetch'}
                           </button>
                           {p.models && p.models.length > 0 && (
                             <button
@@ -1163,15 +1115,16 @@ function ProviderTab() {
                                 e.stopPropagation()
                                 handleSaveProvider(p.id)
                               }}
-                              className="cursor-pointer transition-colors text-[10px] font-medium"
+                              className="cursor-pointer transition-colors"
                               style={{
-                                padding: '3px 8px', borderRadius: 6,
-                                background: savedProvider === p.id ? 'rgba(39, 201, 63, 0.2)' : 'rgba(39, 201, 63, 0.12)',
-                                color: '#27c93f',
+                                padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+                                fontSize: 12, fontWeight: 500,
+                                background: savedProvider === p.id ? 'var(--bg-surface-container-highest)' : 'transparent',
+                                color: savedProvider === p.id ? 'var(--text-success)' : 'var(--text-outline)',
                                 border: 'none',
                               }}
                             >
-                              {savedProvider === p.id ? 'Saved' : 'Save'}
+                              {savedProvider === p.id ? 'Saved' : 'Save selection'}
                             </button>
                           )}
                         </div>
@@ -1184,8 +1137,8 @@ function ProviderTab() {
                               <label
                                 key={m}
                                 className="flex items-center cursor-pointer transition-colors"
-                                style={{ gap: 6, padding: '3px 6px', borderRadius: 6, fontSize: 11 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                                style={{ gap: 7, padding: '3px 6px', borderRadius: 'var(--radius-sm)', fontSize: 12 }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-highest)' }}
                                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                               >
                                 <input
@@ -1202,7 +1155,7 @@ function ProviderTab() {
                                   className="truncate flex-1"
                                   style={{
                                     color: checked ? 'var(--text-on-surface)' : 'var(--text-outline)',
-                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                    fontFamily: 'var(--font-mono)',
                                   }}
                                   title={m}
                                 >
@@ -1213,14 +1166,11 @@ function ProviderTab() {
                           })}
                         </div>
                       ) : fetchError && fetchingModels === null ? (
-                        <div className="text-[10px]" style={{ color: '#ff5f56' }}>{fetchError}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-danger)' }}>{fetchError}</div>
                       ) : (
-                        <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
-                          {fetchingModels === p.id ? 'Fetching...' : 'No models — click Fetch'}
+                        <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
+                          {fetchingModels === p.id ? 'Fetching…' : 'Not fetched yet.'}
                         </div>
-                      )}
-                      {fetchSuccess === p.id && (
-                        <div className="text-[10px]" style={{ color: '#27c93f' }}>Fetched {p.models?.length || 0} models</div>
                       )}
                     </div>
                   </div>
@@ -1233,64 +1183,79 @@ function ProviderTab() {
 
       {/* Add provider */}
       {adding ? (
-        <Section title="New Provider">
-          <div style={{ padding: 14, borderRadius: 12, background: 'var(--bg-surface-container-high)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <TextInput value={newId} onChange={setNewId} placeholder="Provider name (e.g. openai)" />
-            <PillGroup options={['anthropic', 'openai', 'google']} value={newType} onChange={(v) => setNewType(v as ProviderType)} />
-            <TextInput value={newURL} onChange={setNewURL} placeholder="Base URL" />
-            <TextInput value={newKey} onChange={setNewKey} placeholder="API Key" type="password" mono />
-            <div className="flex items-center" style={{ gap: 8 }}>
+        <Section title="New provider">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+            <Row label="Name">
+              <TextInput value={newId} onChange={setNewId} placeholder="openai" />
+            </Row>
+            <Row label="Type">
+              <PillGroup options={['anthropic', 'openai', 'google']} value={newType} onChange={(v) => setNewType(v as ProviderType)} />
+            </Row>
+            <Row label="Base URL">
+              <TextInput value={newURL} onChange={setNewURL} placeholder="https://api.openai.com/v1" mono />
+            </Row>
+            <Row label="API key">
+              <TextInput value={newKey} onChange={setNewKey} placeholder="sk-..." type="password" mono />
+            </Row>
+            <div className="flex items-center" style={{ gap: 8, paddingTop: 4 }}>
               <PrimaryButton onClick={handleAddProvider}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
       ) : (
-        <SecondaryButton onClick={() => setAdding(true)}>
-          <span className="flex items-center" style={{ gap: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Add Provider
-          </span>
-        </SecondaryButton>
+        <div style={{ paddingTop: 4 }}>
+          <SecondaryButton onClick={() => setAdding(true)}>
+            <span className="flex items-center" style={{ gap: 6 }}>
+              <Plus size={13} strokeWidth={1.5} />
+              Add provider
+            </span>
+          </SecondaryButton>
+        </div>
       )}
 
       {/* Model Aliases */}
-      <Section title="Model Aliases">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <Section
+        title="Model aliases"
+        hint="A short name the top bar can select in place of a full model id."
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {Object.entries(aliases).map(([alias, modelId]) => (
-            <div key={alias} className="flex items-center" style={{ gap: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--bg-surface-container-high)' }}>
-              <span className="text-[11px] font-semibold shrink-0" style={{ color: 'var(--accent-primary)', minWidth: 60 }}>{alias}</span>
-              <span className="text-[11px] truncate flex-1" style={{ color: 'var(--text-on-surface-variant)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{modelId}</span>
-              <button onClick={() => handleDeleteAlias(alias)} className="cursor-pointer transition-colors" style={{ padding: 3, borderRadius: 6, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }} onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5f56' }} onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}>
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-              </button>
+            <div key={alias} className="flex items-center" style={{ gap: 10, padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)', minWidth: 64 }}>{alias}</span>
+              <span className="truncate flex-1" style={{ fontSize: 12, color: 'var(--text-on-surface-variant)', fontFamily: 'var(--font-mono)' }}>{modelId}</span>
+              <IconButton onClick={() => handleDeleteAlias(alias)} label={`Remove alias ${alias}`} danger>
+                <X size={13} strokeWidth={1.5} />
+              </IconButton>
             </div>
           ))}
           {Object.keys(aliases).length === 0 && (
-            <div className="text-[11px] py-3" style={{ color: 'var(--text-outline)' }}>No model aliases configured.</div>
+            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>None yet.</div>
           )}
         </div>
-      </Section>
 
-      <Section title="Add Alias">
-        <div className="flex items-center" style={{ gap: 8 }}>
-          <div style={{ width: 100 }}><TextInput value={newAlias} onChange={setNewAlias} placeholder="alias" /></div>
-          <span className="text-[11px]" style={{ color: 'var(--text-outline)' }}>=</span>
-          <div className="flex-1"><TextInput value={newModelId} onChange={setNewModelId} placeholder="claude-sonnet-4-20250514" mono /></div>
+        <div className="flex items-center" style={{ gap: 8, marginTop: 12 }}>
+          <div style={{ width: 110 }}>
+            <TextInput value={newAlias} onChange={setNewAlias} placeholder="alias" />
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-outline)' }}>→</span>
+          <div className="flex-1">
+            <TextInput value={newModelId} onChange={setNewModelId} placeholder="claude-sonnet-4-20250514" mono />
+          </div>
           <SecondaryButton onClick={handleAddAlias}>Add</SecondaryButton>
         </div>
       </Section>
 
-      <div style={{ marginTop: 16 }}>
-        <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save All'}</PrimaryButton>
-        {saveError && (
-          <div className="text-[11px]" style={{ color: 'var(--danger, #f87171)', marginTop: 8 }}>
-            Save failed: {saveError}
-          </div>
-        )}
-      </div>
+      <Section title="Save">
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save all'}</PrimaryButton>
+          {saveError && (
+            <span style={{ fontSize: 12, color: 'var(--text-danger)' }}>
+              {saveError}
+            </span>
+          )}
+        </div>
+      </Section>
     </div>
   )
 }
@@ -1333,9 +1298,9 @@ interface McpServerStatus {
 }
 
 const MCP_STATUS_META: Record<McpServerStatus['status'], { color: string; label: string }> = {
-  connected: { color: '#27c93f', label: '已连接' },
-  connecting: { color: '#ffbd2e', label: '连接中' },
-  failed: { color: '#ff5f56', label: '连接失败' },
+  connected: { color: 'var(--text-success)', label: 'Connected' },
+  connecting: { color: 'var(--text-warning)', label: 'Connecting' },
+  failed: { color: 'var(--text-danger)', label: 'Failed' },
 }
 
 function McpTab() {
@@ -1400,109 +1365,90 @@ function McpTab() {
 
   return (
     <div>
-      <Section title="Configured Servers">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {entries.map(([name, cfg]) => (
-            <div
-              key={name}
-              style={{
-                borderRadius: 12,
-                overflow: 'hidden',
-                background: 'var(--bg-surface-container-high)',
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
-              {/* Server row */}
+      <Section title="Servers" hint="Status is polled live; the Gateway reloads a few seconds after you save.">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {entries.map(([name, cfg]) => {
+            const status = MCP_STATUS_META[statusMap[name]?.status ?? 'connecting']
+            return (
               <div
-                className="flex items-center cursor-pointer transition-colors"
-                style={{ gap: 10, padding: '10px 12px' }}
-                onClick={() => setExpanded(expanded === name ? null : name)}
+                key={name}
+                style={{
+                  borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden',
+                  background: 'var(--bg-surface-container-high)',
+                  border: '1px solid var(--border-subtle)',
+                }}
               >
+                {/* Server row */}
                 <div
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].color,
-                    flexShrink: 0,
-                  }}
-                />
-                <span className="text-[12px] font-medium flex-1" style={{ color: 'var(--text-on-surface)' }}>
-                  {name}
-                </span>
-                <span className="text-[10px]" style={{ color: MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].color, flexShrink: 0 }}>
-                  {MCP_STATUS_META[statusMap[name]?.status ?? 'connecting'].label}
-                </span>
-                <span className="text-[10px] truncate" style={{ color: 'var(--text-outline)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', maxWidth: 200 }}>
-                  {cfg.url || cfg.command}
-                </span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDelete(name) }}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    padding: 3,
-                    borderRadius: 6,
-                    color: 'var(--text-outline)',
-                    background: 'transparent',
-                    border: 'none',
-                    display: 'flex',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5f56' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}
+                  className="flex items-center cursor-pointer transition-colors"
+                  style={{ gap: 10, padding: '9px 12px' }}
+                  onClick={() => setExpanded(expanded === name ? null : name)}
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <path d="M4 4l8 8M12 4l-8 8" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Expanded details */}
-              {expanded === name && (
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    borderTop: '1px solid var(--border-subtle)',
-                    fontSize: 10,
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                    color: 'var(--text-on-surface-variant)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 3,
-                  }}
-                >
-                  <div><span style={{ color: 'var(--text-outline)' }}>type:</span> {cfg.type}</div>
-                  {cfg.url
-                    ? <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>url:</span> {cfg.url}</div>
-                    : <div><span style={{ color: 'var(--text-outline)' }}>command:</span> {cfg.command}</div>}
-                  {statusMap[name]?.status === 'connected' && (
-                    <div><span style={{ color: 'var(--text-outline)' }}>tools:</span> {statusMap[name].toolCount} 个可用</div>
-                  )}
-                  {statusMap[name]?.status === 'failed' && (
-                    <div style={{ color: '#ff5f56', wordBreak: 'break-all' }}>
-                      <span style={{ color: 'var(--text-outline)' }}>error:</span> {statusMap[name].error}
-                    </div>
-                  )}
-                  {/* env / headers 都是键值对，凭证打码后展示 */}
-                  {([['env', cfg.env], ['headers', cfg.headers]] as const).map(([label, map]) =>
-                    map && Object.keys(map).length > 0 ? (
-                      <div key={label}>
-                        <span style={{ color: 'var(--text-outline)' }}>{label}:</span>
-                        {Object.entries(map).map(([k, v]) => (
-                          <div key={k} style={{ paddingLeft: 12 }}>
-                            {k} = {isSecretKey(k) ? '***' : v}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null,
-                  )}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
+                    {name}
+                  </span>
+                  <span className="truncate" style={{ fontSize: 11, color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', maxWidth: 220 }}>
+                    {cfg.url || cfg.command}
+                  </span>
+                  <span style={{ fontSize: 11, color: status.color, flexShrink: 0, minWidth: 66, textAlign: 'right' }}>
+                    {status.label}
+                  </span>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <IconButton onClick={() => handleDelete(name)} label={`Remove ${name}`} danger>
+                      <X size={13} strokeWidth={1.5} />
+                    </IconButton>
+                  </span>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* Expanded details */}
+                {expanded === name && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderTop: '1px solid var(--border-subtle)',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-on-surface-variant)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                    }}
+                  >
+                    <div><span style={{ color: 'var(--text-outline)' }}>type</span> {cfg.type}</div>
+                    {cfg.url
+                      ? <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>url</span> {cfg.url}</div>
+                      : <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>command</span> {cfg.command}</div>}
+                    {statusMap[name]?.status === 'connected' && (
+                      <div><span style={{ color: 'var(--text-outline)' }}>tools</span> {statusMap[name].toolCount}</div>
+                    )}
+                    {statusMap[name]?.status === 'failed' && (
+                      <div style={{ color: 'var(--text-danger)', wordBreak: 'break-all' }}>
+                        <span style={{ color: 'var(--text-outline)' }}>error</span> {statusMap[name].error}
+                      </div>
+                    )}
+                    {/* env / headers 都是键值对，凭证打码后展示 */}
+                    {([['env', cfg.env], ['headers', cfg.headers]] as const).map(([label, map]) =>
+                      map && Object.keys(map).length > 0 ? (
+                        <div key={label}>
+                          <span style={{ color: 'var(--text-outline)' }}>{label}</span>
+                          {Object.entries(map).map(([k, v]) => (
+                            <div key={k} style={{ paddingLeft: 12 }}>
+                              {k} = {isSecretKey(k) ? '***' : v}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
 
           {entries.length === 0 && (
-            <div className="text-[11px] py-3" style={{ color: 'var(--text-outline)' }}>
-              No MCP servers configured.
+            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>
+              None configured.
             </div>
           )}
         </div>
@@ -1510,74 +1456,58 @@ function McpTab() {
 
       {/* Add form */}
       {adding ? (
-        <Section title="New Server">
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 12,
-              background: 'var(--bg-surface-container-high)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            }}
-          >
-            <TextInput value={newName} onChange={setNewName} placeholder="Server name" />
-
-            {/* 传输方式：本地起进程 / 直连远端 URL */}
-            <div className="flex items-center" style={{ gap: 6 }}>
-              {([['stdio', '本地 (stdio)'], ['remote', '远端 (HTTP)']] as const).map(([m, label]) => (
-                <button
-                  key={m}
-                  onClick={() => setNewMode(m)}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: 8,
-                    fontSize: 11,
-                    border: '1px solid var(--border-subtle)',
-                    background: newMode === m ? 'var(--bg-surface-container-highest)' : 'transparent',
-                    color: newMode === m ? 'var(--text-on-surface)' : 'var(--text-outline)',
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
+        <Section title="New server">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 460 }}>
+            <Row label="Name">
+              <TextInput value={newName} onChange={setNewName} placeholder="filesystem" />
+            </Row>
+            <Row label="Transport" hint="stdio starts a local process; HTTP connects to a remote endpoint.">
+              <PillGroup
+                options={['stdio', 'remote']}
+                value={newMode}
+                onChange={(m) => setNewMode(m as 'stdio' | 'remote')}
+                renderLabel={(m) => (m === 'stdio' ? 'Local (stdio)' : 'Remote (HTTP)')}
+              />
+            </Row>
             {newMode === 'remote' ? (
               <>
-                <TextInput value={newUrl} onChange={setNewUrl} placeholder="URL (e.g. https://example.com/mcp)" />
-                <MultilineInput value={newHeaders} onChange={setNewHeaders} placeholder="Headers (KEY=VALUE, one per line)" />
+                <Row label="URL">
+                  <TextInput value={newUrl} onChange={setNewUrl} placeholder="https://example.com/mcp" mono />
+                </Row>
+                <Row label="Headers" hint="KEY=VALUE, one per line.">
+                  <MultilineInput value={newHeaders} onChange={setNewHeaders} placeholder="Authorization=Bearer …" />
+                </Row>
               </>
             ) : (
               <>
-                <TextInput value={newCommand} onChange={setNewCommand} placeholder="Command (e.g. npx obsidian-mcp-server)" />
-                <MultilineInput value={newEnv} onChange={setNewEnv} placeholder="Environment variables (KEY=VALUE, one per line)" />
+                <Row label="Command">
+                  <TextInput value={newCommand} onChange={setNewCommand} placeholder="npx obsidian-mcp-server" mono />
+                </Row>
+                <Row label="Environment" hint="KEY=VALUE, one per line.">
+                  <MultilineInput value={newEnv} onChange={setNewEnv} placeholder="API_KEY=…" />
+                </Row>
               </>
             )}
-            <div className="flex items-center" style={{ gap: 8 }}>
+            <div className="flex items-center" style={{ gap: 8, paddingTop: 4 }}>
               <PrimaryButton onClick={handleAdd}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
       ) : (
-        <SecondaryButton onClick={() => setAdding(true)}>
-          <span className="flex items-center" style={{ gap: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Add Server
-          </span>
-        </SecondaryButton>
+        <div style={{ paddingTop: 4 }}>
+          <SecondaryButton onClick={() => setAdding(true)}>
+            <span className="flex items-center" style={{ gap: 6 }}>
+              <Plus size={13} strokeWidth={1.5} />
+              Add server
+            </span>
+          </SecondaryButton>
+        </div>
       )}
 
-      <div style={{ marginTop: 16 }}>
-        <PrimaryButton onClick={handleSave}>
-          {saved ? 'Saved' : 'Save MCP Config'}
-        </PrimaryButton>
-      </div>
+      <Section title="Save">
+        <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save and reload'}</PrimaryButton>
+      </Section>
     </div>
   )
 }
@@ -1611,79 +1541,50 @@ function SkillsTab() {
 
   return (
     <div>
-      <Section title="Detected Skills">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Section
+        title="Skills"
+        hint="Read from .agents/skills/*/SKILL.md in the working directory. A skill needs frontmatter with name and description."
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {skills.map((skill) => (
             <div
               key={skill.id}
-              style={{
-                borderRadius: 12,
-                padding: '10px 12px',
-                background: 'var(--bg-surface-container-high)',
-                border: '1px solid var(--border-subtle)',
-              }}
+              className="flex items-center"
+              style={{ gap: 12, padding: '8px 10px', borderRadius: 'var(--radius-sm)' }}
             >
-              <div className="flex items-center" style={{ gap: 10 }}>
-                {/* Toggle */}
-                <button
-                  onClick={() => handleToggle(skill.id)}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    width: 32,
-                    height: 18,
-                    borderRadius: 9,
-                    padding: 2,
-                    background: skill.enabled ? 'var(--accent-primary)' : 'rgba(255,255,255,0.12)',
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: skill.enabled ? 'flex-end' : 'flex-start',
-                    flexShrink: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: '50%',
-                      background: '#fff',
-                    }}
-                  />
-                </button>
+              <Toggle
+                on={skill.enabled}
+                onChange={() => handleToggle(skill.id)}
+                label={`Toggle ${skill.name}`}
+              />
 
-                <div className="flex-1 min-w-0">
-                  <span className="text-[12px] font-medium block truncate" style={{ color: 'var(--text-on-surface)' }}>
-                    {skill.name}
-                  </span>
-                  {skill.description && (
-                    <span className="text-[10px] block" style={{ color: 'var(--text-outline)', lineHeight: 1.4 }}>
-                      {skill.description.length > 120 ? skill.description.slice(0, 120) + '...' : skill.description}
-                    </span>
-                  )}
-                </div>
-
-                <span
-                  className="text-[10px] shrink-0"
-                  style={{ color: skill.enabled ? '#34d399' : 'var(--text-outline)' }}
-                >
-                  {skill.enabled ? 'ON' : 'OFF'}
+              <div className="flex-1 min-w-0">
+                <span className="block truncate" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-on-surface)' }}>
+                  {skill.name}
                 </span>
+                {skill.description && (
+                  <span className="block" style={{ fontSize: 11, color: 'var(--text-outline)', lineHeight: 1.45 }}>
+                    {skill.description.length > 140 ? skill.description.slice(0, 140) + '…' : skill.description}
+                  </span>
+                )}
               </div>
+
+              <span
+                className="shrink-0"
+                style={{ fontSize: 11, color: skill.enabled ? 'var(--text-on-surface-variant)' : 'var(--text-outline)' }}
+              >
+                {skill.enabled ? 'On' : 'Off'}
+              </span>
             </div>
           ))}
 
           {skills.length === 0 && (
-            <div className="text-[11px] py-3" style={{ color: 'var(--text-outline)' }}>
-              No skills found in <code>.agents/skills/</code>. Add SKILL.md files to get started.
+            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>
+              None found.
             </div>
           )}
         </div>
       </Section>
-
-      <div className="text-[10px] mt-3" style={{ color: 'var(--text-outline)', lineHeight: 1.5 }}>
-        Skills are loaded from <code>.agents/skills/*/SKILL.md</code> in your working directory.
-        Place a folder with a SKILL.md file (with frontmatter: name, description) to add a new skill.
-      </div>
     </div>
   )
 }
@@ -1743,89 +1644,62 @@ function VoiceTab() {
   }
 
   const fallbackNote = (!endpoint || !apiKey)
-    ? `Falls back to Provider config (${providerInfo.baseURL || 'not set'}, ${providerInfo.hasKey ? 'key set' : 'no key'})`
+    ? `Falls back to the Provider config — ${providerInfo.baseURL || 'no endpoint set'}, ${providerInfo.hasKey ? 'key set' : 'no key'}`
     : null
-
-  const EyeIcon = showKey ? (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  ) : (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
 
   return (
     <div>
-      <Section title="Voice Input (STT)">
-        <div className="text-[11px] mb-4" style={{ color: 'var(--text-outline)', lineHeight: 1.5 }}>
-          Uses an LLM with audio understanding to transcribe your voice.
-          If not configured separately, it reuses the Provider endpoint and API key.
-        </div>
+      <Section
+        title="Voice input"
+        hint="Transcribes dictation with an audio-capable LLM. Leave these empty to reuse the Provider endpoint and key."
+      >
+        <Row label="Endpoint">
+          <TextInput
+            value={endpoint}
+            onChange={setEndpoint}
+            placeholder="https://api.xiaomimimo.com"
+            mono
+          />
+          {fallbackNote && <Hint>{fallbackNote}</Hint>}
+        </Row>
+
+        <Row label="API key">
+          <TextInput
+            value={apiKey}
+            onChange={setApiKey}
+            placeholder="Empty — use the Provider key"
+            type={showKey ? 'text' : 'password'}
+            mono
+            rightSlot={
+              <IconButton
+                onClick={() => setShowKey(!showKey)}
+                label={showKey ? 'Hide key' : 'Show key'}
+              >
+                {showKey ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
+              </IconButton>
+            }
+          />
+        </Row>
+
+        <Row label="Model" hint="Must accept audio input — mimo-v2.5, mimo-v2-omni.">
+          <TextInput value={model} onChange={setModel} placeholder="mimo-v2.5" mono />
+        </Row>
       </Section>
 
-      <Section title="API Endpoint (optional)">
-        <TextInput
-          value={endpoint}
-          onChange={setEndpoint}
-          placeholder="https://api.xiaomimimo.com"
-        />
-        {fallbackNote && (
-          <div className="text-[10px] mt-1.5" style={{ color: 'var(--text-outline)' }}>
-            {fallbackNote}
+      <Section title="Verify">
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <SecondaryButton onClick={handleTest}>Record 2s and transcribe</SecondaryButton>
+          <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
+        </div>
+        {testResult && (
+          <div style={{ marginTop: 12 }}>
+            <StatusBadge
+              ok={testResult.ok}
+              text={testResult.ok ? (testResult.error || 'STT working') : (testResult.error || '')}
+            />
           </div>
         )}
       </Section>
-
-      <Section title="API Key (optional)">
-        <TextInput
-          value={apiKey}
-          onChange={setApiKey}
-          placeholder="Leave empty to use Provider key"
-          type={showKey ? 'text' : 'password'}
-          mono
-          rightSlot={
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="cursor-pointer transition-colors"
-              style={{ padding: 3, borderRadius: 4, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }}
-            >
-              {EyeIcon}
-            </button>
-          }
-        />
-      </Section>
-
-      <Section title="Model">
-        <TextInput
-          value={model}
-          onChange={setModel}
-          placeholder="mimo-v2.5"
-          mono
-        />
-        <div className="text-[10px] mt-1.5" style={{ color: 'var(--text-outline)' }}>
-          Must support audio input (e.g. mimo-v2.5, mimo-v2-omni)
-        </div>
-      </Section>
-
-      <Section title="Actions">
-        <div className="flex items-center" style={{ gap: 8 }}>
-          <PrimaryButton onClick={handleSave}>
-            {saved ? 'Saved' : 'Save'}
-          </PrimaryButton>
-          <SecondaryButton onClick={handleTest}>
-            Test (records 2s)
-          </SecondaryButton>
-        </div>
-      </Section>
-
-      {testResult && (
-        <StatusBadge ok={testResult.ok} text={testResult.ok ? (testResult.error || 'STT working') : `Failed: ${testResult.error}`} />
-      )}
     </div>
   )
 }
@@ -1937,120 +1811,69 @@ function ChannelsTab() {
 
   return (
     <div>
-      <style>{`
-        @keyframes channel-pulse {
-          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(39, 201, 63, 0.4); }
-          50% { opacity: 0.8; box-shadow: 0 0 6px 2px rgba(39, 201, 63, 0.3); }
-        }
-      `}</style>
-
-      <Section title="Network Proxy">
-        <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
-          配置代理以访问被墙的 IM 服务（如 Telegram）。保存后重启 Gateway 生效。
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="flex items-center" style={{ gap: 10 }}>
-            <FieldLabel>启用代理</FieldLabel>
-            <button
-              onClick={() => setProxyEnabled(!proxyEnabled)}
-              className="cursor-pointer transition-colors"
-              style={{
-                padding: '3px 10px',
-                borderRadius: 6,
-                fontSize: 10,
-                fontWeight: 700,
-                fontFamily: 'monospace',
-                color: proxyEnabled ? '#27c93f' : '#484f58',
-                background: proxyEnabled ? 'rgba(39,201,63,0.1)' : 'transparent',
-                border: `1px solid ${proxyEnabled ? 'rgba(39,201,63,0.25)' : 'rgba(255,255,255,0.06)'}`,
-              }}
-            >
-              {proxyEnabled ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          {proxyEnabled && (
-            <>
-              <div className="flex items-end" style={{ gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <FieldLabel>协议</FieldLabel>
-                  <PillGroup
-                    options={['http', 'socks5']}
-                    value={proxyProtocol}
-                    onChange={(p) => setProxyProtocol(p as 'http' | 'socks5')}
-                  />
-                </div>
-                <div style={{ flex: 2 }}>
-                  <FieldLabel>Host</FieldLabel>
-                  <TextInput value={proxyHost} onChange={setProxyHost} placeholder="127.0.0.1" mono />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <FieldLabel>Port</FieldLabel>
-                  <TextInput value={proxyPort} onChange={setProxyPort} placeholder="7897" mono />
-                </div>
-              </div>
-              <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
-                当前: {proxyProtocol}://{proxyHost}:{proxyPort}
-              </div>
-            </>
-          )}
-        </div>
+      <Section
+        title="Network proxy"
+        hint="Route outbound IM traffic through a proxy. Takes effect after the Gateway restarts."
+      >
+        <Row label="Enabled">
+          <Toggle
+            on={proxyEnabled}
+            onChange={() => setProxyEnabled(!proxyEnabled)}
+            label="Enable network proxy"
+          />
+        </Row>
+        {proxyEnabled && (
+          <>
+            <Row label="Protocol">
+              <PillGroup
+                options={['http', 'socks5']}
+                value={proxyProtocol}
+                onChange={(p) => setProxyProtocol(p as 'http' | 'socks5')}
+                renderLabel={(p) => (p === 'http' ? 'HTTP' : 'SOCKS5')}
+              />
+            </Row>
+            <Row label="Host">
+              <TextInput value={proxyHost} onChange={setProxyHost} placeholder="127.0.0.1" mono />
+            </Row>
+            <Row label="Port">
+              <TextInput value={proxyPort} onChange={setProxyPort} placeholder="7897" mono />
+            </Row>
+            <Hint>{proxyProtocol}://{proxyHost}:{proxyPort}</Hint>
+          </>
+        )}
       </Section>
 
-      <Section title="Public Access">
-        <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
-          允许外部程序通过 WebSocket 连接到你的 Nerve Agent。启用后需配合 cloudflared 或公网 IP 使用。
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="flex items-center" style={{ gap: 10 }}>
-            <FieldLabel>公网访问</FieldLabel>
-            <button
-              onClick={() => setPublicAccessEnabled(!publicAccessEnabled)}
-              className="cursor-pointer transition-colors"
-              style={{
-                padding: '3px 10px',
-                borderRadius: 6,
-                fontSize: 10,
-                fontWeight: 700,
-                fontFamily: 'monospace',
-                color: publicAccessEnabled ? '#f0883e' : '#484f58',
-                background: publicAccessEnabled ? 'rgba(240,136,62,0.1)' : 'transparent',
-                border: `1px solid ${publicAccessEnabled ? 'rgba(240,136,62,0.25)' : 'rgba(255,255,255,0.06)'}`,
-              }}
-            >
-              {publicAccessEnabled ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          {publicAccessEnabled && (
-            <>
-              <div>
-                <FieldLabel>Access Token</FieldLabel>
-                <TextInput
-                  value={publicAccessToken}
-                  onChange={setPublicAccessToken}
-                  placeholder="输入一个强随机 token"
-                  mono
-                  type="password"
-                />
-              </div>
-              {!publicAccessToken && (
-                <div className="text-[10px]" style={{ color: '#f0883e' }}>
-                  公网模式必须配置 token，否则不会生效。
-                </div>
-              )}
-              <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
-                公网地址: ws://你的IP:18789 &nbsp;|&nbsp; 配合 cloudflared 可获得 HTTPS
-              </div>
-            </>
-          )}
-        </div>
+      <Section
+        title="Public access"
+        hint="Lets an external program reach this agent over WebSocket. Pair it with cloudflared or a public IP for TLS."
+      >
+        <Row label="Enabled">
+          <Toggle
+            on={publicAccessEnabled}
+            onChange={() => setPublicAccessEnabled(!publicAccessEnabled)}
+            label="Enable public access"
+          />
+        </Row>
+        {publicAccessEnabled && (
+          <>
+            <Row label="Access token" hint="Required — public mode stays off without one.">
+              <TextInput
+                value={publicAccessToken}
+                onChange={setPublicAccessToken}
+                placeholder="A long random string"
+                mono
+                type="password"
+              />
+            </Row>
+            <Hint>
+              Endpoint: <span style={{ fontFamily: 'var(--font-mono)' }}>ws://your-ip:18789</span>
+            </Hint>
+          </>
+        )}
       </Section>
 
-      <Section title="IM Channels">
-        <div className="text-[11px] mb-3" style={{ color: 'var(--text-outline)' }}>
-          配置 IM 通道，让 Nerve Agent 通过消息平台与你交互。
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Section title="IM channels" hint="Message platforms Nerve Agent talks to you over.">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {channels.map((ch) => {
             const isExpanded = expanded === ch.id
             const isJustSaved = justSavedId === ch.id
@@ -2061,69 +1884,44 @@ function ChannelsTab() {
               <div
                 key={ch.id}
                 style={{
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-md)',
                   overflow: 'hidden',
                   background: 'var(--bg-surface-container-high)',
-                  border: `1px solid ${isJustSaved ? 'rgba(39,201,63,0.4)' : ch.enabled ? 'var(--border-subtle)' : 'rgba(255,255,255,0.04)'}`,
-                  opacity: ch.enabled ? 1 : 0.6,
-                  transition: 'border-color 0.3s',
+                  border: `1px solid ${isJustSaved ? 'var(--text-success)' : 'var(--border-subtle)'}`,
+                  transition: 'border-color 0.2s',
                 }}
               >
                 {/* Row */}
                 <div
                   className="flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 10, padding: '10px 12px' }}
+                  style={{ gap: 10, padding: '9px 12px' }}
                   onClick={() => setExpanded(isExpanded ? null : ch.id)}
                 >
-                  <div
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      background: ch.enabled ? '#27c93f' : '#484f58',
-                      flexShrink: 0,
-                      animation: isJustSaved ? 'channel-pulse 1.2s ease-in-out 2' : 'none',
-                    }}
-                  />
-                  <span className="text-[12px] font-medium flex-1" style={{ color: 'var(--text-on-surface)' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
                     {ch.name}
                   </span>
-                  <span className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>
                     {CHANNEL_PLATFORM_LABELS[ch.platform]}
                   </span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleToggle(ch.id) }}
-                    className="cursor-pointer transition-colors"
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      fontSize: 10,
-                      color: ch.enabled ? '#27c93f' : 'var(--text-outline)',
-                      background: ch.enabled ? 'rgba(39,201,63,0.1)' : 'transparent',
-                      border: `1px solid ${ch.enabled ? 'rgba(39,201,63,0.25)' : 'transparent'}`,
-                    }}
-                  >
-                    {ch.enabled ? 'ON' : 'OFF'}
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(ch.id) }}
-                    className="cursor-pointer transition-colors"
-                    style={{ padding: 3, borderRadius: 6, color: 'var(--text-outline)', background: 'transparent', border: 'none', display: 'flex' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5f56' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                      <path d="M4 4l8 8M12 4l-8 8" />
-                    </svg>
-                  </button>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Toggle
+                      on={ch.enabled}
+                      onChange={() => handleToggle(ch.id)}
+                      label={`Toggle ${ch.name}`}
+                    />
+                  </span>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <IconButton onClick={() => handleDelete(ch.id)} label={`Remove ${ch.name}`} danger>
+                      <X size={13} strokeWidth={1.5} />
+                    </IconButton>
+                  </span>
                 </div>
 
                 {/* Expanded config */}
                 {isExpanded && (
-                  <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {fields.map((field) => (
-                      <div key={field.key}>
-                        <FieldLabel>{field.label}</FieldLabel>
+                      <Row key={field.key} label={field.label}>
                         <TextInput
                           value={cfg[field.key] || ''}
                           onChange={(v) => updateField(ch.id, field.key, v)}
@@ -2131,11 +1929,11 @@ function ChannelsTab() {
                           type={field.secret ? 'password' : 'text'}
                           mono
                         />
-                      </div>
+                      </Row>
                     ))}
                     {fields.length === 0 && (
-                      <div className="text-[10px]" style={{ color: 'var(--text-outline)' }}>
-                        该平台暂无可配置项
+                      <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
+                        This platform has nothing to configure.
                       </div>
                     )}
                   </div>
@@ -2145,8 +1943,8 @@ function ChannelsTab() {
           })}
 
           {channels.length === 0 && !adding && (
-            <div className="text-[11px] text-center py-4" style={{ color: 'var(--text-outline)' }}>
-              尚未配置任何 IM 通道
+            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>
+              None configured.
             </div>
           )}
         </div>
@@ -2154,36 +1952,36 @@ function ChannelsTab() {
 
       {/* Add new */}
       {adding ? (
-        <Section title="Add Channel">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div>
-              <FieldLabel>Platform</FieldLabel>
+        <Section title="Add channel">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 380 }}>
+            <Row label="Platform">
               <PillGroup
                 options={platforms}
                 value={newPlatform}
                 onChange={(p) => setNewPlatform(p as ChannelPlatform)}
                 renderLabel={(p) => CHANNEL_PLATFORM_LABELS[p as ChannelPlatform]}
               />
-            </div>
-            <div className="flex items-center" style={{ gap: 8 }}>
+            </Row>
+            <div className="flex items-center" style={{ gap: 8, paddingTop: 4 }}>
               <PrimaryButton onClick={handleAdd}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
       ) : (
-        <div style={{ marginTop: 12 }}>
-          <SecondaryButton onClick={() => setAdding(true)}>+ Add Channel</SecondaryButton>
+        <div style={{ paddingTop: 4 }}>
+          <SecondaryButton onClick={() => setAdding(true)}>
+            <span className="flex items-center" style={{ gap: 6 }}>
+              <Plus size={13} strokeWidth={1.5} />
+              Add channel
+            </span>
+          </SecondaryButton>
         </div>
       )}
 
       {/* Save */}
-      <Section title="Actions">
-        <div className="flex items-center" style={{ gap: 8 }}>
-          <PrimaryButton onClick={handleSave}>
-            {saved ? 'Saved' : 'Save'}
-          </PrimaryButton>
-        </div>
+      <Section title="Save">
+        <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
       </Section>
     </div>
   )

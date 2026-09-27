@@ -54,6 +54,19 @@
   --border-strong: #3a3a3a;
   --border-subtle: rgba(255, 255, 255, 0.06);
 
+  /* 状态色：成功取全 app 已在用的 #34d399，失败/警告沿用设置面板原有值，仅提到 token */
+  --text-success: #34d399;
+  --text-danger: #ff5f56;
+  --text-warning: #ffbd2e;
+
+  /* 强调色的低透明度派生：写死 rgba(173,198,255) 会让浅色主题的 --accent-primary(#005ac2) 失效 */
+  --accent-soft: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+
+  /* 悬浮层：紧致接触阴影 + 小范围环境阴影，绝不超过元素本身 */
+  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.34);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28);
+
   --glass-bg: #1f1f1f;
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-blur: none;
@@ -118,6 +131,17 @@
   --border-strong: rgba(0, 0, 0, 0.15);
   --border-subtle: rgba(0, 0, 0, 0.06);
 
+  /* 白底上 #34d399/#ff5f56 只有 ~2:1 对比度，浅色主题改用同色系深一档 */
+  --text-success: #1a7f37;
+  --text-danger: #9a2c22;
+  --text-warning: #8a5a00;
+
+  --accent-soft: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent-primary) 28%, transparent);
+
+  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.16);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.08);
+
   --glass-bg: #ffffff;
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-blur: none;
@@ -139,6 +163,7 @@
   --window-alpha-floor: rgba(13, 13, 30, 0.01);
   --bg-background: transparent;
   --bg-mica: rgba(13, 13, 30, 0.25);
+  --bg-mica-sidebar: rgba(13, 13, 30, 0.55);
   --bg-surface: rgba(13, 13, 30, 0.4);
   --bg-surface-dim: rgba(13, 13, 30, 0.5);
   --bg-surface-bright: rgba(40, 30, 60, 0.5);
@@ -180,6 +205,16 @@
   --border-default: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
   --border-subtle: rgba(255, 255, 255, 0.06);
+
+  --text-success: #34d399;
+  --text-danger: #ff5f56;
+  --text-warning: #ffbd2e;
+
+  --accent-soft: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent-primary) 34%, transparent);
+
+  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
 
   --glass-bg: rgba(20, 15, 40, 0.5);
   --glass-border: rgba(255, 255, 255, 0.1);
@@ -2370,18 +2405,22 @@ button, a, input, textarea, select {
 .user-log-timeline {
   position: absolute;
   right: 40px;
-  bottom: 52px;
+  /* 抬到输入区之上：stage 输入区从窗口底起占 74px（bottom 14 + 胶囊 36 + gap 4 + 状态行 20），
+     .stage-main 底边又高 4.5px（根描边 1.5 + shell margin 2 + shell 描边 1） */
+  bottom: 90px;
   z-index: 35;
+  --log-row: 15px; /* 单行高：9px 字号 × 1.45 行高 + 上下各 1px */
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-height: 240px;
+  /* 视口固定 10 行（+ 上下 4px 内边距），更多轮次靠滚动翻阅 */
+  max-height: calc(var(--log-row) * 10 + 8px);
   overflow-y: auto;
-  padding: 6px 0;
+  padding: 4px 0;
   scrollbar-width: none;
   /* 上下渐隐：滚动方向的视觉提示 */
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 18px, #000 calc(100% - 18px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 .user-log-timeline::-webkit-scrollbar { display: none; }
 /* 导轨层：覆盖时间轴，pointer-events 全透 */
@@ -2406,7 +2445,8 @@ button, a, input, textarea, select {
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 1px 0 1px 16px;
+  height: var(--log-row);
+  padding: 0 0 0 14px;
   border: none;
   background: transparent;
   text-align: left;
@@ -2426,20 +2466,20 @@ button, a, input, textarea, select {
   transition: opacity 0.15s;
 }
 .user-log-kinds svg {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
 }
 .user-log-entry:hover .user-log-kinds { opacity: 0.85; }
 .user-log-entry.is-active .user-log-kinds { opacity: 0.9; }
 /* 行文本 */
 .user-log-text {
   user-select: none;
-  max-width: 200px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.45;
   color: var(--text-on-surface);
   opacity: 0.5;
@@ -3914,6 +3954,14 @@ pre.hljs {
   border-radius: 50%;
   background: #27c93f;
   color: #fff;
+}
+
+/* ===== Settings：设置区分段，首段不画分隔线 ===== */
+.settings-body > div > section:first-child,
+.settings-body > section:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
 }
 
 /* ===== Selection Actions：选中文字的上下文 AI 操作条 ===== */
