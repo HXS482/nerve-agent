@@ -3964,6 +3964,40 @@ pre.hljs {
   border-top: none;
 }
 
+/* ===== Settings slider：轨道用 --fill 画已选段，thumb 悬停/按下放大 ===== */
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent-primary) 0%,
+    var(--accent-primary) var(--fill, 0%),
+    var(--bg-surface-container-highest) var(--fill, 0%),
+    var(--bg-surface-container-highest) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.settings-slider::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+}
+
 /* ===== Selection Actions：选中文字的上下文 AI 操作条 ===== */
 .selection-bar-anchor {
   position: fixed;

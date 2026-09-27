@@ -23,6 +23,8 @@ export function getApprovalSummary(req: ToolApprovalRequest): string {
 export function ChatPanel({ messages, isLoading, onSend }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
+  // 与底部输入栏共用同一上限：滑杆一动，正文列与胶囊左右边缘同步
+  const conversationWidth = useChatStore((s) => s.conversationWidth)
 
   const filteredMessages = useMemo(
     () => currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : [],
@@ -73,7 +75,7 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
       style={{ paddingTop: '32px', paddingBottom: '80px' }}
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
-        <div style={{ maxWidth: '90%', margin: '0 auto' }}>
+        <div style={{ maxWidth: conversationWidth > 0 ? conversationWidth : '90%', margin: '0 auto' }}>
           {filteredMessages.map((msg, i) => {
             const prev = i > 0 ? filteredMessages[i - 1] : undefined
             return (

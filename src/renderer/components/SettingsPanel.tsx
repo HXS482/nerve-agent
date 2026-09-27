@@ -4,7 +4,7 @@ import {
   Package, Plus, X, Eye, EyeOff,
 } from 'lucide-react'
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
-import { useChatStore } from '../stores/chatStore'
+import { useChatStore, CONVERSATION_WIDTH_MIN, CONVERSATION_WIDTH_MAX } from '../stores/chatStore'
 import { isVideoBg, isHtmlBg, htmlForIframe } from './Stage/StageBgMedia'
 
 interface Props {
@@ -599,7 +599,49 @@ function GeneralTab({ config, onUpdateConfig, onOpenProjectPicker }: {
         <Row label="Stage background" hint="Shown behind the Stage view.">
           <StageBgPicker />
         </Row>
+
+        <Row label="Conversation width" hint="Message text and the input bar share this limit.">
+          <ConversationWidthControl />
+        </Row>
       </Section>
+    </div>
+  )
+}
+
+// 会话宽度上限：正文列与底部输入栏共用，改一处两边同步收窄
+function ConversationWidthControl() {
+  const conversationWidth = useChatStore((s) => s.conversationWidth)
+  const setConversationWidth = useChatStore((s) => s.setConversationWidth)
+  const limited = conversationWidth > 0
+  // 0（不限）落在滑杆量程之外，否则最左档会误读成 480px；拖到最左即回到不限
+  const sliderValue = limited ? conversationWidth : CONVERSATION_WIDTH_MIN
+  const fill = ((sliderValue - CONVERSATION_WIDTH_MIN) / (CONVERSATION_WIDTH_MAX - CONVERSATION_WIDTH_MIN)) * 100
+
+  return (
+    <div>
+      <div className="flex items-center" style={{ gap: 12 }}>
+        <input
+          type="range"
+          min={CONVERSATION_WIDTH_MIN}
+          max={CONVERSATION_WIDTH_MAX}
+          step={20}
+          value={sliderValue}
+          onChange={(e) => {
+            const v = Number(e.target.value)
+            setConversationWidth(v <= CONVERSATION_WIDTH_MIN ? 0 : v)
+          }}
+          className="settings-slider flex-1"
+          style={{ '--fill': `${fill}%` } as React.CSSProperties}
+        />
+        <span
+          className="tabular-nums"
+          style={{ width: 54, textAlign: 'right', fontSize: 11, color: 'var(--text-outline)' }}
+        >
+          {limited ? `${conversationWidth}px` : 'Full'}
+        </span>
+        {limited && <SecondaryButton onClick={() => setConversationWidth(0)}>Reset</SecondaryButton>}
+      </div>
+      <Hint>Applies instantly. Drag the handle all the way left to follow the window again.</Hint>
     </div>
   )
 }

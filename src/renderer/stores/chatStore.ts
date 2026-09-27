@@ -4,6 +4,9 @@ import { ChatMessage, ClaudeConfig, Theme, ModelInfo, SessionUsage, ProviderInfo
 import { useTodoStore } from './todoStore'
 
 const MAX_FLOW_ITEMS = 30
+/** 会话宽度滑杆量程（px）：下限保证正文可读，过大则宽屏行长难以扫读 */
+export const CONVERSATION_WIDTH_MIN = 480
+export const CONVERSATION_WIDTH_MAX = 1280
 
 export interface Session {
   id: string
@@ -42,6 +45,9 @@ interface ChatState {
 
   /** Stage 自定义壁纸（data URL，canvas 压缩后持久化）；null = 默认壁纸 */
   stageBg: string | null
+
+  /** 会话内容宽度上限（px）：消息正文与底部输入栏共享同一个上限；0 = 不限制，跟随窗口 */
+  conversationWidth: number
 
   // Sessions
   sessions: Session[]
@@ -103,6 +109,8 @@ interface ChatState {
   setTheme: (theme: Theme) => void
   /** 设置/清除 Stage 自定义壁纸（data URL | null） */
   setStageBg: (bg: string | null) => void
+  /** 设置会话内容宽度上限（px，0 = 不限制） */
+  setConversationWidth: (width: number) => void
 
   // Session actions
   addSession: (session: Session) => void
@@ -160,6 +168,7 @@ export const useChatStore = create<ChatState>()(
       // Theme state
       theme: 'dark',
       stageBg: null,
+      conversationWidth: 0,
 
       // Sessions state
       sessions: [],
@@ -240,6 +249,8 @@ export const useChatStore = create<ChatState>()(
         set({ theme })
       },
       setStageBg: (bg) => set({ stageBg: bg }),
+      setConversationWidth: (width) =>
+        set({ conversationWidth: Math.min(CONVERSATION_WIDTH_MAX, Math.max(0, Math.round(width))) }),
 
       // Session actions
       addSession: (session) =>
@@ -319,6 +330,7 @@ export const useChatStore = create<ChatState>()(
       partialize: (state) => ({
         theme: state.theme,
         stageBg: state.stageBg,
+        conversationWidth: state.conversationWidth,
         sessions: state.sessions,
         sessionModes: state.sessionModes,
         config: state.config,

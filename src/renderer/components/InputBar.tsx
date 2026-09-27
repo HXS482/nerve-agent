@@ -48,6 +48,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
+  const conversationWidth = useChatStore((s) => s.conversationWidth)
   const viewMode = useStageStore((s) => s.viewMode)
   // Stage 模式下侧边栏不存在，输入栏不预留其宽度
   const effectiveSidebarOpen = viewMode === 'stage' ? false : sidebarOpen
@@ -181,7 +182,11 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
       {/* Input row：外层列容器把胶囊和状态行绑成同宽一组（max-w-4xl 挂这里，
           状态行才跟着胶囊一起限宽，而不是自己顶到窗口边缘） */}
       <div className="flex justify-center items-center gap-3 w-full">
-        <div className="flex flex-col gap-1 flex-1 min-w-0 max-w-4xl">
+        {/* max-w-4xl 是默认上限；conversationWidth > 0 时由设置面板接管，与正文列同宽 */}
+        <div
+          className="flex flex-col gap-1 flex-1 min-w-0 max-w-4xl"
+          style={{ maxWidth: conversationWidth > 0 ? conversationWidth : undefined }}
+        >
           {/* Main Input Container */}
           <div
             className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group w-full h-9"
