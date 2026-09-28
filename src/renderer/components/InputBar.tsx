@@ -42,6 +42,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const [hasVoice, setHasVoice] = useState(false)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const plusRootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const setOrbState = useChatStore((s) => s.setOrbState)
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
@@ -100,6 +101,19 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // 菜单开着时点外面就收起：document mousedown 而非全屏遮罩。
+  // 原遮罩 z-54 与胶囊的 backdrop-filter 层级冲突，把弹出的菜单压到点不到
+  useEffect(() => {
+    if (!plusMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (plusRootRef.current && !plusRootRef.current.contains(e.target as Node)) {
+        setPlusMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [plusMenuOpen])
 
   const handlePickFiles = async () => {
     setPlusMenuOpen(false)
@@ -173,11 +187,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
         </div>
       )}
 
-      {/* 菜单关闭遮罩：必须待在 .glass-dock 外面。backdrop-filter 会让胶囊成为
-          fixed 后代的包含块，遮罩会被裁成 36px 高的胶囊、盖住输入框而点不到别处 */}
-      {plusMenuOpen && (
-        <div className="fab-menu-mask" onClick={() => setPlusMenuOpen(false)} />
-      )}
+      {/* 菜单关闭遮罩已改为 document mousedown 外点关闭（StageAvatar 同款做法） */}
 
       {/* Input row：外层列容器把胶囊和状态行绑成同宽一组（max-w-4xl 挂这里，
           状态行才跟着胶囊一起限宽，而不是自己顶到窗口边缘） */}
@@ -196,7 +206,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
             }}
           >
             {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar */}
-            <div className="inputbar-plus-root" style={{ marginLeft: 4 }}>
+            <div className="inputbar-plus-root" ref={plusRootRef} style={{ marginLeft: 4 }}>
               {plusMenuOpen && (
                 <div className="inputbar-plus-menu">
                   <button className="fab-menu-item" onClick={handlePickFiles}>
