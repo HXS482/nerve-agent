@@ -533,6 +533,25 @@ async function callNonStreaming(
 
 // --- OpenAI streaming loop ---
 
+// Anthropic 格式的 user content 块转 OpenAI 格式：上游统一按 Anthropic 格式构建
+// （prepareMessages 首条消息 + loadConversationHistory 历史回放），直连 OpenAI 网关
+// 不认 image/document 块，原样透传会被静默丢弃（模型看不到图）或整个请求 400。
+// 图片统一转 image_url data URL；document（PDF）无通用对应类型，降级为提示文本。
+function toOpenAIUserContent(content: any[]): any[] {
+  return content.map((b: any) => {
+    if (b?.type === 'image') {
+      const url = b.source?.type === 'base64'
+        ? `data:${b.source.media_type ?? 'image/png'};base64,${b.source.data}`
+        : (typeof b.src === 'string' && /^(data:|https?:\/\/)/.test(b.src) ? b.src : null)
+      return url ? { type: 'image_url', image_url: { url } } : { type: 'text', text: '[图片数据缺失]' }
+    }
+    if (b?.type === 'document') {
+      return { type: 'text', text: '[PDF 附件：当前 provider 不支持文档块，内容未传送]' }
+    }
+    return b
+  })
+}
+
 async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResult> {
   const { client, modelId, messages, system, tools, toolExecutors, abortSignal, onTextDelta, onToolCall, onToolResult, onToolApproval, onBeforeStep, onAfterToolCall } = params
   const maxSteps = params.maxSteps ?? 50
@@ -584,7 +603,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
             })
           }
         } else {
-          oaiMessages.push(msg)
+          oaiMessages.push({ ...msg, content: toOpenAIUserContent(msg.content) })
         }
       } else {
         oaiMessages.push(msg)
