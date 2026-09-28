@@ -1606,14 +1606,14 @@ button, a, input, textarea, select {
   border-radius: var(--app-shell-radius);
 }
 /* Stage 外框底图：锐利壁纸铺满窗口（含 shell 的 2px 缝隙），给毛玻璃环提供 backdrop。
-   圆角与窗口裁剪严格一致（同一 var(--app-window-radius)），壁纸的裁切弧 = 窗口的可见弧，
-   不存在"壁纸比窗口更圆/更方"的错位，blur 边缘采样自然有壁纸像素可用 */
+   裁切圆角比窗口小 1px（弧更"方"一点）：壁纸边缘完整垫在窗口圆角裁剪之下，
+   blur 采样不会探出壁纸边界；1px 差在 1.5px 描边覆盖范围内，肉眼不可见 */
 .stage-frame-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  border-radius: var(--app-window-radius);
+  border-radius: calc(var(--app-window-radius) - 1px);
   overflow: hidden;
   background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
 }
