@@ -12,42 +12,42 @@ export async function getSkills(projectDir?: string): Promise<Skill[]> {
     join(homedir(), '.claude'),
   ].filter(Boolean) as string[]
 
-  let skillsDir = ''
+  // 聚合所有候选目录（与 SkillRegistry.discoverFromDirs 对齐），
+  // 同名 skill 先到先得：项目级覆盖用户级（.nerve → .claude）
+  const byId = new Map<string, Skill>()
   for (const base of candidates) {
-    const dir = join(base, '.agents', 'skills')
-    if (existsSync(dir)) {
-      skillsDir = dir
-      break
+    const skillsDir = join(base, '.agents', 'skills')
+    if (!existsSync(skillsDir)) continue
+
+    const disabled = new Set<string>(getDisabledSkills())
+
+    try {
+      const dirs = readdirSync(skillsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+
+      for (const dir of dirs) {
+        if (byId.has(dir)) continue
+        const skillPath = join(skillsDir, dir, 'SKILL.md')
+        if (!existsSync(skillPath)) continue
+        const raw = readFileSync(skillPath, 'utf-8')
+        const parsed = parseSkillFrontmatter(raw)
+        if (!parsed) continue
+        byId.set(dir, {
+          id: dir,
+          name: parsed.meta.name || dir,
+          description: parsed.meta.description || '',
+          prompt: parsed.body,
+          skillDir: join(skillsDir, dir),
+          enabled: !disabled.has(dir),
+        })
+      }
+    } catch (err) {
+      console.error('[Skills] error:', err)
     }
   }
-  if (!skillsDir) return []
 
-  const disabled = new Set<string>(getDisabledSkills())
-
-  try {
-    const dirs = readdirSync(skillsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-
-    return dirs.map((dir) => {
-      const skillPath = join(skillsDir, dir, 'SKILL.md')
-      if (!existsSync(skillPath)) return null
-      const raw = readFileSync(skillPath, 'utf-8')
-      const parsed = parseSkillFrontmatter(raw)
-      if (!parsed) return null
-      return {
-        id: dir,
-        name: parsed.meta.name || dir,
-        description: parsed.meta.description || '',
-        prompt: parsed.body,
-        skillDir: join(skillsDir, dir),
-        enabled: !disabled.has(dir),
-      }
-    }).filter(Boolean) as Skill[]
-  } catch (err) {
-    console.error('[Skills] error:', err)
-    return []
-  }
+  return Array.from(byId.values())
 }
 
 export async function toggleSkill(id: string, enabled: boolean) {
