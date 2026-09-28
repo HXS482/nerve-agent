@@ -5,7 +5,7 @@ import { useStageStore } from '../stores/stageStore'
 import { useGitStore } from '../stores/gitStore'
 import { ModelIsland } from './ModelIsland'
 import { ContextRing } from './ContextRing'
-import type { FileAttachment } from '../../shared/types'
+import type { ClaudeConfig, FileAttachment } from '../../shared/types'
 
 interface Props {
   onSend: (prompt: string, files?: FileAttachment[]) => void
@@ -17,6 +17,12 @@ interface Props {
   // Stage 模式注入：状态行左半的「Local checkout / 当前分支」
   workingDirectory?: string
 }
+
+// 思考强度档位：存的是 API enum，显示说人话
+const EFFORT_LABELS: Record<string, string> = {
+  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max',
+}
+const EFFORTS: Array<ClaudeConfig['effort']> = ['low', 'medium', 'high', 'xhigh', 'max']
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60)
@@ -43,6 +49,8 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const plusRootRef = useRef<HTMLDivElement>(null)
+  const [effortMenuOpen, setEffortMenuOpen] = useState(false)
+  const effortRootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const setOrbState = useChatStore((s) => s.setOrbState)
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
@@ -50,6 +58,8 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const conversationWidth = useChatStore((s) => s.conversationWidth)
+  const effort = useChatStore((s) => s.config.effort)
+  const setConfigEffort = useChatStore((s) => s.setConfig)
   const viewMode = useStageStore((s) => s.viewMode)
   // Stage 模式下侧边栏不存在，输入栏不预留其宽度
   const effectiveSidebarOpen = viewMode === 'stage' ? false : sidebarOpen
@@ -114,6 +124,18 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [plusMenuOpen])
+
+  // 思考强度菜单同款外点关闭
+  useEffect(() => {
+    if (!effortMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (effortRootRef.current && !effortRootRef.current.contains(e.target as Node)) {
+        setEffortMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [effortMenuOpen])
 
   const handlePickFiles = async () => {
     setPlusMenuOpen(false)
@@ -249,6 +271,38 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
 
             {/* Right Actions */}
             <div className="flex items-center gap-1.5" style={{ paddingRight: '10px', paddingLeft: '4px' }}>
+              {/* 思考强度：胶囊内显示当前档位，点击弹向上切换菜单（仅 stage） */}
+              {viewMode === 'stage' && (
+                <div className="inputbar-plus-root" ref={effortRootRef}>
+                  {effortMenuOpen && (
+                    <div className="inputbar-plus-menu" style={{ minWidth: 120 }}>
+                      {EFFORTS.map((e) => (
+                        <button
+                          key={e}
+                          className="fab-menu-item"
+                          style={e === effort ? { color: 'var(--accent-primary)', background: 'var(--accent-soft)' } : undefined}
+                          onClick={() => { setConfigEffort({ effort: e }); setEffortMenuOpen(false) }}
+                        >
+                          {EFFORT_LABELS[e] ?? e}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    className="stage-icon-btn"
+                    onClick={() => setEffortMenuOpen((v) => !v)}
+                    title={`思考强度: ${EFFORT_LABELS[effort] ?? effort}`}
+                    style={{ borderRadius: 999, fontSize: 10, fontWeight: 600, width: 'auto', padding: '0 8px', gap: 3 }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3a6 6 0 016 6c0 2.2-1.2 3.6-2.2 4.8-.6.7-1 1.3-1.2 2.2h-5.2c-.2-.9-.6-1.5-1.2-2.2C7.2 12.6 6 11.2 6 9a6 6 0 016-6z" />
+                      <path d="M9.5 19h5" />
+                      <path d="M10.5 21.5h3" />
+                    </svg>
+                    {EFFORT_LABELS[effort] ?? effort}
+                  </button>
+                </div>
+              )}
               {currentModel && onSelectModel && (
                 <ModelIsland
                   currentModel={currentModel}
