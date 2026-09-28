@@ -213,8 +213,9 @@ function groupRounds(messages: ChatMessage[], isLoading = false): StageRound[] {
         .map((b) => b.text!)
         .join(' ')
       const r = newRound(msg.id, msg.timestamp, userText, true)
+      // file 附件落小卡；图片不落卡也不进 CoverFlow——带图提问是问句不是产物，
+      // 落卡会把该轮判成混合轮、回答降级成批注（image 卡无批注渲染层）→ 回答被截断
       msg.content.forEach((b, i) => {
-        if (b.type === 'image' && b.src) r.artifactCards.push({ id: `${msg.id}:im${i}`, kind: 'image', block: b, timestamp: msg.timestamp })
         if (b.type === 'file') r.artifactCards.push({ id: `${msg.id}:fl${i}`, kind: 'file', block: b, timestamp: msg.timestamp })
       })
       continue
@@ -460,7 +461,8 @@ function detectWriting(text: string): boolean {
   return false
 }
 
-/** 会话内全部已出图的图片卡（CoverFlow 数据源：不随焦点轮切换/画布清空变化） */
+/** 会话内全部已出图的图片卡（CoverFlow 数据源：不随焦点轮切换/画布清空变化）。
+    用户上传的图片在 groupRounds 已不落卡，自然不会进这里 */
 export function listSessionImageCards(messages: ChatMessage[]): StageCardData[] {
   return groupRounds(messages).flatMap((r) =>
     r.artifactCards.filter((c) => c.kind === 'image' && c.block?.src),
