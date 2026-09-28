@@ -49,6 +49,20 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const plusRootRef = useRef<HTMLDivElement>(null)
+  // + 弹条几何：打开瞬间实测 + 按钮相对根的偏移（弹条挂在根层级，见下方 JSX 注释）。
+  // 写死数字会飘位——按钮距根左缘受胶囊内边距影响，chat 模式根还有侧边栏 marginLeft
+  const [plusMenuPos, setPlusMenuPos] = useState({ left: 10, bottom: 106 })
+  const rootRef = useRef<HTMLDivElement>(null)
+  const togglePlusMenu = () => {
+    const root = rootRef.current
+    const btn = plusRootRef.current
+    if (root && btn) {
+      const rr = root.getBoundingClientRect()
+      const br = btn.getBoundingClientRect()
+      setPlusMenuPos({ left: br.left - rr.left, bottom: rr.bottom - br.top + 8 })
+    }
+    setPlusMenuOpen((v) => !v)
+  }
   const [effortMenuOpen, setEffortMenuOpen] = useState(false)
   const effortRootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -231,6 +245,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
 
   return (
     <div
+      ref={rootRef}
       className="absolute left-0 right-0 z-50 flex flex-col items-center gap-2"
       style={{
         paddingLeft: '11px',
@@ -269,14 +284,13 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
 
       {/* + 按钮弹出条（Add photo & files）：挂在 InputBar 根层级，与思考强度弹条同款处理——
           嵌在 glass-dock 里 blur 采不到壁纸（backdrop-filter 屏障），挪出来才是真磨砂。
-          位置沿用原 .inputbar-plus-menu 的几何：+ 按钮左缘对齐（胶囊内边 1.5p+4+4≈距根 10px），
-          垂直仍是菜单底到 + 按钮顶 8px。胶囊顶距根 = 14(bottom)+20(状态行)+4(gap)+36(胶囊) = 70，
-          菜单 bottom = 70 + 按钮高(28) + 8 = 106... 以实测为准先取 106 */}
+          几何在打开瞬间从 + 按钮实测（见 togglePlusMenu）：弹条左缘对齐按钮左缘，
+          弹条底到按钮顶 8px。不写死数字——写死的 106/10 在真实布局下偏左偏低 */}
       {plusMenuOpen && (
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}>
           <div
             className="inputbar-plus-menu"
-            style={{ position: 'absolute', bottom: 106, left: 10, minWidth: 180 }}
+            style={{ position: 'absolute', bottom: plusMenuPos.bottom, left: plusMenuPos.left, minWidth: 180 }}
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button className="fab-menu-item" style={{ pointerEvents: 'auto' }} onClick={handlePickFiles}>
@@ -341,7 +355,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
             <div className="inputbar-plus-root" ref={plusRootRef} style={{ marginLeft: 4 }}>
               <button
                 className="stage-icon-btn"
-                onClick={() => setPlusMenuOpen((v) => !v)}
+                onClick={togglePlusMenu}
                 title="添加文件"
                 style={{ borderRadius: 999 }}
               >
