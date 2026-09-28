@@ -163,7 +163,7 @@ export function UserLogTerminal({ messages }: { messages: ChatMessage[] }) {
         visible={pointerInside && hoverIndex !== null && hoverIndex !== activeIdx}
         dashed
       />
-      <Rail y={activeY} visible={activeY !== null} color="#34d399" dashed />
+      <Rail y={activeY} visible={activeY !== null} color="#3dff8f" dashed />
 
       {vm.rounds.map((r, i) => {
         const state = i === activeIdx ? 'is-active' : activeIdx > 0 && i < activeIdx ? 'is-passed' : ''

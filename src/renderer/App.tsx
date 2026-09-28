@@ -127,6 +127,7 @@ export default function App() {
           />
           <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
           <div className="stage-frame-frost" />
+          <div className="stage-frame-ring" />
         </>
       )}
 

@@ -243,7 +243,7 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
-  --app-window-radius: 19px;
+  --app-window-radius: 17px;
   --app-shell-radius: 16px;
 
   /* Fluid typography — scales with viewport width (min 600px, max 1400px) */
@@ -1605,12 +1605,16 @@ button, a, input, textarea, select {
   border: 1px solid transparent; /* 保留 1px 几何：fab 底部补偿依赖它 */
   border-radius: var(--app-shell-radius);
 }
-/* Stage 外框底图：锐利壁纸铺满窗口（含 shell 的 2px 缝隙），给毛玻璃环提供 backdrop */
+/* Stage 外框底图：锐利壁纸铺满窗口（含 shell 的 2px 缝隙），给毛玻璃环提供 backdrop。
+   圆角与窗口裁剪严格一致（同一 var(--app-window-radius)），壁纸的裁切弧 = 窗口的可见弧，
+   不存在"壁纸比窗口更圆/更方"的错位，blur 边缘采样自然有壁纸像素可用 */
 .stage-frame-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  border-radius: var(--app-window-radius);
+  overflow: hidden;
   background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
 }
 /* Stage 外框毛玻璃环：与会话按钮同一质感（backdrop blur + 5% 白），
@@ -1629,6 +1633,16 @@ button, a, input, textarea, select {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
+}
+/* Stage 最外圈高亮描边：独立于 App.tsx 的 1.5px 内描边，走同一条 17px 圆角弧。
+   用双层 box-shadow 内嵌实现 1px 描边，不吃布局、跟 border-radius 自动相切 */
+.stage-frame-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 41;
+  pointer-events: none;
+  border-radius: var(--app-window-radius);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 /* Stage 模式全局隐藏滚动条（壁纸悬浮美学，滚动功能保留） */
 .stage-shell * {
@@ -2409,7 +2423,7 @@ button, a, input, textarea, select {
      .stage-main 底边又高 4.5px（根描边 1.5 + shell margin 2 + shell 描边 1） */
   bottom: 90px;
   z-index: 35;
-  --log-row: 15px; /* 单行高：9px 字号 × 1.45 行高 + 上下各 1px */
+  --log-row: 18px; /* 单行高：11px 字号 × 1.45 行高 + 上下各 1px */
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -2433,11 +2447,13 @@ button, a, input, textarea, select {
 .rail-line {
   position: absolute;
   left: 0.5px;
-  width: 1px;
+  width: 2px;
+  filter: drop-shadow(0 0 3px currentColor);
 }
 .rail-hook {
   position: absolute;
   left: 0.5px;
+  filter: drop-shadow(0 0 3px currentColor);
 }
 .user-log-entry {
   position: relative;
@@ -2479,15 +2495,15 @@ button, a, input, textarea, select {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
-  color: var(--text-on-surface);
-  opacity: 0.5;
+  color: #fff;
+  opacity: 0.55;
   transition: opacity 0.15s, color 0.2s;
 }
 .user-log-entry.is-passed .user-log-text { opacity: 0.4; }
-.user-log-entry:hover .user-log-text { opacity: 0.9; }
-.user-log-entry.is-active .user-log-text { opacity: 1; }
+.user-log-entry:hover .user-log-text { opacity: 0.9; color: #fff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.45); }
+.user-log-entry.is-active .user-log-text { opacity: 1; color: #fff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.55); }
 @keyframes userLogEntryIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
