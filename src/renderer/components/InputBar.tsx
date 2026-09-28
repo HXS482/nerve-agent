@@ -137,6 +137,62 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
     return () => document.removeEventListener('mousedown', onDown)
   }, [effortMenuOpen])
 
+  // 滑动变阻器：按点击/拖动的横向位置换算档位（5 档均分轨道）。
+  // 拖动中只在松手时提交 setConfig——每次 setConfig 都触发 zustand persist 写盘，
+  // 拖动一路写 localStorage 是拖动卡顿的根因
+  const effortTrackRef = useRef<HTMLDivElement>(null)
+  const pendingEffortRef = useRef<ClaudeConfig['effort'] | null>(null)
+  // 粒子：滑动时从条的右端冒出的绿色小光点，纯 DOM + CSS 动画（不用 canvas，
+  // 粒子数量个位数，DOM 足够且免掉一层渲染栈）
+  const spawnEffortParticles = (fillEl: HTMLElement) => {
+    const track = fillEl.parentElement
+    if (!track) return
+    // 限流：上一颗粒子还没走完就不再补种（300ms 生命周期）
+    if ((track as any)._particleBusy) return
+    ;(track as any)._particleBusy = true
+    setTimeout(() => { (track as any)._particleBusy = false }, 90)
+    for (let i = 0; i < 2; i++) {
+      const p = document.createElement('span')
+      p.className = 'effort-particle'
+      const w = fillEl.getBoundingClientRect().width
+      p.style.left = `${w - 2 + Math.random() * 4}px`
+      p.style.top = `${8 + Math.random() * 14}px`
+      p.style.animationDelay = `${i * 60}ms`
+      p.style.setProperty('--dx', `${2 + Math.random() * 5}px`)
+      p.style.setProperty('--dy', `${-(2 + Math.random() * 5)}px`)
+      p.addEventListener('animationend', () => p.remove())
+      track.appendChild(p)
+    }
+  }
+  const effortIdxFromClientX = (clientX: number): number => {
+    const el = effortTrackRef.current
+    if (!el) return EFFORTS.indexOf(effort)
+    const r = el.getBoundingClientRect()
+    const ratio = Math.min(Math.max((clientX - r.left) / r.width, 0), 0.999)
+    return Math.floor(ratio * EFFORTS.length)
+  }
+  const effortApplyFromClientX = (clientX: number) => {
+    const idx = effortIdxFromClientX(clientX)
+    pendingEffortRef.current = EFFORTS[idx]
+    // 可用行程 = 轨道内宽（扣两侧 4px 等距边距），fill 宽度按档位比例折算
+    const el = effortTrackRef.current
+    if (el) {
+      const fill = el.querySelector<HTMLElement>('.effort-slider-fill')
+      if (fill) {
+        const trackW = el.getBoundingClientRect().width - 8
+        fill.style.width = `${Math.max(8, ((idx + 1) / EFFORTS.length) * trackW)}px`
+        spawnEffortParticles(fill)
+      }
+      const label = el.querySelector<HTMLElement>('.effort-slider-label')
+      if (label) label.textContent = EFFORT_LABELS[pendingEffortRef.current] ?? pendingEffortRef.current
+    }
+  }
+  const effortCommitPending = () => {
+    const next = pendingEffortRef.current
+    pendingEffortRef.current = null
+    if (next && next !== effort) setConfigEffort({ effort: next })
+  }
+
   const handlePickFiles = async () => {
     setPlusMenuOpen(false)
     const files = await window.claude.pickAndReadFiles()
@@ -211,6 +267,60 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
 
       {/* 菜单关闭遮罩已改为 document mousedown 外点关闭（StageAvatar 同款做法） */}
 
+      {/* + 按钮弹出条（Add photo & files）：挂在 InputBar 根层级，与思考强度弹条同款处理——
+          嵌在 glass-dock 里 blur 采不到壁纸（backdrop-filter 屏障），挪出来才是真磨砂。
+          位置沿用原 .inputbar-plus-menu 的几何：+ 按钮左缘对齐（胶囊内边 1.5p+4+4≈距根 10px），
+          垂直仍是菜单底到 + 按钮顶 8px。胶囊顶距根 = 14(bottom)+20(状态行)+4(gap)+36(胶囊) = 70，
+          菜单 bottom = 70 + 按钮高(28) + 8 = 106... 以实测为准先取 106 */}
+      {plusMenuOpen && (
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}>
+          <div
+            className="inputbar-plus-menu"
+            style={{ position: 'absolute', bottom: 106, left: 10, minWidth: 180 }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button className="fab-menu-item" style={{ pointerEvents: 'auto' }} onClick={handlePickFiles}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="M21 15l-3.5-3.5L8 16" />
+              </svg>
+              Add photo &amp; files
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 思考强度弹出条：挂在 InputBar 根层级（与输入胶囊同层级、同为 z-50 根内直接子元素），
+          不嵌在 glass-dock 里——backdrop-filter 胶囊会成为 fixed/absolute 后代的采样屏障，
+          嵌在里面 blur 采不到壁纸，观感发虚。现在 blur 直接吃壁纸，与输入胶囊同一质感 */}
+      {viewMode === 'stage' && effortMenuOpen && (
+        <div ref={effortRootRef} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div
+            className="effort-slider-track"
+            role="slider"
+            aria-label="思考强度"
+            aria-valuemin={0}
+            aria-valuemax={EFFORTS.length - 1}
+            aria-valuenow={EFFORTS.indexOf(effort)}
+            ref={effortTrackRef}
+            style={{ pointerEvents: 'auto', position: 'absolute', bottom: 76, left: '50%', transform: 'translateX(-50%)' }}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId)
+              effortApplyFromClientX(e.clientX)
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons & 1) effortApplyFromClientX(e.clientX)
+            }}
+            onPointerUp={effortCommitPending}
+            onLostPointerCapture={effortCommitPending}
+          >
+            <div className="effort-slider-fill" style={{ width: `${Math.max(8, ((EFFORTS.indexOf(effort) + 1) / EFFORTS.length) * 142)}px` }} />
+            <span className="effort-slider-label">{EFFORT_LABELS[effort] ?? effort}</span>
+          </div>
+        </div>
+      )}
+
       {/* Input row：外层列容器把胶囊和状态行绑成同宽一组（max-w-4xl 挂这里，
           状态行才跟着胶囊一起限宽，而不是自己顶到窗口边缘） */}
       <div className="flex justify-center items-center gap-3 w-full">
@@ -227,20 +337,8 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
               border: voice.isRecording ? '1px solid var(--error)' : undefined,
             }}
           >
-            {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar */}
+            {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar（弹条挂在根层级，见上） */}
             <div className="inputbar-plus-root" ref={plusRootRef} style={{ marginLeft: 4 }}>
-              {plusMenuOpen && (
-                <div className="inputbar-plus-menu">
-                  <button className="fab-menu-item" onClick={handlePickFiles}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="3" />
-                      <circle cx="9" cy="9" r="2" />
-                      <path d="M21 15l-3.5-3.5L8 16" />
-                    </svg>
-                    Add photo &amp; files
-                  </button>
-                </div>
-              )}
               <button
                 className="stage-icon-btn"
                 onClick={() => setPlusMenuOpen((v) => !v)}
@@ -271,23 +369,9 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
 
             {/* Right Actions */}
             <div className="flex items-center gap-1.5" style={{ paddingRight: '10px', paddingLeft: '4px' }}>
-              {/* 思考强度：胶囊内显示当前档位，点击弹向上切换菜单（仅 stage） */}
+              {/* 思考强度入口按钮：弹出条挂在 InputBar 根层级（见上方 effortMenuOpen 块） */}
               {viewMode === 'stage' && (
                 <div className="inputbar-plus-root" ref={effortRootRef}>
-                  {effortMenuOpen && (
-                    <div className="inputbar-plus-menu" style={{ minWidth: 120 }}>
-                      {EFFORTS.map((e) => (
-                        <button
-                          key={e}
-                          className="fab-menu-item"
-                          style={e === effort ? { color: 'var(--accent-primary)', background: 'var(--accent-soft)' } : undefined}
-                          onClick={() => { setConfigEffort({ effort: e }); setEffortMenuOpen(false) }}
-                        >
-                          {EFFORT_LABELS[e] ?? e}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   <button
                     className="stage-icon-btn"
                     onClick={() => setEffortMenuOpen((v) => !v)}

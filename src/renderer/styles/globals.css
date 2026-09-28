@@ -1706,11 +1706,9 @@ button, a, input, textarea, select {
   align-items: center;
   flex-shrink: 0;
 }
+/* 弹出菜单本体：几何位置由 JSX 内联定位（挂在 InputBar 根层级，玻璃才能采到壁纸）；
+   这里只保留外观——毛玻璃配方与 glass-dock 一致，外点关闭靠 document mousedown */
 .inputbar-plus-menu {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  min-width: 180px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1747,6 +1745,68 @@ button, a, input, textarea, select {
 .fab-menu-item:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-on-surface);
+}
+/* ===== 思考强度滑动变阻器：挂在 InputBar 根层级，与输入胶囊同一层级同一 blur 语境 ===== */
+/* 滑轨：输入胶囊（.glass-dock）同款毛玻璃——5% 白 + blur(12px) + 1px 白描边。
+   之前嵌在 glass-dock 里 blur 采不到壁纸（backdrop-filter 层是后代的采样屏障），
+   挪到根层级后背后直接是壁纸，同一配方观感即一致 */
+.effort-slider-track {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  width: 150px;
+  height: 30px;
+  padding: 0 10px 0 0; /* fill 绝对定界，左内边距归零避免双重偏移 */
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  touch-action: none;
+  overflow: hidden; /* 粒子飘出条外即裁掉，不出胶囊 */
+  user-select: none;
+}
+/* 实心长条块：宽度 = 档位比例，跟手动画过渡（仅 width，无布局抖动）。
+   四周等距：距描边统一 4px——水平 left 4 / 行程右端 4，垂直高 = 30 - 2×4 = 22
+   （fill 顶满上下等距，随 width 生长，四周缝隙恒等） */
+.effort-slider-fill {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--text-success) 45%, transparent), var(--text-success));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--text-success) 55%, transparent);
+  transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  max-width: calc(100% - 8px); /* 右侧同样 4px，与左侧对称 */
+}
+.effort-slider-label {
+  position: relative;
+  margin-left: auto;
+  margin-right: 4px; /* 与 fill 的右等距一致，文字不贴描边 */
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-on-surface);
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 滑动粒子：从实心条右端冒出的绿色小光点，向外飘散淡出（纯 CSS 动画） */
+.effort-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-success);
+  box-shadow: 0 0 4px var(--text-success);
+  pointer-events: none;
+  animation: effort-particle-float 0.3s ease-out forwards;
+}
+@keyframes effort-particle-float {
+  from { opacity: 0.9; transform: translate(0, 0) scale(1); }
+  to { opacity: 0; transform: translate(var(--dx, 3px), var(--dy, -3px)) scale(0.4); }
 }
 /* Stage 顶栏账号头像 + 二级菜单（菜单项样式复用 .fab-menu-item） */
 .stage-avatar-root {
