@@ -1039,231 +1039,207 @@ function ProviderTab() {
   return (
     <div>
       <Section title="Providers" hint="Endpoints and credentials. Fetch pulls the live model list; only checked models get saved.">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {allProviders.map((p) => {
-            const isDefault = p.id === (defaultProvider || 'anthropic')
-            const isExpanded = expanded === p.id
-            const isBase = p.id === 'anthropic'
-
-            return (
-              <div
-                key={p.id}
-                style={{
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden',
-                  background: 'var(--bg-surface-container-high)',
-                  border: `1px solid ${isDefault ? 'var(--accent-line)' : 'var(--border-subtle)'}`,
-                }}
-              >
-                {/* Provider row */}
-                <div
-                  className="flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 10, padding: '9px 12px' }}
-                  onClick={() => setExpanded(isExpanded ? null : p.id)}
-                >
-                  <span
-                    style={{
-                      fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1,
-                    }}
-                  >
-                    {p.id}
+        {allProviders.map((p) => {
+          const isDefault = p.id === (defaultProvider || 'anthropic')
+          const isExpanded = expanded === p.id
+          const isBase = p.id === 'anthropic'
+          return (
+            <div key={p.id}>
+              <div className="settings-list-row" onClick={() => setExpanded(isExpanded ? null : p.id)}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
+                  {p.id}
+                </span>
+                {isDefault && <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>default</span>}
+                <span className="shrink-0" style={{ fontSize: 11, color: 'var(--text-outline)' }}>
+                  {p.type}
+                </span>
+                {!isBase && (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <IconButton onClick={() => handleDeleteProvider(p.id)} label={`Remove ${p.id}`} danger>
+                      <X size={13} strokeWidth={1.5} />
+                    </IconButton>
                   </span>
-                  {isDefault && (
-                    <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>default</span>
+                )}
+              </div>
+              {isExpanded && (
+                <div className="settings-list-expand">
+                  {isBase ? (
+                    <>
+                      <div>
+                        <FieldLabel>Base URL</FieldLabel>
+                        <TextInput value={baseURL} onChange={setBaseURL} placeholder="https://api.anthropic.com/v1" />
+                      </div>
+                      <div>
+                        <FieldLabel>API Key</FieldLabel>
+                        <TextInput
+                          value={authToken} onChange={setAuthToken} placeholder="sk-ant-..." type={showKeys['anthropic'] ? 'text' : 'password'} mono
+                          rightSlot={
+                            <IconButton
+                              onClick={() => setShowKeys({ ...showKeys, 'anthropic': !showKeys['anthropic'] })}
+                              label={showKeys['anthropic'] ? 'Hide key' : 'Show key'}
+                            >
+                              {showKeys['anthropic']
+                                ? <EyeOff size={14} strokeWidth={1.5} />
+                                : <Eye size={14} strokeWidth={1.5} />}
+                            </IconButton>
+                          }
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <FieldLabel>Type</FieldLabel>
+                        <PillGroup
+                          options={['anthropic', 'openai', 'google']}
+                          value={p.type}
+                          onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], type: v as ProviderType } })}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>Base URL</FieldLabel>
+                        <TextInput value={p.baseURL} onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], baseURL: v }})} placeholder="https://api.openai.com/v1" />
+                      </div>
+                      <div>
+                        <FieldLabel>API Key</FieldLabel>
+                        <TextInput
+                          value={p.authToken} onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], authToken: v }})}
+                          placeholder="sk-..." type={showKeys[p.id] ? 'text' : 'password'} mono
+                          rightSlot={
+                            <IconButton
+                              onClick={() => setShowKeys({ ...showKeys, [p.id]: !showKeys[p.id] })}
+                              label={showKeys[p.id] ? 'Hide key' : 'Show key'}
+                            >
+                              {showKeys[p.id]
+                                ? <EyeOff size={14} strokeWidth={1.5} />
+                                : <Eye size={14} strokeWidth={1.5} />}
+                            </IconButton>
+                          }
+                        />
+                      </div>
+                    </>
                   )}
-                  <span className="shrink-0" style={{ fontSize: 11, color: 'var(--text-outline)' }}>
-                    {p.type}
-                  </span>
-                  {!isBase && (
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <IconButton onClick={() => handleDeleteProvider(p.id)} label={`Remove ${p.id}`} danger>
-                        <X size={13} strokeWidth={1.5} />
-                      </IconButton>
-                    </span>
+                  {!isDefault && (
+                    <SecondaryButton onClick={() => setDefaultProvider(p.id)}>
+                      Set as Default
+                    </SecondaryButton>
                   )}
-                </div>
 
-                {/* Expanded details */}
-                {isExpanded && (
-                  <div style={{ padding: '8px 12px 12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {isBase ? (
-                      <>
-                        <div>
-                          <FieldLabel>Base URL</FieldLabel>
-                          <TextInput value={baseURL} onChange={setBaseURL} placeholder="https://api.anthropic.com/v1" />
-                        </div>
-                        <div>
-                          <FieldLabel>API Key</FieldLabel>
-                          <TextInput
-                            value={authToken} onChange={setAuthToken} placeholder="sk-ant-..." type={showKeys['anthropic'] ? 'text' : 'password'} mono
-                            rightSlot={
-                              <IconButton
-                                onClick={() => setShowKeys({ ...showKeys, 'anthropic': !showKeys['anthropic'] })}
-                                label={showKeys['anthropic'] ? 'Hide key' : 'Show key'}
-                              >
-                                {showKeys['anthropic']
-                                  ? <EyeOff size={14} strokeWidth={1.5} />
-                                  : <Eye size={14} strokeWidth={1.5} />}
-                              </IconButton>
-                            }
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <FieldLabel>Type</FieldLabel>
-                          <PillGroup
-                            options={['anthropic', 'openai', 'google']}
-                            value={p.type}
-                            onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], type: v as ProviderType } })}
-                          />
-                        </div>
-                        <div>
-                          <FieldLabel>Base URL</FieldLabel>
-                          <TextInput value={p.baseURL} onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], baseURL: v }})} placeholder="https://api.openai.com/v1" />
-                        </div>
-                        <div>
-                          <FieldLabel>API Key</FieldLabel>
-                          <TextInput
-                            value={p.authToken} onChange={(v) => setProviders({ ...providers, [p.id]: { ...providers[p.id], authToken: v }})}
-                            placeholder="sk-..." type={showKeys[p.id] ? 'text' : 'password'} mono
-                            rightSlot={
-                              <IconButton
-                                onClick={() => setShowKeys({ ...showKeys, [p.id]: !showKeys[p.id] })}
-                                label={showKeys[p.id] ? 'Hide key' : 'Show key'}
-                              >
-                                {showKeys[p.id]
-                                  ? <EyeOff size={14} strokeWidth={1.5} />
-                                  : <Eye size={14} strokeWidth={1.5} />}
-                              </IconButton>
-                            }
-                          />
-                        </div>
-                      </>
-                    )}
-                    {!isDefault && (
-                      <SecondaryButton onClick={() => setDefaultProvider(p.id)}>
-                        Set as Default
-                      </SecondaryButton>
-                    )}
-
-                    {/* Fetch Models */}
-                    <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 4 }}>
-                      <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-                        <FieldLabel>Models</FieldLabel>
-                        <div className="flex items-center" style={{ gap: 4 }}>
+                  {/* Fetch Models */}
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 4 }}>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <FieldLabel>Models</FieldLabel>
+                      <div className="flex items-center" style={{ gap: 4 }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleFetchModels(p.id) }}
+                          disabled={fetchingModels === p.id}
+                          className="cursor-pointer transition-colors"
+                          style={{
+                            padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+                            fontSize: 13, fontWeight: 500,
+                            background: 'var(--accent-soft)',
+                            color: 'var(--accent-primary)',
+                            border: 'none',
+                            opacity: fetchingModels === p.id ? 0.6 : 1,
+                          }}
+                        >
+                          {fetchingModels === p.id ? 'Fetching…' : 'Fetch'}
+                        </button>
+                        {p.models && p.models.length > 0 && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleFetchModels(p.id) }}
-                            disabled={fetchingModels === p.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSaveProvider(p.id)
+                            }}
                             className="cursor-pointer transition-colors"
                             style={{
                               padding: '4px 10px', borderRadius: 'var(--radius-sm)',
-                              fontSize: 12, fontWeight: 500,
-                              background: 'var(--accent-soft)',
-                              color: 'var(--accent-primary)',
+                              fontSize: 13, fontWeight: 500,
+                              background: savedProvider === p.id ? 'var(--bg-surface-container-highest)' : 'transparent',
+                              color: savedProvider === p.id ? 'var(--text-success)' : 'var(--text-outline)',
                               border: 'none',
-                              opacity: fetchingModels === p.id ? 0.6 : 1,
                             }}
                           >
-                            {fetchingModels === p.id ? 'Fetching…' : 'Fetch'}
+                            {savedProvider === p.id ? 'Saved' : 'Save selection'}
                           </button>
-                          {p.models && p.models.length > 0 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleSaveProvider(p.id)
-                              }}
-                              className="cursor-pointer transition-colors"
-                              style={{
-                                padding: '4px 10px', borderRadius: 'var(--radius-sm)',
-                                fontSize: 12, fontWeight: 500,
-                                background: savedProvider === p.id ? 'var(--bg-surface-container-highest)' : 'transparent',
-                                color: savedProvider === p.id ? 'var(--text-success)' : 'var(--text-outline)',
-                                border: 'none',
-                              }}
-                            >
-                              {savedProvider === p.id ? 'Saved' : 'Save selection'}
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
-                      {p.models && p.models.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 160, overflowY: 'auto' }}>
-                          {p.models.map((m) => {
-                            const checked = selectedModels[p.id]?.has(m) ?? false
-                            return (
-                              <label
-                                key={m}
-                                className="flex items-center cursor-pointer transition-colors"
-                                style={{ gap: 7, padding: '3px 6px', borderRadius: 'var(--radius-sm)', fontSize: 12 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-highest)' }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => {
-                                    const next = new Set(selectedModels[p.id] || [])
-                                    if (checked) next.delete(m); else next.add(m)
-                                    setSelectedModels({ ...selectedModels, [p.id]: next })
-                                  }}
-                                  style={{ accentColor: 'var(--accent-primary)', width: 12, height: 12, flexShrink: 0 }}
-                                />
-                                <span
-                                  className="truncate flex-1"
-                                  style={{
-                                    color: checked ? 'var(--text-on-surface)' : 'var(--text-outline)',
-                                    fontFamily: 'var(--font-mono)',
-                                  }}
-                                  title={m}
-                                >
-                                  {m}
-                                </span>
-                              </label>
-                            )
-                          })}
-                        </div>
-                      ) : fetchError && fetchingModels === null ? (
-                        <div style={{ fontSize: 12, color: 'var(--text-danger)' }}>{fetchError}</div>
-                      ) : (
-                        <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
-                          {fetchingModels === p.id ? 'Fetching…' : 'Not fetched yet.'}
-                        </div>
-                      )}
                     </div>
+                    {p.models && p.models.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 160, overflowY: 'auto' }}>
+                        {p.models.map((m) => {
+                          const checked = selectedModels[p.id]?.has(m) ?? false
+                          return (
+                            <label
+                              key={m}
+                              className="flex items-center cursor-pointer transition-colors"
+                              style={{ gap: 7, padding: '3px 6px', borderRadius: 'var(--radius-sm)', fontSize: 13 }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-highest)' }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  const next = new Set(selectedModels[p.id] || [])
+                                  if (checked) next.delete(m); else next.add(m)
+                                  setSelectedModels({ ...selectedModels, [p.id]: next })
+                                }}
+                                style={{ accentColor: 'var(--accent-primary)', width: 12, height: 12, flexShrink: 0 }}
+                              />
+                              <span
+                                className="truncate flex-1"
+                                style={{
+                                  color: checked ? 'var(--text-on-surface)' : 'var(--text-outline)',
+                                  fontFamily: 'var(--font-mono)',
+                                }}
+                                title={m}
+                              >
+                                {m}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    ) : fetchError && fetchingModels === null ? (
+                      <div style={{ fontSize: 12, color: 'var(--text-danger)' }}>{fetchError}</div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
+                        {fetchingModels === p.id ? 'Fetching…' : 'Not fetched yet.'}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </Section>
 
       {/* Add provider */}
       {adding ? (
         <Section title="New provider">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
-            <Row label="Name">
+            <Row label="Name" stack>
               <TextInput value={newId} onChange={setNewId} placeholder="openai" />
             </Row>
-            <Row label="Type">
+            <Row label="Type" stack>
               <PillGroup options={['anthropic', 'openai', 'google']} value={newType} onChange={(v) => setNewType(v as ProviderType)} />
             </Row>
-            <Row label="Base URL">
+            <Row label="Base URL" stack>
               <TextInput value={newURL} onChange={setNewURL} placeholder="https://api.openai.com/v1" mono />
             </Row>
-            <Row label="API key">
+            <Row label="API key" stack>
               <TextInput value={newKey} onChange={setNewKey} placeholder="sk-..." type="password" mono />
             </Row>
-            <div className="flex items-center" style={{ gap: 8, paddingTop: 4 }}>
+            <div className="settings-card-pad flex items-center" style={{ gap: 8 }}>
               <PrimaryButton onClick={handleAddProvider}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
       ) : (
-        <div style={{ paddingTop: 4 }}>
+        <div className="settings-reveal">
           <SecondaryButton onClick={() => setAdding(true)}>
             <span className="flex items-center" style={{ gap: 6 }}>
               <Plus size={13} strokeWidth={1.5} />
@@ -1278,26 +1254,23 @@ function ProviderTab() {
         title="Model aliases"
         hint="A short name the top bar can select in place of a full model id."
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {Object.entries(aliases).map(([alias, modelId]) => (
-            <div key={alias} className="flex items-center" style={{ gap: 10, padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)', minWidth: 64 }}>{alias}</span>
-              <span className="truncate flex-1" style={{ fontSize: 12, color: 'var(--text-on-surface-variant)', fontFamily: 'var(--font-mono)' }}>{modelId}</span>
-              <IconButton onClick={() => handleDeleteAlias(alias)} label={`Remove alias ${alias}`} danger>
-                <X size={13} strokeWidth={1.5} />
-              </IconButton>
-            </div>
-          ))}
-          {Object.keys(aliases).length === 0 && (
-            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>None yet.</div>
-          )}
-        </div>
-
-        <div className="flex items-center" style={{ gap: 8, marginTop: 12 }}>
+        {Object.entries(aliases).map(([alias, modelId]) => (
+          <div key={alias} className="flex items-center" style={{ gap: 10, padding: '10px 14px' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-primary)', minWidth: 64 }}>{alias}</span>
+            <span className="truncate flex-1" style={{ fontSize: 12, color: 'var(--text-on-surface-variant)', fontFamily: 'var(--font-mono)' }}>{modelId}</span>
+            <IconButton onClick={() => handleDeleteAlias(alias)} label={`Remove alias ${alias}`} danger>
+              <X size={13} strokeWidth={1.5} />
+            </IconButton>
+          </div>
+        ))}
+        {Object.keys(aliases).length === 0 && (
+          <div className="settings-card-pad" style={{ fontSize: 13, color: 'var(--text-outline)' }}>None yet.</div>
+        )}
+        <div className="settings-card-pad flex items-center" style={{ gap: 8 }}>
           <div style={{ width: 110 }}>
             <TextInput value={newAlias} onChange={setNewAlias} placeholder="alias" />
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-outline)' }}>→</span>
+          <span style={{ fontSize: 13, color: 'var(--text-outline)' }}>→</span>
           <div className="flex-1">
             <TextInput value={newModelId} onChange={setNewModelId} placeholder="claude-sonnet-4-20250514" mono />
           </div>
@@ -1306,7 +1279,7 @@ function ProviderTab() {
       </Section>
 
       <Section title="Save">
-        <div className="flex items-center" style={{ gap: 8 }}>
+        <div className="settings-card-pad flex items-center" style={{ gap: 8 }}>
           <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save all'}</PrimaryButton>
           {saveError && (
             <span style={{ fontSize: 12, color: 'var(--text-danger)' }}>
