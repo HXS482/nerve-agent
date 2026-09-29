@@ -1224,7 +1224,7 @@ function ProviderTab() {
       {/* Add provider */}
       {adding ? (
         <Section title="New provider">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Row label="Name" stack>
               <TextInput value={newId} onChange={setNewId} placeholder="openai" />
             </Row>
@@ -1466,7 +1466,7 @@ function McpTab() {
       {/* Add form */}
       {adding ? (
         <Section title="New server">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 460 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Row label="Name" stack>
               <TextInput value={newName} onChange={setNewName} placeholder="filesystem" />
             </Row>
@@ -1885,7 +1885,7 @@ function ChannelsTab() {
               key={ch.id}
               style={{
                 overflow: 'hidden',
-                border: `1px solid ${isJustSaved ? 'var(--text-success)' : 'var(--border-subtle)'}`,
+                border: `1px solid ${isJustSaved ? 'var(--text-success)' : 'transparent'}`,
                 transition: 'border-color 0.2s',
               }}
             >
@@ -1915,7 +1915,8 @@ function ChannelsTab() {
               {isExpanded && (
                 <div className="settings-list-expand">
                   {fields.map((field) => (
-                    <Row key={field.key} label={field.label} stack>
+                    <div key={field.key}>
+                      <FieldLabel>{field.label}</FieldLabel>
                       <TextInput
                         value={cfg[field.key] || ''}
                         onChange={(v) => updateField(ch.id, field.key, v)}
@@ -1923,7 +1924,7 @@ function ChannelsTab() {
                         type={field.secret ? 'password' : 'text'}
                         mono
                       />
-                    </Row>
+                    </div>
                   ))}
                   {fields.length === 0 && (
                     <div style={{ fontSize: 13, color: 'var(--text-outline)' }}>
@@ -1946,7 +1947,7 @@ function ChannelsTab() {
       {/* Add new */}
       {adding ? (
         <Section title="Add channel">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 380 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Row label="Platform">
               <PillGroup
                 options={platforms}
