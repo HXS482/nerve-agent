@@ -50,38 +50,55 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ size?: number;
 
 // --- Shared UI Primitives ---
 
-/** 设置区：真标题（13/600）+ 可选说明，靠发丝线分段，不靠等距留白 */
+/** 设置分组：uppercase 段标题在卡外（ChunUI 段标题范式），内容包进分组大卡，
+    整组以 settings-reveal 入场（错峰延迟由 CSS nth-child 接管） */
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section style={{ paddingTop: 22, marginTop: 22, borderTop: '1px solid var(--border-subtle)' }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)' }}>{title}</div>
-      {hint && (
-        <div style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--text-outline)', marginTop: 5, maxWidth: 460 }}>
-          {hint}
+    <div className="settings-reveal">
+      <div style={{ margin: '0 14px 8px' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-outline)' }}>
+          {title}
         </div>
-      )}
-      <div style={{ marginTop: 14 }}>{children}</div>
-    </section>
+        {hint && (
+          <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-outline)', marginTop: 4, maxWidth: 520 }}>
+            {hint}
+          </div>
+        )}
+      </div>
+      <div className="settings-group-card">{children}</div>
+    </div>
   )
 }
 
-/** 标签在左、控件在右：右侧面板的主要排版单位，左列可扫读 */
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+/** 设置行：紧凑控件右对齐（stack 缺省）；表单/宽控件用 stack 全宽堆在 label 下。
+    行节奏对齐 ChunUI：minHeight 44，左右内边距 14 与分组卡圆角呼应 */
+function Row({ label, hint, stack, children }: { label: string; hint?: string; stack?: boolean; children: React.ReactNode }) {
+  if (stack) {
+    return (
+      <div style={{ padding: '10px 14px' }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-on-surface)' }}>{label}</div>
+        {hint && <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-outline)', marginTop: 3 }}>{hint}</div>}
+        <div style={{ marginTop: 10, minWidth: 0 }}>{children}</div>
+      </div>
+    )
+  }
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: '124px minmax(0, 1fr)',
+        display: 'flex',
+        alignItems: 'center',
         gap: 16,
-        alignItems: 'start',
-        padding: '9px 0',
+        minHeight: 44,
+        padding: '10px 14px',
       }}
     >
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-on-surface-variant)' }}>{label}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-on-surface)' }}>{label}</div>
         {hint && <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-outline)', marginTop: 3 }}>{hint}</div>}
       </div>
-      <div style={{ minWidth: 0 }}>{children}</div>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -102,9 +119,9 @@ function PillGroup({ options, value, onChange, renderLabel }: {
             onClick={() => onChange(opt)}
             className="transition-colors cursor-pointer"
             style={{
-              padding: '5px 11px',
+              padding: '6px 12px',
               borderRadius: 'var(--radius-md)',
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: active ? 600 : 400,
               background: active ? 'var(--accent-soft)' : 'var(--bg-surface-container-high)',
               color: active ? 'var(--accent-primary)' : 'var(--text-on-surface-variant)',
@@ -138,14 +155,14 @@ function TextInput({ value, onChange, placeholder, type = 'text', mono, rightSlo
         style={{
           padding: rightSlot ? '7px 34px 7px 10px' : '7px 10px',
           borderRadius: 'var(--radius-md)',
-          fontSize: 12,
+          fontSize: 13,
           fontFamily: mono ? 'var(--font-mono)' : undefined,
           background: 'var(--bg-surface-container-high)',
           color: 'var(--text-on-surface)',
           border: '1px solid var(--border-subtle)',
         }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-line)' }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-line)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-soft)' }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none' }}
       />
       {rightSlot && (
         <div style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)' }}>
@@ -173,14 +190,14 @@ function MultilineInput({ value, onChange, placeholder, rows = 3 }: {
       style={{
         padding: '7px 10px',
         borderRadius: 'var(--radius-md)',
-        fontSize: 12,
+        fontSize: 13,
         fontFamily: 'var(--font-mono)',
         background: 'var(--bg-surface-container-high)',
         color: 'var(--text-on-surface)',
         border: '1px solid var(--border-subtle)',
       }}
-      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-line)' }}
-      onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
+      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-line)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-soft)' }}
+      onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none' }}
     />
   )
 }
@@ -196,9 +213,9 @@ function PrimaryButton({ children, onClick, disabled }: {
       disabled={disabled}
       className="cursor-pointer transition-colors"
       style={{
-        padding: '7px 16px',
+        padding: '8px 16px',
         borderRadius: 'var(--radius-md)',
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: 600,
         background: 'var(--accent-primary)',
         color: 'var(--accent-on-primary)',
@@ -222,9 +239,9 @@ function SecondaryButton({ children, onClick, disabled }: {
       disabled={disabled}
       className="cursor-pointer transition-colors"
       style={{
-        padding: '7px 16px',
+        padding: '8px 16px',
         borderRadius: 'var(--radius-md)',
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: 500,
         background: 'var(--bg-surface-container-high)',
         color: 'var(--text-on-surface)',
@@ -239,7 +256,7 @@ function SecondaryButton({ children, onClick, disabled }: {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-on-surface-variant)', marginBottom: 5 }}>
+    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-on-surface-variant)', marginBottom: 5 }}>
       {children}
     </div>
   )
@@ -263,7 +280,7 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; la
       aria-label={label}
       className="cursor-pointer transition-colors"
       style={{
-        width: 30, height: 17, borderRadius: 9, padding: 2,
+        width: 40, height: 22, borderRadius: 11, padding: 3,
         background: on ? 'var(--accent-primary)' : 'var(--bg-surface-container-highest)',
         border: '1px solid var(--border-subtle)',
         display: 'flex', alignItems: 'center',
@@ -271,7 +288,7 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; la
         flexShrink: 0,
       }}
     >
-      <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#fff' }} />
+      <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff' }} />
     </button>
   )
 }
@@ -304,7 +321,7 @@ function IconButton({ onClick, label, children, danger }: {
 /** 状态靠字承载，颜色只做辅助；不再是一个同色系染满的盒子 */
 function StatusBadge({ ok, text }: { ok: boolean; text: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 13 }}>
       <span style={{ fontWeight: 600, color: ok ? 'var(--text-success)' : 'var(--text-danger)' }}>
         {ok ? 'Passed' : 'Failed'}
       </span>
