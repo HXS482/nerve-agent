@@ -1605,12 +1605,13 @@ button, a, input, textarea, select {
   border: 1px solid transparent; /* 保留 1px 几何：fab 底部补偿依赖它 */
   border-radius: var(--app-shell-radius);
 }
-/* Stage 外框底图：锐利壁纸铺满窗口（含 shell 的 2px 缝隙），给毛玻璃环提供 backdrop。
-   裁切圆角与窗口严格一致（同一 var(--app-window-radius)）：壁纸的裁切弧 = 窗口的可见弧，
-   blur 采样不会探出壁纸边界 */
+/* Stage 外框底图：锐利壁纸给毛玻璃环提供 backdrop。
+   四边内缩 1px 不顶满窗口：窗口圆角裁切弧在最外 1px 处有抗锯齿半透明像素，
+   壁纸贴满会从描边下露出，内缩后壁纸边缘完全藏在 1.5px 描边之下。
+   裁切圆角与窗口一致（同一 var(--app-window-radius)）：blur 采样不会探出壁纸边界 */
 .stage-frame-bg {
   position: absolute;
-  inset: 0;
+  inset: 1px;
   z-index: 0;
   pointer-events: none;
   border-radius: var(--app-window-radius);
