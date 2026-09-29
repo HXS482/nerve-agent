@@ -387,7 +387,7 @@ function PluginsTab() {
           </div>
         )}
         {plugins.map(plugin => (
-          <div key={plugin.id}>
+          <div key={plugin.id} style={{ padding: '10px 14px' }}>
             {/* Header row */}
             <div className="flex items-center justify-between">
               <div className="flex items-center" style={{ gap: 10 }}>
