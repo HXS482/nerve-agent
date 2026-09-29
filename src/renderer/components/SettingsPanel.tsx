@@ -476,7 +476,7 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
           </div>
 
           {/* Tab buttons */}
-          <div className="flex flex-col" style={{ padding: '0 8px 10px', gap: 1 }}>
+          <div className="flex flex-col" style={{ padding: '0 8px 10px', gap: 1, overflowY: 'auto' }}>
             {TABS.map((t) => {
               const active = tab === t.id
               const Icon = t.icon
@@ -487,9 +487,9 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
                   className="flex items-center transition-colors cursor-pointer"
                   style={{
                     gap: 9,
-                    padding: '7px 10px',
+                    padding: '9px 10px',
                     borderRadius: 'var(--radius-md)',
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: active ? 600 : 400,
                     background: active ? 'var(--accent-soft)' : 'transparent',
                     color: active ? 'var(--accent-primary)' : 'var(--text-on-surface-variant)',
@@ -522,7 +522,7 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
           </div>
 
           {/* Tab content — scrollable */}
-          <div className="settings-body flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 24px 24px' }}>
+          <div key={tab} className="settings-body flex-1 overflow-y-auto scrollbar-hide" style={{ padding: '0 24px 24px' }}>
             {tab === 'general' && (
               <GeneralTab config={config} onUpdateConfig={onUpdateConfig} onOpenProjectPicker={onOpenProjectPicker} />
             )}
