@@ -601,7 +601,7 @@ function GeneralTab({ config, onUpdateConfig, onOpenProjectPicker }: {
       </Section>
 
       <Section title="Workspace">
-        <Row label="Working directory">
+        <Row label="Working directory" stack>
           <div className="flex items-center" style={{ gap: 10 }}>
             <span
               className="truncate"
@@ -613,11 +613,11 @@ function GeneralTab({ config, onUpdateConfig, onOpenProjectPicker }: {
           </div>
         </Row>
 
-        <Row label="Stage background" hint="Shown behind the Stage view.">
+        <Row label="Stage background" hint="Shown behind the Stage view." stack>
           <StageBgPicker />
         </Row>
 
-        <Row label="Conversation width" hint="Message text and the input bar share this limit.">
+        <Row label="Conversation width" hint="Message text and the input bar share this limit." stack>
           <ConversationWidthControl />
         </Row>
       </Section>
@@ -805,10 +805,10 @@ function PromptEditorTab({ field, description }: { field: 'soul' | 'persona'; de
             width: '100%',
             minHeight: 320,
             resize: 'vertical',
-            padding: '10px 12px',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--bg-surface-container)',
-            border: '1px solid var(--border-subtle)',
+            padding: '12px 14px',
+            borderRadius: 0,
+            background: 'transparent',
+            border: 'none',
             color: 'var(--text-on-surface)',
             fontFamily: 'var(--font-mono)',
             fontSize: 12,
@@ -817,7 +817,7 @@ function PromptEditorTab({ field, description }: { field: 'soul' | 'persona'; de
             boxSizing: 'border-box',
           }}
         />
-        <div className="flex items-center justify-end" style={{ gap: 10, marginTop: 10 }}>
+        <div className="settings-card-pad flex items-center justify-end" style={{ gap: 10 }}>
           {saveError && (
             <span style={{ fontSize: 12, color: 'var(--text-danger)' }}>{saveError}</span>
           )}
@@ -1712,7 +1712,7 @@ function VoiceTab() {
         title="Voice input"
         hint="Transcribes dictation with an audio-capable LLM. Leave these empty to reuse the Provider endpoint and key."
       >
-        <Row label="Endpoint">
+        <Row label="Endpoint" stack>
           <TextInput
             value={endpoint}
             onChange={setEndpoint}
@@ -1722,7 +1722,7 @@ function VoiceTab() {
           {fallbackNote && <Hint>{fallbackNote}</Hint>}
         </Row>
 
-        <Row label="API key">
+        <Row label="API key" stack>
           <TextInput
             value={apiKey}
             onChange={setApiKey}
@@ -1740,12 +1740,13 @@ function VoiceTab() {
           />
         </Row>
 
-        <Row label="Model" hint="Must accept audio input — mimo-v2.5, mimo-v2-omni.">
+        <Row label="Model" hint="Must accept audio input — mimo-v2.5, mimo-v2-omni." stack>
           <TextInput value={model} onChange={setModel} placeholder="mimo-v2.5" mono />
         </Row>
       </Section>
 
       <Section title="Verify">
+        <div className="settings-card-pad">
         <div className="flex items-center" style={{ gap: 8 }}>
           <SecondaryButton onClick={handleTest}>Record 2s and transcribe</SecondaryButton>
           <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
@@ -1758,6 +1759,7 @@ function VoiceTab() {
             />
           </div>
         )}
+        </div>
       </Section>
     </div>
   )
