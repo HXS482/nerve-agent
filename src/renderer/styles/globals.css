@@ -4033,12 +4033,62 @@ pre.hljs {
   color: #fff;
 }
 
-/* ===== Settings：设置区分段，首段不画分隔线 ===== */
-.settings-body > div > section:first-child,
-.settings-body > section:first-child {
-  padding-top: 0;
-  margin-top: 0;
-  border-top: none;
+/* ===== Settings ChunUI 化：分组大卡 + 发丝线 + ccReveal 入场 ===== */
+/* tab 根容器：分组卡纵向节奏（gap 统一 20px，替代旧 Section 的 margin/border 自分段） */
+.settings-body > div {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 分组大卡：圆角 14 + 发丝边；直接子行间画发丝线（iOS 设置分组范式） */
+.settings-group-card {
+  border-radius: 14px;
+  background: var(--bg-surface-container);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+.settings-group-card > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* 可展开列表行：行头 + 展开面板（面板顶部发丝线与行头分隔，不用底色块） */
+.settings-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+}
+.settings-list-expand {
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 卡内松散内容（不成行的按钮组、说明文字）统一内边距 */
+.settings-card-pad {
+  padding: 12px 14px;
+}
+
+/* ccReveal 入场：0.32s 零过冲上浮（ChunUI ccReveal 曲线 0.22,0.8,0.36,1），
+   分组按序错峰 0.06s；`both` 让延迟期内保持隐藏 */
+@keyframes cc-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.settings-reveal {
+  animation: cc-reveal 0.32s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+}
+.settings-body > div > .settings-reveal:nth-child(2) { animation-delay: 0.06s; }
+.settings-body > div > .settings-reveal:nth-child(3) { animation-delay: 0.12s; }
+.settings-body > div > .settings-reveal:nth-child(4) { animation-delay: 0.18s; }
+.settings-body > div > .settings-reveal:nth-child(5) { animation-delay: 0.24s; }
+.settings-body > div > .settings-reveal:nth-child(n+6) { animation-delay: 0.3s; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-reveal { animation: none; }
 }
 
 /* ===== Settings slider：轨道用 --fill 画已选段，thumb 悬停/按下放大 ===== */
