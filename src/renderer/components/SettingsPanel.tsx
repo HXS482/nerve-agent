@@ -1747,18 +1747,18 @@ function VoiceTab() {
 
       <Section title="Verify">
         <div className="settings-card-pad">
-        <div className="flex items-center" style={{ gap: 8 }}>
-          <SecondaryButton onClick={handleTest}>Record 2s and transcribe</SecondaryButton>
-          <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
-        </div>
-        {testResult && (
-          <div style={{ marginTop: 12 }}>
-            <StatusBadge
-              ok={testResult.ok}
-              text={testResult.ok ? (testResult.error || 'STT working') : (testResult.error || '')}
-            />
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <SecondaryButton onClick={handleTest}>Record 2s and transcribe</SecondaryButton>
+            <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
           </div>
-        )}
+          {testResult && (
+            <div style={{ marginTop: 12 }}>
+              <StatusBadge
+                ok={testResult.ok}
+                text={testResult.ok ? (testResult.error || 'STT working') : (testResult.error || '')}
+              />
+            </div>
+          )}
         </div>
       </Section>
     </div>
