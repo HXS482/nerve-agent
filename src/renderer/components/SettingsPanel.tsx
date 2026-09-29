@@ -1840,13 +1840,15 @@ function ChannelsTab() {
                 renderLabel={(p) => (p === 'http' ? 'HTTP' : 'SOCKS5')}
               />
             </Row>
-            <Row label="Host">
+            <Row label="Host" stack>
               <TextInput value={proxyHost} onChange={setProxyHost} placeholder="127.0.0.1" mono />
             </Row>
-            <Row label="Port">
+            <Row label="Port" stack>
               <TextInput value={proxyPort} onChange={setProxyPort} placeholder="7897" mono />
             </Row>
-            <Hint>{proxyProtocol}://{proxyHost}:{proxyPort}</Hint>
+            <div className="settings-card-pad">
+              <Hint>{proxyProtocol}://{proxyHost}:{proxyPort}</Hint>
+            </div>
           </>
         )}
       </Section>
@@ -1864,7 +1866,7 @@ function ChannelsTab() {
         </Row>
         {publicAccessEnabled && (
           <>
-            <Row label="Access token" hint="Required — public mode stays off without one.">
+            <Row label="Access token" hint="Required — public mode stays off without one." stack>
               <TextInput
                 value={publicAccessToken}
                 onChange={setPublicAccessToken}
@@ -1873,89 +1875,83 @@ function ChannelsTab() {
                 type="password"
               />
             </Row>
-            <Hint>
-              Endpoint: <span style={{ fontFamily: 'var(--font-mono)' }}>ws://your-ip:18789</span>
-            </Hint>
+            <div className="settings-card-pad">
+              <Hint>
+                Endpoint: <span style={{ fontFamily: 'var(--font-mono)' }}>ws://your-ip:18789</span>
+              </Hint>
+            </div>
           </>
         )}
       </Section>
 
       <Section title="IM channels" hint="Message platforms Nerve Agent talks to you over.">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {channels.map((ch) => {
-            const isExpanded = expanded === ch.id
-            const isJustSaved = justSavedId === ch.id
-            const fields = CHANNEL_FIELDS[ch.platform] || []
-            const cfg = editConfig[ch.id] || {}
+        {channels.map((ch) => {
+          const isExpanded = expanded === ch.id
+          const isJustSaved = justSavedId === ch.id
+          const fields = CHANNEL_FIELDS[ch.platform] || []
+          const cfg = editConfig[ch.id] || {}
 
-            return (
-              <div
-                key={ch.id}
-                style={{
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden',
-                  background: 'var(--bg-surface-container-high)',
-                  border: `1px solid ${isJustSaved ? 'var(--text-success)' : 'var(--border-subtle)'}`,
-                  transition: 'border-color 0.2s',
-                }}
-              >
-                {/* Row */}
-                <div
-                  className="flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 10, padding: '9px 12px' }}
-                  onClick={() => setExpanded(isExpanded ? null : ch.id)}
-                >
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
-                    {ch.name}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>
-                    {CHANNEL_PLATFORM_LABELS[ch.platform]}
-                  </span>
-                  <span onClick={(e) => e.stopPropagation()}>
-                    <Toggle
-                      on={ch.enabled}
-                      onChange={() => handleToggle(ch.id)}
-                      label={`Toggle ${ch.name}`}
-                    />
-                  </span>
-                  <span onClick={(e) => e.stopPropagation()}>
-                    <IconButton onClick={() => handleDelete(ch.id)} label={`Remove ${ch.name}`} danger>
-                      <X size={13} strokeWidth={1.5} />
-                    </IconButton>
-                  </span>
-                </div>
-
-                {/* Expanded config */}
-                {isExpanded && (
-                  <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {fields.map((field) => (
-                      <Row key={field.key} label={field.label}>
-                        <TextInput
-                          value={cfg[field.key] || ''}
-                          onChange={(v) => updateField(ch.id, field.key, v)}
-                          placeholder={field.placeholder || field.label}
-                          type={field.secret ? 'password' : 'text'}
-                          mono
-                        />
-                      </Row>
-                    ))}
-                    {fields.length === 0 && (
-                      <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
-                        This platform has nothing to configure.
-                      </div>
-                    )}
-                  </div>
-                )}
+          return (
+            <div
+              key={ch.id}
+              style={{
+                overflow: 'hidden',
+                border: `1px solid ${isJustSaved ? 'var(--text-success)' : 'var(--border-subtle)'}`,
+                transition: 'border-color 0.2s',
+              }}
+            >
+              {/* Row */}
+              <div className="settings-list-row" onClick={() => setExpanded(isExpanded ? null : ch.id)}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
+                  {ch.name}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>
+                  {CHANNEL_PLATFORM_LABELS[ch.platform]}
+                </span>
+                <span onClick={(e) => e.stopPropagation()}>
+                  <Toggle
+                    on={ch.enabled}
+                    onChange={() => handleToggle(ch.id)}
+                    label={`Toggle ${ch.name}`}
+                  />
+                </span>
+                <span onClick={(e) => e.stopPropagation()}>
+                  <IconButton onClick={() => handleDelete(ch.id)} label={`Remove ${ch.name}`} danger>
+                    <X size={13} strokeWidth={1.5} />
+                  </IconButton>
+                </span>
               </div>
-            )
-          })}
 
-          {channels.length === 0 && !adding && (
-            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>
-              None configured.
+              {/* Expanded config */}
+              {isExpanded && (
+                <div className="settings-list-expand">
+                  {fields.map((field) => (
+                    <Row key={field.key} label={field.label} stack>
+                      <TextInput
+                        value={cfg[field.key] || ''}
+                        onChange={(v) => updateField(ch.id, field.key, v)}
+                        placeholder={field.placeholder || field.label}
+                        type={field.secret ? 'password' : 'text'}
+                        mono
+                      />
+                    </Row>
+                  ))}
+                  {fields.length === 0 && (
+                    <div style={{ fontSize: 13, color: 'var(--text-outline)' }}>
+                      This platform has nothing to configure.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          )
+        })}
+
+        {channels.length === 0 && !adding && (
+          <div className="settings-card-pad" style={{ fontSize: 13, color: 'var(--text-outline)' }}>
+            None configured.
+          </div>
+        )}
       </Section>
 
       {/* Add new */}
@@ -1970,14 +1966,14 @@ function ChannelsTab() {
                 renderLabel={(p) => CHANNEL_PLATFORM_LABELS[p as ChannelPlatform]}
               />
             </Row>
-            <div className="flex items-center" style={{ gap: 8, paddingTop: 4 }}>
+            <div className="settings-card-pad flex items-center" style={{ gap: 8 }}>
               <PrimaryButton onClick={handleAdd}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
       ) : (
-        <div style={{ paddingTop: 4 }}>
+        <div className="settings-reveal">
           <SecondaryButton onClick={() => setAdding(true)}>
             <span className="flex items-center" style={{ gap: 6 }}>
               <Plus size={13} strokeWidth={1.5} />
@@ -1989,7 +1985,9 @@ function ChannelsTab() {
 
       {/* Save */}
       <Section title="Save">
-        <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
+        <div className="settings-card-pad">
+          <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save'}</PrimaryButton>
+        </div>
       </Section>
     </div>
   )
