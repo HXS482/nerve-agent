@@ -367,51 +367,56 @@ function PluginsTab() {
   }
 
   if (loading) {
-    return <div style={{ fontSize: 12, color: 'var(--text-outline)', padding: '20px 0' }}>Loading plugins…</div>
+    return (
+      <div>
+        <Section title="Plugins" hint="Drop a plugin folder into ~/.nerve/plugins/ to install it.">
+          <div className="settings-card-pad" style={{ fontSize: 13, color: 'var(--text-outline)' }}>
+            Loading plugins…
+          </div>
+        </Section>
+      </div>
+    )
   }
 
   return (
     <div>
       <Section title="Plugins" hint="Drop a plugin folder into ~/.nerve/plugins/ to install it.">
-        {plugins.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text-outline)' }}>
+        {plugins.length === 0 && (
+          <div className="settings-card-pad" style={{ fontSize: 13, color: 'var(--text-outline)' }}>
             None installed.
           </div>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 4 }}>
-            {plugins.map(plugin => (
-              <div key={plugin.id} style={{ padding: '9px 10px', borderRadius: 'var(--radius-sm)' }}>
-                {/* Header row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center" style={{ gap: 10 }}>
-                    <Toggle
-                      on={plugin.enabled}
-                      onChange={() => handleToggle(plugin.id, !plugin.enabled)}
-                      label={`Toggle ${plugin.id}`}
-                    />
-                    <span style={{ fontSize: 12, fontWeight: 500, color: plugin.enabled ? 'var(--text-on-surface)' : 'var(--text-outline)' }}>
-                      {plugin.id}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>{plugin.version}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>{plugin.trust}</span>
-                  </div>
-                  <SecondaryButton onClick={() => handleReload(plugin.id)}>Reload</SecondaryButton>
-                </div>
-
-                {/* Description */}
-                {plugin.description && (
-                  <p style={{ fontSize: 11, marginTop: 4, marginBottom: 0, lineHeight: 1.5, color: 'var(--text-outline)' }}>{plugin.description}</p>
-                )}
-
-                {plugin.toolCount > 0 && (
-                  <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-outline)' }}>
-                    {plugin.toolCount} {plugin.toolCount === 1 ? 'tool' : 'tools'}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
         )}
+        {plugins.map(plugin => (
+          <div key={plugin.id}>
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center" style={{ gap: 10 }}>
+                <Toggle
+                  on={plugin.enabled}
+                  onChange={() => handleToggle(plugin.id, !plugin.enabled)}
+                  label={`Toggle ${plugin.id}`}
+                />
+                <span style={{ fontSize: 13, fontWeight: 500, color: plugin.enabled ? 'var(--text-on-surface)' : 'var(--text-outline)' }}>
+                  {plugin.id}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>{plugin.version}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-outline)' }}>{plugin.trust}</span>
+              </div>
+              <SecondaryButton onClick={() => handleReload(plugin.id)}>Reload</SecondaryButton>
+            </div>
+
+            {/* Description */}
+            {plugin.description && (
+              <p style={{ fontSize: 11, marginTop: 4, marginBottom: 0, lineHeight: 1.5, color: 'var(--text-outline)' }}>{plugin.description}</p>
+            )}
+
+            {plugin.toolCount > 0 && (
+              <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-outline)' }}>
+                {plugin.toolCount} {plugin.toolCount === 1 ? 'tool' : 'tools'}
+              </div>
+            )}
+          </div>
+        ))}
       </Section>
     </div>
   )
@@ -1551,45 +1556,29 @@ function SkillsTab() {
         title="Skills"
         hint="Read from .agents/skills/*/SKILL.md in the working directory. A skill needs frontmatter with name and description."
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {skills.map((skill) => (
-            <div
-              key={skill.id}
-              className="flex items-center"
-              style={{ gap: 12, padding: '8px 10px', borderRadius: 'var(--radius-sm)' }}
-            >
-              <Toggle
-                on={skill.enabled}
-                onChange={() => handleToggle(skill.id)}
-                label={`Toggle ${skill.name}`}
-              />
-
-              <div className="flex-1 min-w-0">
-                <span className="block truncate" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-on-surface)' }}>
-                  {skill.name}
-                </span>
-                {skill.description && (
-                  <span className="block" style={{ fontSize: 11, color: 'var(--text-outline)', lineHeight: 1.45 }}>
-                    {skill.description.length > 140 ? skill.description.slice(0, 140) + '…' : skill.description}
-                  </span>
-                )}
-              </div>
-
-              <span
-                className="shrink-0"
-                style={{ fontSize: 11, color: skill.enabled ? 'var(--text-on-surface-variant)' : 'var(--text-outline)' }}
-              >
-                {skill.enabled ? 'On' : 'Off'}
+        {skills.map((skill) => (
+          <div key={skill.id} className="flex items-center" style={{ gap: 12, padding: '10px 14px' }}>
+            <Toggle on={skill.enabled} onChange={() => handleToggle(skill.id)} label={`Toggle ${skill.name}`} />
+            <div className="flex-1 min-w-0">
+              <span className="block truncate" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-on-surface)' }}>
+                {skill.name}
               </span>
+              {skill.description && (
+                <span className="block" style={{ fontSize: 11, color: 'var(--text-outline)', lineHeight: 1.45 }}>
+                  {skill.description.length > 140 ? skill.description.slice(0, 140) + '…' : skill.description}
+                </span>
+              )}
             </div>
-          ))}
-
-          {skills.length === 0 && (
-            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>
-              None found.
-            </div>
-          )}
-        </div>
+            <span className="shrink-0" style={{ fontSize: 11, color: skill.enabled ? 'var(--text-on-surface-variant)' : 'var(--text-outline)' }}>
+              {skill.enabled ? 'On' : 'Off'}
+            </span>
+          </div>
+        ))}
+        {skills.length === 0 && (
+          <div className="settings-card-pad" style={{ fontSize: 13, color: 'var(--text-outline)' }}>
+            None found.
+          </div>
+        )}
       </Section>
     </div>
   )
