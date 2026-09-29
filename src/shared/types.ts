@@ -256,7 +256,7 @@ export interface ClaudeConfig {
   provider?: string
 }
 
-export type Theme = 'dark' | 'light' | 'aurora'
+export type Theme = 'dark' | 'light'
 export type ColorScheme = 'purple' | 'blue' | 'green' | 'pink' | 'orange'
 
 export type MessageRole = 'user' | 'assistant' | 'system'

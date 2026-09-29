@@ -18,13 +18,13 @@ function loadHighlightTheme(theme: string) {
   document.head.appendChild(link)
 }
 
-// Load initial theme
+// Load initial theme（旧持久化里的 'aurora' 已废弃，归入 dark）
 const savedTheme = (() => {
   try {
     const raw = localStorage.getItem('nerve-state')
     if (raw) {
       const parsed = JSON.parse(raw)
-      return parsed?.state?.theme || 'dark'
+      return parsed?.state?.theme === 'light' ? 'light' : 'dark'
     }
   } catch {}
   return 'dark'

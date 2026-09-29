@@ -35,7 +35,6 @@ function PaletteIcon() {
 const THEMES = [
   { id: 'dark' as const, label: 'Dark' },
   { id: 'light' as const, label: 'Light' },
-  { id: 'aurora' as const, label: 'Aurora' },
 ]
 
 export function GradientButtonGroup({
@@ -153,21 +152,16 @@ export function GradientButtonGroup({
   return (
     <div className="relative flex items-center">
       <nav
-        className={`inline-flex items-center gap-1.5 rounded-[14px] p-1 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+        className="inline-flex items-center gap-1.5 rounded-[14px] p-1"
         style={{
-          background: theme === 'aurora'
-            ? undefined
-            : isDark
-              ? "rgba(30, 30, 32, 0.6)"
-              : "rgba(255, 255, 255, 0.6)",
-          backdropFilter: theme === 'aurora' ? undefined : "blur(20px) saturate(180%)",
-          WebkitBackdropFilter: theme === 'aurora' ? undefined : "blur(20px) saturate(180%)",
-          border: theme === 'aurora'
-            ? "1px solid var(--glass-border)"
-            : isDark
-              ? "1px solid rgba(255,255,255,0.08)"
-              : "1px solid rgba(0,0,0,0.06)",
-          boxShadow: theme === 'aurora' ? "0 20px 50px rgba(0,0,0,0.5)" : undefined,
+          background: isDark
+            ? "rgba(30, 30, 32, 0.6)"
+            : "rgba(255, 255, 255, 0.6)",
+          backdropFilter: "blur(20px) saturate(180%)",
+          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          border: isDark
+            ? "1px solid rgba(255,255,255,0.08)"
+            : "1px solid rgba(0,0,0,0.06)",
         }}
       >
         {navItems.map((item) => {

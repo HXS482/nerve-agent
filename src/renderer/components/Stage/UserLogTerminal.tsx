@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import type { ChatMessage } from '../../../shared/types'
 import { useStageStore } from '../../stores/stageStore'
 import { buildStageView } from '../../adapters/stageAdapter'
+import { useChatStore } from '../../stores/chatStore'
 import type { StageCardKind } from './StageCard'
 
 // 用户消息时间轴（右下角）：Hook Sidebar 式「钩轨」导航。
@@ -109,6 +110,9 @@ export function UserLogTerminal({ messages }: { messages: ChatMessage[] }) {
   const currentSessionId = useStageStore((s) => s.stageSessionId)
   const selectedRoundId = useStageStore((s) => s.selectedRoundId)
   const setSelectedRoundId = useStageStore((s) => s.setSelectedRoundId)
+  // 焦点导轨色：dark 绿光压黑壁纸，light 换深绿保对比
+  const theme = useChatStore((s) => s.theme)
+  const focusColor = theme === 'light' ? '#1a7f37' : '#3dff8f'
 
   const vm = useMemo(() => {
     const sessionMsgs = currentSessionId ? messages.filter((m) => m.sessionId === currentSessionId) : []
@@ -163,7 +167,7 @@ export function UserLogTerminal({ messages }: { messages: ChatMessage[] }) {
         visible={pointerInside && hoverIndex !== null && hoverIndex !== activeIdx}
         dashed
       />
-      <Rail y={activeY} visible={activeY !== null} color="#3dff8f" dashed />
+      <Rail y={activeY} visible={activeY !== null} color={focusColor} dashed />
 
       {vm.rounds.map((r, i) => {
         const state = i === activeIdx ? 'is-active' : activeIdx > 0 && i < activeIdx ? 'is-passed' : ''

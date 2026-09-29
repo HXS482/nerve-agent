@@ -7,7 +7,6 @@ import { StageSessions } from './StageSessions'
 import { SidebarToggleIcon } from '../SidebarToggleIcon'
 import { StageAvatar } from './StageAvatar'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
-import { PredictiveArcBg } from './PredictiveArcBg'
 import { ThinkSpot } from './ThinkSpot'
 import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
@@ -39,12 +38,11 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
   return (
     <div className="stage-shell">
-      {/* 背景：默认 Predictive Arc 弧光动画；自定义壁纸（图片/视频/HTML）优先 */}
+      {/* 背景：仅自定义壁纸（图片/视频/HTML）；无壁纸时露出纯纸面 */}
       <div
         className="stage-bg"
-        style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { background: `#0a0a0a url("${stageBg}") center / cover no-repeat` }) : { background: '#030303' }}
+        style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: 'var(--stage-frame)' } : { background: `var(--stage-frame) url("${stageBg}") center / cover no-repeat` }) : undefined}
       >
-        {!stageBg && <PredictiveArcBg />}
         {stageBg && isVideoBg(stageBg) && <BgVideo src={stageBg} />}
         {stageBg && isHtmlBg(stageBg) && <BgHtml src={stageBg} />}
       </div>

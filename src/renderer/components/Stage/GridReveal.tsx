@@ -635,10 +635,10 @@ export function GridReveal({
       style={{
         aspectRatio: ratio,
         borderRadius: 12,
-        background: "rgba(255, 255, 255, 0.05)",
+        background: "var(--stage-glass, rgba(255, 255, 255, 0.05))",
         backdropFilter: "blur(12px) saturate(180%)",
         WebkitBackdropFilter: "blur(12px) saturate(180%)",
-        border: "3px solid rgba(255, 255, 255, 0.1)",
+        border: "3px solid var(--stage-border, rgba(255, 255, 255, 0.1))",
         ...style,
       }}
       {...props}

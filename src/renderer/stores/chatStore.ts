@@ -245,8 +245,10 @@ export const useChatStore = create<ChatState>()(
         set({ theme: next })
       },
       setTheme: (theme) => {
-        document.documentElement.setAttribute('data-theme', theme)
-        set({ theme })
+        // 兼容旧持久化状态里的 'aurora'：主题只剩 dark/light，aurora 归入 dark
+        const next = theme === 'light' ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', next)
+        set({ theme: next })
       },
       setStageBg: (bg) => set({ stageBg: bg }),
       setConversationWidth: (width) =>
@@ -345,7 +347,10 @@ export const useChatStore = create<ChatState>()(
       onRehydrate: () => {
         return (state) => {
           if (state?.theme) {
-            document.documentElement.setAttribute('data-theme', state.theme)
+            // 旧持久化里可能是 'aurora'：主题只剩 dark/light，归入 dark
+            const t = state.theme === 'light' ? 'light' : 'dark'
+            state.theme = t
+            document.documentElement.setAttribute('data-theme', t)
           }
           // Sanitize stale persisted view values
           const validViews = ['flow', 'folder', 'git', 'diff']

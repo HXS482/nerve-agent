@@ -158,80 +158,6 @@
   color-scheme: light;
 }
 
-/* ===== Aurora Theme (Grainient background) ===== */
-[data-theme="aurora"] {
-  --window-alpha-floor: rgba(13, 13, 30, 0.01);
-  --bg-background: transparent;
-  --bg-mica: rgba(13, 13, 30, 0.25);
-  --bg-mica-sidebar: rgba(13, 13, 30, 0.55);
-  --bg-surface: rgba(13, 13, 30, 0.4);
-  --bg-surface-dim: rgba(13, 13, 30, 0.5);
-  --bg-surface-bright: rgba(40, 30, 60, 0.5);
-  --bg-surface-container-lowest: rgba(10, 10, 25, 0.4);
-  --bg-surface-container-low: rgba(15, 15, 35, 0.4);
-  --bg-surface-container: rgba(20, 15, 40, 0.45);
-  --bg-surface-container-high: rgba(255, 255, 255, 0.1);
-  --bg-surface-container-highest: rgba(255, 255, 255, 0.15);
-  --bg-surface-variant: rgba(40, 30, 60, 0.5);
-
-  --text-on-surface: #e5e2e1;
-  --text-on-surface-variant: #c2c6d6;
-  --text-on-background: #e5e2e1;
-  --text-outline: #8c909f;
-  --text-outline-variant: rgba(255, 255, 255, 0.2);
-
-  --accent-primary: #d4a0ff;
-  --accent-on-primary: #2a0050;
-  --accent-primary-container: #7c3acd;
-  --accent-on-primary-container: #e8d5ff;
-  --accent-inverse-primary: #7c3acd;
-  --accent-surface-tint: #d4a0ff;
-
-  --accent-secondary: #c8b4ff;
-  --accent-on-secondary: #1a0040;
-  --accent-secondary-container: rgba(120, 90, 200, 0.3);
-  --accent-on-secondary-container: #d8c8ff;
-
-  --accent-tertiary: #ffb4d0;
-  --accent-on-tertiary: #4a0020;
-  --accent-tertiary-container: rgba(200, 80, 140, 0.3);
-  --accent-on-tertiary-container: #ffd8e8;
-
-  --error: #ffb4ab;
-  --error-on: #690005;
-  --error-container: rgba(147, 0, 10, 0.5);
-  --error-on-container: #ffdad6;
-
-  --border-default: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.18);
-  --border-subtle: rgba(255, 255, 255, 0.06);
-
-  --text-success: #34d399;
-  --text-danger: #ff5f56;
-  --text-warning: #ffbd2e;
-
-  --accent-soft: color-mix(in srgb, var(--accent-primary) 16%, transparent);
-  --accent-line: color-mix(in srgb, var(--accent-primary) 34%, transparent);
-
-  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
-
-  --glass-bg: rgba(20, 15, 40, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-blur: blur(20px) saturate(180%);
-
-  --dynamic-island-bg: rgba(200, 180, 255, 0.11);
-  --dynamic-island-border: rgba(255, 255, 255, 0.12);
-  --dynamic-island-blur: blur(20px) saturate(180%);
-
-  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
-
-  --selection: rgba(212, 160, 255, 0.25);
-
-  color-scheme: dark;
-}
-
 /* ===== Typography ===== */
 :root {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -368,12 +294,12 @@ button, a, input, textarea, select {
   -webkit-backdrop-filter: var(--dynamic-island-blur);
 }
 
-/* ===== Glass dock（CoverFlow 翻页 dock 同款毛玻璃） ===== */
+/* ===== Glass dock（CoverFlow 翻页 dock 同款毛玻璃；stage 亮色主题走 --stage-glass） ===== */
 .glass-dock {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
 }
 
 /* ===== 顶栏中央：任务执行 gooey loader ===== */
@@ -495,26 +421,49 @@ button, a, input, textarea, select {
   min-height: 0;
 }
 
+/* ===== Stage 玻璃令牌：壁纸玻璃体系（dark 默认，light 覆写） =====
+   stage 浮层一律用这套令牌而不是写死 rgba：暗色是白玻璃压黑壁纸，
+   亮色是实一档的白玻璃 + 深色发丝线压亮纸面，换主题整套跟随 */
+:root {
+  --stage-paper: #030303;
+  --stage-frame: #0a0a0a;
+  --stage-frost: rgba(255, 255, 255, 0.05);
+  --stage-ring: rgba(255, 255, 255, 0.22);
+  --stage-window-border: rgba(255, 255, 255, 0.10);
+  --stage-glass: rgba(255, 255, 255, 0.05);
+  --stage-glass-strong: rgba(255, 255, 255, 0.10);
+  --stage-border-faint: rgba(255, 255, 255, 0.07);
+  --stage-border: rgba(255, 255, 255, 0.10);
+  --stage-border-strong: rgba(255, 255, 255, 0.18);
+  --stage-border-active: rgba(255, 255, 255, 0.5);
+  --stage-hover: rgba(255, 255, 255, 0.06);
+  --stage-hover-strong: rgba(255, 255, 255, 0.09);
+  --stage-scroll: rgba(255, 255, 255, 0.18);
+}
+[data-theme="light"] {
+  --stage-paper: #eef1f6;
+  --stage-frame: #eef1f6;
+  --stage-frost: rgba(0, 0, 0, 0.04);
+  --stage-ring: rgba(0, 0, 0, 0.16);
+  --stage-window-border: rgba(0, 0, 0, 0.12);
+  --stage-glass: rgba(255, 255, 255, 0.45);
+  --stage-glass-strong: rgba(255, 255, 255, 0.62);
+  --stage-border-faint: rgba(0, 0, 0, 0.07);
+  --stage-border: rgba(0, 0, 0, 0.10);
+  --stage-border-strong: rgba(0, 0, 0, 0.2);
+  --stage-border-active: rgba(0, 0, 0, 0.35);
+  --stage-hover: rgba(0, 0, 0, 0.05);
+  --stage-hover-strong: rgba(0, 0, 0, 0.08);
+  --stage-scroll: rgba(0, 0, 0, 0.18);
+}
+
 /* Stage 背景层 —— 默认渲染 Predictive Arc 弧光动画（.stage-bg-predictive），自定义壁纸时由内联样式覆盖 */
 .stage-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: #030303;
-}
-/* 默认动态背景：Predictive Arc 点阵弧光（PredictiveArcBg.tsx） */
-.stage-bg-predictive {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-.stage-bg-predictive > canvas {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
+  background: var(--stage-paper);
 }
 /* 视频背景（自定义 mp4/webm 等）：填满足位容器 */
 .stage-bg-media {
@@ -653,10 +602,10 @@ button, a, input, textarea, select {
   max-height: calc(100vh - 48px);
   overflow: hidden;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
 }
 .web-viewer-bar {
@@ -691,7 +640,7 @@ button, a, input, textarea, select {
   transition: background 0.15s, color 0.15s;
 }
 .web-viewer-collapse:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--stage-hover);
   color: var(--text-on-surface);
 }
 .web-viewer-body {
@@ -781,7 +730,7 @@ button, a, input, textarea, select {
 }
 
 
-/* 图片卡操作：hover 时浮现在右侧角落 */
+/* 图片卡操作：hover 时浮现在右侧角落（深色小圆钮，亮色主题同样压图可读） */
 .stage-card-close {
   position: absolute;
   top: 7px;
@@ -864,8 +813,12 @@ button, a, input, textarea, select {
   background: #0c1017;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--stage-border-faint);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+[data-theme="light"] .stage-card[data-kind="code"] {
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 .stage-code {
   display: flex;
@@ -983,7 +936,7 @@ button, a, input, textarea, select {
   transition: color 0.1s, background 0.1s;
 }
 .stage-code-copy:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-hover);
   color: var(--text-on-surface);
 }
 .stage-code-copy[data-copied="true"] {
@@ -1052,7 +1005,7 @@ button, a, input, textarea, select {
 }
 /* 底部说明栏：模型对代码的解释常驻显示（两行截断），不用再点批注图标 */
 .stage-code-caption {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--stage-border-faint);
   padding: 8px 14px;
   font-family: var(--font-sans, inherit);
   font-size: 11.5px;
@@ -1076,19 +1029,19 @@ button, a, input, textarea, select {
   max-width: 30vw;
   pointer-events: auto;
 }
-/* todo 卡毛玻璃容器：浅白底 + blur(12px) + 细白边 */
+/* todo 卡毛玻璃容器：浅白底 + blur(12px) + 细边 */
 .stage-todo-glass {
   border-radius: 12px;
   padding: 4px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 .stage-task-card {
-  --stage-task-line: rgba(255, 255, 255, 0.14);
+  --stage-task-line: var(--stage-border-strong);
   --stage-task-run: #60a5fa;
   --stage-task-done: #34d399;
   padding: 4px 6px;
@@ -1097,7 +1050,8 @@ button, a, input, textarea, select {
   gap: 2px;
 }
 [data-theme="light"] .stage-task-card {
-  --stage-task-line: rgba(0, 0, 0, 0.12);
+  --stage-task-run: #2563eb;
+  --stage-task-done: #1a7f37;
 }
 /* 头栏（beui TodoList）：整行可点折叠，图标 + 标题 + 计数 + chevron */
 .stage-task-header {
@@ -1130,10 +1084,10 @@ button, a, input, textarea, select {
   overflow: visible;
 }
 .stage-task-hicon-svg.is-complete {
-  color: #34d399;
+  color: var(--stage-task-done);
 }
 .stage-task-hicon-svg.is-complete circle {
-  fill: #34d399;
+  fill: var(--stage-task-done);
 }
 .stage-task-hicon-svg.is-complete path {
   stroke: #fff;
@@ -1156,7 +1110,7 @@ button, a, input, textarea, select {
   color: var(--text-outline-variant);
 }
 .stage-task-count.is-done {
-  color: #34d399;
+  color: var(--stage-task-done);
 }
 .stage-task-chevron {
   display: inline-flex;
@@ -1199,10 +1153,7 @@ button, a, input, textarea, select {
   transition: background-color 200ms;
 }
 .stage-task-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-[data-theme="light"] .stage-task-row:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--stage-hover);
 }
 /* 行状态图标（beui TodoStatusIcon）：pending 虚线环 / in_progress 旋转进度弧 / completed 勾 */
 .stage-task-sicon {
@@ -1309,8 +1260,12 @@ button, a, input, textarea, select {
   background: rgba(12, 16, 23, 0.82);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--stage-border-faint);
   text-align: left;
+}
+[data-theme="light"] .narration-code {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: var(--stage-border);
 }
 .narration-code .prose {
   font-size: 12px;
@@ -1372,14 +1327,14 @@ button, a, input, textarea, select {
 }
 [data-theme="light"] .writing-card {
   background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(0, 0, 0, 0.08);
+  border-color: var(--stage-border);
 }
 .writing-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--stage-border-faint);
   flex-shrink: 0;
 }
 .writing-card-title {
@@ -1428,7 +1383,7 @@ button, a, input, textarea, select {
 }
 .writing-card-btn:hover {
   color: var(--text-on-surface);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-hover);
 }
 .writing-card-btn:active {
   transform: scale(0.92);
@@ -1456,14 +1411,14 @@ button, a, input, textarea, select {
   padding: 0 4px 0 14px;
   border-radius: 12px;
   /* 与卡身同配方的玻璃底 */
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
 }
 /* 点击聚焦不改矩形外观（浏览器默认 outline/高亮去掉，保留 caret） */
 .writing-card-input:focus-within {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--stage-border);
   outline: none;
 }
 .writing-card-input input:focus {
@@ -1506,7 +1461,7 @@ button, a, input, textarea, select {
 }
 .writing-card-send:hover:not(:disabled) {
   color: var(--accent-primary);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-hover);
 }
 .writing-card-send:disabled {
   opacity: 0.4;
@@ -1532,7 +1487,7 @@ button, a, input, textarea, select {
   overflow-y: auto;
   padding: 18px 22px 20px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--stage-scroll) transparent;
   mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 24px), transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
 }
@@ -1540,7 +1495,7 @@ button, a, input, textarea, select {
   width: 3px;
 }
 .writing-card-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--stage-scroll);
   border-radius: 2px;
 }
 /* 写作卡内文字比旁白层稍收敛：正文阅读排版 */
@@ -1551,7 +1506,7 @@ button, a, input, textarea, select {
   margin: 0 0 0.8em;
 }
 .writing-card .narration-code {
-  background: rgba(12, 16, 23, 0.6);
+  background: var(--stage-glass);
   margin: 0.4em 0 0.9em;
 }
 .writing-card .narration-code .prose,
@@ -1605,9 +1560,10 @@ button, a, input, textarea, select {
   border: 1px solid transparent; /* 保留 1px 几何：fab 底部补偿依赖它 */
   border-radius: var(--app-shell-radius);
 }
-/* Stage 外框底图：锐利壁纸给毛玻璃环提供 backdrop。
-   四边内缩 1px 不顶满窗口：窗口圆角裁切弧在最外 1px 处有抗锯齿半透明像素，
-   壁纸贴满会从描边下露出，内缩后壁纸边缘完全藏在 1.5px 描边之下。
+/* Stage 外框底图：锐利壁纸给毛玻璃环提供 backdrop（仅自定义壁纸时渲染，
+   App.tsx 在无壁纸时 display:none 隐藏此层）。四边内缩 1px 不顶满窗口：
+   窗口圆角裁切弧在最外 1px 处有抗锯齿半透明像素，壁纸贴满会从描边下露出，
+   内缩后壁纸边缘完全藏在 1.5px 描边之下。
    裁切圆角与窗口一致（同一 var(--app-window-radius)）：blur 采样不会探出壁纸边界 */
 .stage-frame-bg {
   position: absolute;
@@ -1616,7 +1572,7 @@ button, a, input, textarea, select {
   pointer-events: none;
   border-radius: var(--app-window-radius);
   overflow: hidden;
-  background: #0a0a0a url('/assets/stage-bg.jpg') center / cover no-repeat;
+  background: var(--stage-frame);
 }
 /* Stage 外框毛玻璃环：与会话按钮同一质感（backdrop blur + 5% 白），
    xor mask 抠掉中间只留窗口边缘一环；圆角由 border-radius + mask-clip 承担 */
@@ -1626,7 +1582,7 @@ button, a, input, textarea, select {
   z-index: 40;
   pointer-events: none;
   border-radius: var(--app-window-radius);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-frost);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   padding: 5px; /* 环宽：盖住 1.5 描边 + 2 margin + 1 shell border */
@@ -1643,7 +1599,7 @@ button, a, input, textarea, select {
   z-index: 41;
   pointer-events: none;
   border-radius: var(--app-window-radius);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 1px var(--stage-ring);
 }
 /* Stage 模式全局隐藏滚动条（壁纸悬浮美学，滚动功能保留） */
 .stage-shell * {
@@ -1715,10 +1671,10 @@ button, a, input, textarea, select {
   gap: 2px;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   animation: expand-in 0.2s ease-out;
   z-index: 60;
@@ -1744,7 +1700,7 @@ button, a, input, textarea, select {
   transition: background 0.15s, color 0.15s;
 }
 .fab-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--stage-hover);
   color: var(--text-on-surface);
 }
 /* ===== 思考强度滑动变阻器：挂在 InputBar 根层级，与输入胶囊同一层级同一 blur 语境 ===== */
@@ -1759,10 +1715,10 @@ button, a, input, textarea, select {
   height: 30px;
   padding: 0 10px 0 0; /* fill 绝对定界，左内边距归零避免双重偏移 */
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   touch-action: none;
@@ -1827,9 +1783,9 @@ button, a, input, textarea, select {
   height: 32px;
   /* 内缩出环缝：照片与边框之间留一圈，缝里露的是按钮自己的毛玻璃底 */
   padding: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid var(--stage-border-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   cursor: pointer;
@@ -1846,8 +1802,8 @@ button, a, input, textarea, select {
   display: block;
 }
 .stage-avatar-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: var(--stage-glass-strong);
+  border-color: var(--stage-border-active);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
 }
 .stage-avatar-menu {
@@ -1860,10 +1816,10 @@ button, a, input, textarea, select {
   gap: 2px;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   animation: expand-in 0.2s ease-out;
   z-index: 60;
@@ -1943,7 +1899,7 @@ button, a, input, textarea, select {
   transition: background 0.15s;
 }
 .stage-project-pick:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--stage-hover);
 }
 .stage-project-icon {
   flex-shrink: 0;
@@ -2001,7 +1957,7 @@ button, a, input, textarea, select {
   transition: background 0.15s, color 0.15s;
 }
 .stage-project-new:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-hover-strong);
   color: var(--text-on-surface);
 }
 .stage-project-new > svg {
@@ -2029,9 +1985,9 @@ button, a, input, textarea, select {
   flex-direction: column;
   padding: 6px;
   border-radius: 12px;
-  /* 白色叠加底（不用 dynamic-island 的近黑底，压在 Stage 黑底上会黑上加黑），
-     比 ModelIsland 的 0.05 实一档，正文压得住又不至于板结 */
-  background: rgba(255, 255, 255, 0.1);
+  /* 白色叠加底（不用 dynamic-island 的近黑底，压在 Stage 纸面上更透一档），
+     比 ModelIsland 的 0.05 实一档，正文压得住又不至于板结；亮色主题玻璃自身翻白 */
+  background: var(--stage-glass-strong);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--dynamic-island-border);
@@ -2045,9 +2001,9 @@ button, a, input, textarea, select {
   flex-shrink: 0;
   margin-bottom: 5px;
   padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--stage-border-strong);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--stage-glass);
   color: var(--text-on-surface);
   font-family: inherit;
   font-size: 12px;
@@ -2080,7 +2036,7 @@ button, a, input, textarea, select {
   height: 1px;
   flex-shrink: 0;
   margin: 5px 2px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-border);
 }
 
 /* 下拉与面板共用的行样式（尺寸不同，靠各自的容器类覆盖） */
@@ -2102,7 +2058,7 @@ button, a, input, textarea, select {
 }
 .project-row:hover,
 .project-row.is-active {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--stage-hover-strong);
 }
 .project-row-name {
   flex: 0 1 auto;
@@ -2145,7 +2101,7 @@ button, a, input, textarea, select {
   overflow: hidden;
   border-radius: 14px;
   /* 与下拉同一套材质，只把投影放大一档配居中面板的体量 */
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--stage-glass-strong);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--dynamic-island-border);
@@ -2181,7 +2137,7 @@ button, a, input, textarea, select {
 .project-palette-sep {
   height: 1px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-border);
 }
 .project-palette-crumbs {
   display: flex;
@@ -2207,7 +2163,7 @@ button, a, input, textarea, select {
   transition: background 0.15s, color 0.15s;
 }
 .project-palette-back:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-hover-strong);
   color: var(--text-on-surface);
 }
 .project-palette-crumb-sep {
@@ -2215,7 +2171,7 @@ button, a, input, textarea, select {
   height: 18px;
   flex-shrink: 0;
   margin: 0 6px;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--stage-border-strong);
 }
 .project-palette-crumb {
   flex-shrink: 0;
@@ -2234,11 +2190,11 @@ button, a, input, textarea, select {
   transition: background 0.15s, color 0.15s;
 }
 .project-palette-crumb:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--stage-hover);
   color: var(--text-on-surface);
 }
 .project-palette-crumb.is-current {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--stage-glass-strong);
   color: var(--text-on-surface);
 }
 .project-palette-crumb-arrow {
@@ -2288,7 +2244,7 @@ button, a, input, textarea, select {
 }
 .project-palette-row:hover,
 .project-palette-row.is-active {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--stage-hover-strong);
 }
 .project-palette-row.is-action {
   color: var(--accent-primary);
@@ -2330,9 +2286,9 @@ button, a, input, textarea, select {
   min-width: 20px;
   height: 18px;
   padding: 0 5px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--stage-border-faint);
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-hover);
   font-size: 10.5px;
   color: var(--text-on-surface-variant);
 }
@@ -2363,10 +2319,10 @@ button, a, input, textarea, select {
   transition: background 0.15s;
 }
 .stage-session-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
 }
 .stage-session-item.is-active {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--stage-hover-strong);
 }
 .stage-session-head {
   display: flex;
@@ -2429,7 +2385,7 @@ button, a, input, textarea, select {
   transition: color 0.15s, background 0.15s;
 }
 .stage-session-act:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--stage-glass-strong);
   color: var(--text-on-surface);
 }
 .stage-session-act.is-danger:hover {
@@ -2548,7 +2504,7 @@ button, a, input, textarea, select {
 }
 .user-log-entry:hover .user-log-kinds { opacity: 0.85; }
 .user-log-entry.is-active .user-log-kinds { opacity: 0.9; }
-/* 行文本 */
+/* 行文本：白字压壁纸（亮色主题翻深字 + 深色光晕） */
 .user-log-text {
   user-select: none;
   max-width: 150px;
@@ -2562,9 +2518,12 @@ button, a, input, textarea, select {
   opacity: 0.55;
   transition: opacity 0.15s, color 0.2s;
 }
+[data-theme="light"] .user-log-text { color: #1a1a1a; }
 .user-log-entry.is-passed .user-log-text { opacity: 0.4; }
 .user-log-entry:hover .user-log-text { opacity: 0.9; color: #fff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.45); }
 .user-log-entry.is-active .user-log-text { opacity: 1; color: #fff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.55); }
+[data-theme="light"] .user-log-entry:hover .user-log-text { color: #1a1a1a; text-shadow: 0 0 8px rgba(255, 255, 255, 0.9); }
+[data-theme="light"] .user-log-entry.is-active .user-log-text { color: #1a1a1a; text-shadow: 0 0 8px rgba(255, 255, 255, 1); }
 @keyframes userLogEntryIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -2643,9 +2602,12 @@ button, a, input, textarea, select {
   line-height: 1.55;
   color: #b3b8c2;
 }
-/* stage 思考面板竖线：中性灰再降饱和（#6b7280 → 半透明淡灰），上下两端大范围渐隐 */
+[data-theme="light"] .think-spot-panel .think-trace-row-text {
+  color: #3a4149;
+}
+/* stage 思考面板竖线：中性灰再降饱和，上下两端大范围渐隐 */
 .think-spot-panel .think-trace-line {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--stage-border-strong);
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 28px, black calc(100% - 28px), transparent);
   mask-image: linear-gradient(to bottom, transparent, black 28px, black calc(100% - 28px), transparent);
 }
@@ -2702,7 +2664,7 @@ button, a, input, textarea, select {
   overflow-y: auto;
   /* 细滚动条：溢出可见（隐藏滚动条 + 无遮罩会让老图标"凭空消失"） */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--stage-scroll) transparent;
   pointer-events: auto;
   /* 上下渐隐提示还有更多图标 */
   mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
@@ -2712,7 +2674,7 @@ button, a, input, textarea, select {
   width: 3px;
 }
 .tool-spot-dock::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--stage-scroll);
   border-radius: 2px;
 }
 .tool-spot-icon {
@@ -2724,11 +2686,11 @@ button, a, input, textarea, select {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  /* 毛玻璃同款（InputBar 添加文件按钮 .glass-dock）：浅白底 + 轻 blur + 细白边 */
-  background: rgba(255, 255, 255, 0.05);
+  /* 毛玻璃同款（InputBar 添加文件按钮 .glass-dock）：浅玻璃底 + 轻 blur + 细边 */
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   color: var(--text-on-surface-variant);
   transition: color 0.15s, background-color 0.15s, border-color 0.15s;
 }
@@ -2737,21 +2699,21 @@ button.tool-spot-icon {
 }
 button.tool-spot-icon:hover {
   color: var(--text-on-surface);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--stage-glass-strong);
 }
 /* 胶囊总图标：毛玻璃圆底（同 glass-dock 语言），位置相对挂数量角标 */
 .tool-spot-all {
   position: relative;
   pointer-events: auto;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   color: #17abe3;
 }
 button.tool-spot-all:hover {
   color: #17abe3;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--stage-glass-strong);
   filter: none;
 }
 .tool-spot-all[data-status="error"] {
@@ -2774,6 +2736,9 @@ button.tool-spot-all:hover {
   padding: 0 4px;
   pointer-events: none;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+[data-theme="light"] .tool-spot-count {
+  background: rgba(255, 255, 255, 0.9);
 }
 .tool-spot-dock .tool-spot-icon[data-status="running"] {
   color: var(--tool-spot-running, #60a5fa);
@@ -3816,10 +3781,10 @@ pre.hljs {
   width: 320px;
   pointer-events: auto;
   /* glass-dock 同款毛玻璃 */
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--stage-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stage-border);
   border-radius: 16px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48), 0 2px 10px rgba(0, 0, 0, 0.22);
   animation: stage-drawer-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;

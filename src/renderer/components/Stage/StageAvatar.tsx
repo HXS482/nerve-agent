@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import { useChatStore } from '../../stores/chatStore'
 
 interface Props {
   onOpenSettings: () => void
 }
 
-// Stage 顶栏账号头像：点击弹二级菜单（账号 / 设置）
+// Stage 顶栏账号头像：点击弹二级菜单（账号 / 主题切换 / 设置）
 // 关闭走 document mousedown 而不是全屏遮罩：顶栏是 z-30 层，遮罩被压在里面，
 // 点会话 FAB（z-55）、时间轴（z-35）这些更上面的层就关不掉菜单
 export function StageAvatar({ onOpenSettings }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const theme = useChatStore((s) => s.theme)
+  const setTheme = useChatStore((s) => s.setTheme)
+  const isLight = theme === 'light'
 
   useEffect(() => {
     if (!open) return
@@ -31,6 +35,25 @@ export function StageAvatar({ onOpenSettings }: Props) {
               <path d="M4 21v-1a7 7 0 0114 0v1" />
             </svg>
             账号
+          </button>
+          {/* 主题切换：dark ↔ light 二态循环 */}
+          <button
+            className="fab-menu-item"
+            onClick={() => setTheme(isLight ? 'dark' : 'light')}
+          >
+            {isLight ? (
+              // 太阳（当前 light，点击去 dark）
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
+            ) : (
+              // 月亮（当前 dark/其他，点击去 light）
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+              </svg>
+            )}
+            主题：{isLight ? 'Light' : 'Dark'}
           </button>
           <button className="fab-menu-item" onClick={() => { setOpen(false); onOpenSettings() }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

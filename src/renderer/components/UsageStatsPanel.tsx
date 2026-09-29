@@ -255,21 +255,15 @@ function HeatmapCard({
   ]
   const uid = useId()
 
-  const CARD_GLASS: React.CSSProperties = theme === 'aurora'
-    ? { border: '1px solid var(--glass-border)' }
-    : {
-        background: isLight ? 'rgba(255, 255, 255, 0.6)' : 'rgba(30, 30, 32, 0.6)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: isLight ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)',
-      }
+  const CARD_GLASS: React.CSSProperties = {
+    background: isLight ? 'rgba(255, 255, 255, 0.6)' : 'rgba(30, 30, 32, 0.6)',
+    backdropFilter: 'blur(20px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+    border: isLight ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)',
+  }
 
-  const PANEL_BG: React.CSSProperties = theme === 'aurora'
-    ? { background: 'rgba(20, 15, 40, 0.5)' }
-    : { background: isLight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(30, 30, 32, 0.92)' }
-  const PANEL_BORDER: React.CSSProperties = theme === 'aurora'
-    ? { border: '1px solid var(--glass-border)' }
-    : { border: isLight ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)' }
+  const PANEL_BG: React.CSSProperties = { background: isLight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(30, 30, 32, 0.92)' }
+  const PANEL_BORDER: React.CSSProperties = { border: isLight ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)' }
 
   const kick = reduceMotion ? {} : { x: ROW_OFFSET, y: ROW_OFFSET }
   const rowMotion = {
@@ -288,7 +282,7 @@ function HeatmapCard({
 
   return (
     <div
-      className={`rounded-[10px] relative overflow-hidden ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+      className="rounded-[10px] relative overflow-hidden"
       style={CARD_GLASS}
     >
       {/* Grid area */}

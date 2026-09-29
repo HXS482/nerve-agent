@@ -16,7 +16,6 @@ import { ApprovalBar } from './components/ApprovalBar'
 import { SelectionActions } from './components/SelectionActions'
 import { AskUserCard } from './components/AskUserCard'
 import { ResizeBorder } from './components/ResizeBorder'
-import Grainient from './components/Grainient'
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 export default function App() {
@@ -79,51 +78,17 @@ export default function App() {
         borderRadius: 'var(--app-window-radius)',
         clipPath: 'inset(0 round var(--app-window-radius))',
         border: viewMode === 'stage'
-          ? '1.5px solid rgba(255, 255, 255, 0.10)'
+          ? '1.5px solid var(--stage-window-border)'
           : '1.5px solid var(--border-default)',
       }}
     >
-      {/* Aurora theme background */}
-      {theme === 'aurora' && (
-        <div className="fixed inset-0 z-0">
-          <Grainient
-            color1="#FF9FFC"
-            color2="#5227FF"
-            color3="#B497CF"
-            timeSpeed={0.85}
-            colorBalance={0}
-            warpStrength={1}
-            warpFrequency={5}
-            warpSpeed={2}
-            warpAmplitude={50}
-            blendAngle={0}
-            blendSoftness={0.05}
-            rotationAmount={500}
-            noiseScale={2}
-            grainAmount={0.1}
-            grainScale={2}
-            grainAnimated={false}
-            contrast={1.5}
-            gamma={1}
-            saturation={1}
-            centerX={0}
-            centerY={0}
-            zoom={0.9}
-          />
-        </div>
-      )}
-
-      {/* Stage 模式：整屏独立界面 */}
+      {/* Stage 模式：整屏独立界面。外框底图只在设了自定义壁纸时渲染
+          （视频/HTML 用纯色底，图片贴原图）；无壁纸时露出 .stage-bg 的纯纸面 */}
       {viewMode === 'stage' && (
         <>
-          {/* 外框底图（铺满窗口）+ 边缘毛玻璃环（会话按钮同款 backdrop blur）。
-              视频背景时底图用纯色：环的 blur 采样 shell 边缘的视频像素即可，避免双份视频解码卡顿 */}
-          {/* 外框底图（铺满窗口）+ 边缘毛玻璃环（会话按钮同款 backdrop blur）。
-              视频背景时底图用纯色：环的 blur 采样 shell 边缘的视频像素即可，避免双份视频解码卡顿。
-              HTML 背景同策略：只在 StageShell 内渲染一次 iframe，外框用纯色。 */}
           <div
             className="stage-frame-bg"
-            style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: '#0a0a0a' } : { backgroundImage: `url("${stageBg}")` }) : stageBg && isHtmlBg(stageBg) ? { background: '#0a0a0a' } : undefined}
+            style={stageBg && !isHtmlBg(stageBg) ? (isVideoBg(stageBg) ? { background: 'var(--stage-frame)' } : { backgroundImage: `url("${stageBg}")` }) : stageBg && isHtmlBg(stageBg) ? { background: 'var(--stage-frame)' } : { display: 'none' }}
           />
           <StageShell claude={claude} onOpenSettings={() => setSettingsOpen(true)} />
           <div className="stage-frame-frost" />
@@ -199,13 +164,12 @@ export default function App() {
 
           {/* Right: toggle sidebar + settings + cmd */}
           <div
-            className={`flex items-center gap-1.5 shrink-0 ${theme === 'aurora' ? 'dynamic-island' : 'bg-[var(--bg-surface-container)]'} border ${theme === 'aurora' ? 'border-[var(--glass-border)]' : 'border-[var(--border-default)]'}`}
+            className="flex items-center gap-1.5 shrink-0 bg-[var(--bg-surface-container)] border border-[var(--border-default)]"
             style={{
               padding: '3px 8px',
               borderRadius: 9,
               height: 24,
               WebkitAppRegion: 'no-drag',
-              boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
             } as React.CSSProperties}
           >
             <button

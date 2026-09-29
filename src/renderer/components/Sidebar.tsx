@@ -118,26 +118,20 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
 
         {/* Search Bar */}
         <div
-          className={`flex items-center gap-2 rounded-lg cursor-pointer transition-all duration-300 group ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+          className="flex items-center gap-2 rounded-lg cursor-pointer transition-all duration-300 group"
           style={{
             margin: '24px 8px 0 8px',
             padding: '7px 10px',
-            ...(theme === 'aurora'
-              ? { border: '1px solid var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }
-              : { background: 'var(--bg-surface-container-high)', border: '1px solid rgba(173, 198, 255, 0.1)' }
-            ),
+            background: 'var(--bg-surface-container-high)',
+            border: '1px solid rgba(173, 198, 255, 0.1)',
           }}
           onMouseEnter={(e) => {
-            if (theme !== 'aurora') {
-              e.currentTarget.style.borderColor = 'rgba(173, 198, 255, 0.25)'
-              e.currentTarget.style.background = 'var(--bg-surface-container-highest)'
-            }
+            e.currentTarget.style.borderColor = 'rgba(173, 198, 255, 0.25)'
+            e.currentTarget.style.background = 'var(--bg-surface-container-highest)'
           }}
           onMouseLeave={(e) => {
-            if (theme !== 'aurora') {
-              e.currentTarget.style.borderColor = 'rgba(173, 198, 255, 0.1)'
-              e.currentTarget.style.background = 'var(--bg-surface-container-high)'
-            }
+            e.currentTarget.style.borderColor = 'rgba(173, 198, 255, 0.1)'
+            e.currentTarget.style.background = 'var(--bg-surface-container-high)'
           }}
         >
           <svg className="w-4 h-4 text-[var(--accent-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

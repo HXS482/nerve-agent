@@ -558,22 +558,17 @@ export function RightSidebar() {
             }}
           >
             <nav
-              className={`inline-flex items-center gap-1 p-1 ${theme === 'aurora' ? 'dynamic-island' : ''}`}
+              className="inline-flex items-center gap-1 p-1"
               style={{
                 borderRadius: 10,
-                background: theme === 'aurora'
-                  ? undefined
-                  : isDark
-                    ? 'rgba(30, 30, 32, 0.6)'
-                    : 'rgba(255, 255, 255, 0.6)',
-                backdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                WebkitBackdropFilter: theme === 'aurora' ? undefined : 'blur(20px) saturate(180%)',
-                border: theme === 'aurora'
-                  ? '1px solid var(--glass-border)'
-                  : isDark
-                    ? '1px solid rgba(255,255,255,0.08)'
-                    : '1px solid rgba(0,0,0,0.06)',
-                boxShadow: theme === 'aurora' ? '0 20px 50px rgba(0,0,0,0.5)' : undefined,
+                background: isDark
+                  ? 'rgba(30, 30, 32, 0.6)'
+                  : 'rgba(255, 255, 255, 0.6)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: isDark
+                  ? '1px solid rgba(255,255,255,0.08)'
+                  : '1px solid rgba(0,0,0,0.06)',
               }}
             >
               {VIEWS.map((v) => (
