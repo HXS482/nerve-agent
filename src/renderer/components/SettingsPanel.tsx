@@ -1398,99 +1398,71 @@ function McpTab() {
   return (
     <div>
       <Section title="Servers" hint="Status is polled live; the Gateway reloads a few seconds after you save.">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {entries.map(([name, cfg]) => {
-            const status = MCP_STATUS_META[statusMap[name]?.status ?? 'connecting']
-            return (
-              <div
-                key={name}
-                style={{
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden',
-                  background: 'var(--bg-surface-container-high)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              >
-                {/* Server row */}
-                <div
-                  className="flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 10, padding: '9px 12px' }}
-                  onClick={() => setExpanded(expanded === name ? null : name)}
-                >
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
-                    {name}
-                  </span>
-                  <span className="truncate" style={{ fontSize: 11, color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', maxWidth: 220 }}>
-                    {cfg.url || cfg.command}
-                  </span>
-                  <span style={{ fontSize: 11, color: status.color, flexShrink: 0, minWidth: 66, textAlign: 'right' }}>
-                    {status.label}
-                  </span>
-                  <span onClick={(e) => e.stopPropagation()}>
-                    <IconButton onClick={() => handleDelete(name)} label={`Remove ${name}`} danger>
-                      <X size={13} strokeWidth={1.5} />
-                    </IconButton>
-                  </span>
-                </div>
-
-                {/* Expanded details */}
-                {expanded === name && (
-                  <div
-                    style={{
-                      padding: '10px 12px',
-                      borderTop: '1px solid var(--border-subtle)',
-                      fontSize: 12,
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-on-surface-variant)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 3,
-                    }}
-                  >
-                    <div><span style={{ color: 'var(--text-outline)' }}>type</span> {cfg.type}</div>
-                    {cfg.url
-                      ? <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>url</span> {cfg.url}</div>
-                      : <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>command</span> {cfg.command}</div>}
-                    {statusMap[name]?.status === 'connected' && (
-                      <div><span style={{ color: 'var(--text-outline)' }}>tools</span> {statusMap[name].toolCount}</div>
-                    )}
-                    {statusMap[name]?.status === 'failed' && (
-                      <div style={{ color: 'var(--text-danger)', wordBreak: 'break-all' }}>
-                        <span style={{ color: 'var(--text-outline)' }}>error</span> {statusMap[name].error}
-                      </div>
-                    )}
-                    {/* env / headers 都是键值对，凭证打码后展示 */}
-                    {([['env', cfg.env], ['headers', cfg.headers]] as const).map(([label, map]) =>
-                      map && Object.keys(map).length > 0 ? (
-                        <div key={label}>
-                          <span style={{ color: 'var(--text-outline)' }}>{label}</span>
-                          {Object.entries(map).map(([k, v]) => (
-                            <div key={k} style={{ paddingLeft: 12 }}>
-                              {k} = {isSecretKey(k) ? '***' : v}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null,
-                    )}
-                  </div>
-                )}
+        {entries.map(([name, cfg]) => {
+          const status = MCP_STATUS_META[statusMap[name]?.status ?? 'connecting']
+          return (
+            <div key={name}>
+              <div className="settings-list-row" onClick={() => setExpanded(expanded === name ? null : name)}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)', flex: 1 }}>
+                  {name}
+                </span>
+                <span className="truncate" style={{ fontSize: 11, color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', maxWidth: 220 }}>
+                  {cfg.url || cfg.command}
+                </span>
+                <span style={{ fontSize: 11, color: status.color, flexShrink: 0, minWidth: 66, textAlign: 'right' }}>
+                  {status.label}
+                </span>
+                <span onClick={(e) => e.stopPropagation()}>
+                  <IconButton onClick={() => handleDelete(name)} label={`Remove ${name}`} danger>
+                    <X size={13} strokeWidth={1.5} />
+                  </IconButton>
+                </span>
               </div>
-            )
-          })}
-
-          {entries.length === 0 && (
-            <div style={{ fontSize: 12, padding: '6px 0', color: 'var(--text-outline)' }}>
-              None configured.
+              {expanded === name && (
+                <div className="settings-list-expand" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-on-surface-variant)' }}>
+                  <div><span style={{ color: 'var(--text-outline)' }}>type</span> {cfg.type}</div>
+                  {cfg.url
+                    ? <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>url</span> {cfg.url}</div>
+                    : <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--text-outline)' }}>command</span> {cfg.command}</div>}
+                  {statusMap[name]?.status === 'connected' && (
+                    <div><span style={{ color: 'var(--text-outline)' }}>tools</span> {statusMap[name].toolCount}</div>
+                  )}
+                  {statusMap[name]?.status === 'failed' && (
+                    <div style={{ color: 'var(--text-danger)', wordBreak: 'break-all' }}>
+                      <span style={{ color: 'var(--text-outline)' }}>error</span> {statusMap[name].error}
+                    </div>
+                  )}
+                  {/* env / headers 都是键值对，凭证打码后展示 */}
+                  {([['env', cfg.env], ['headers', cfg.headers]] as const).map(([label, map]) =>
+                    map && Object.keys(map).length > 0 ? (
+                      <div key={label}>
+                        <span style={{ color: 'var(--text-outline)' }}>{label}</span>
+                        {Object.entries(map).map(([k, v]) => (
+                          <div key={k} style={{ paddingLeft: 12 }}>
+                            {k} = {isSecretKey(k) ? '***' : v}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null,
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          )
+        })}
+
+        {entries.length === 0 && (
+          <div className="settings-card-pad" style={{ fontSize: 13, color: 'var(--text-outline)' }}>
+            None configured.
+          </div>
+        )}
       </Section>
 
       {/* Add form */}
       {adding ? (
         <Section title="New server">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 460 }}>
-            <Row label="Name">
+            <Row label="Name" stack>
               <TextInput value={newName} onChange={setNewName} placeholder="filesystem" />
             </Row>
             <Row label="Transport" hint="stdio starts a local process; HTTP connects to a remote endpoint.">
@@ -1503,31 +1475,31 @@ function McpTab() {
             </Row>
             {newMode === 'remote' ? (
               <>
-                <Row label="URL">
+                <Row label="URL" stack>
                   <TextInput value={newUrl} onChange={setNewUrl} placeholder="https://example.com/mcp" mono />
                 </Row>
-                <Row label="Headers" hint="KEY=VALUE, one per line.">
+                <Row label="Headers" hint="KEY=VALUE, one per line." stack>
                   <MultilineInput value={newHeaders} onChange={setNewHeaders} placeholder="Authorization=Bearer …" />
                 </Row>
               </>
             ) : (
               <>
-                <Row label="Command">
+                <Row label="Command" stack>
                   <TextInput value={newCommand} onChange={setNewCommand} placeholder="npx obsidian-mcp-server" mono />
                 </Row>
-                <Row label="Environment" hint="KEY=VALUE, one per line.">
+                <Row label="Environment" hint="KEY=VALUE, one per line." stack>
                   <MultilineInput value={newEnv} onChange={setNewEnv} placeholder="API_KEY=…" />
                 </Row>
               </>
             )}
-            <div className="flex items-center" style={{ gap: 8, paddingTop: 4 }}>
+            <div className="settings-card-pad flex items-center" style={{ gap: 8 }}>
               <PrimaryButton onClick={handleAdd}>Add</PrimaryButton>
               <SecondaryButton onClick={() => setAdding(false)}>Cancel</SecondaryButton>
             </div>
           </div>
         </Section>
       ) : (
-        <div style={{ paddingTop: 4 }}>
+        <div className="settings-reveal">
           <SecondaryButton onClick={() => setAdding(true)}>
             <span className="flex items-center" style={{ gap: 6 }}>
               <Plus size={13} strokeWidth={1.5} />
@@ -1538,7 +1510,9 @@ function McpTab() {
       )}
 
       <Section title="Save">
-        <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save and reload'}</PrimaryButton>
+        <div className="settings-card-pad">
+          <PrimaryButton onClick={handleSave}>{saved ? 'Saved' : 'Save and reload'}</PrimaryButton>
+        </div>
       </Section>
     </div>
   )
