@@ -46,6 +46,11 @@ interface ChatState {
   /** Stage 自定义壁纸（data URL，canvas 压缩后持久化）；null = 默认壁纸 */
   stageBg: string | null
 
+  /** 账号昵称（Stage 头像胶囊/账号面板显示）；空 = 显示 Admin */
+  profileName: string
+  /** 账号头像（data URL，canvas 压缩 128px 后持久化）；null = 默认 avatar.jpg */
+  profileAvatar: string | null
+
   /** 会话内容宽度上限（px）：消息正文与底部输入栏共享同一个上限；0 = 不限制，跟随窗口 */
   conversationWidth: number
 
@@ -109,6 +114,10 @@ interface ChatState {
   setTheme: (theme: Theme) => void
   /** 设置/清除 Stage 自定义壁纸（data URL | null） */
   setStageBg: (bg: string | null) => void
+  /** 账号昵称（空 = 显示默认 Admin） */
+  setProfileName: (name: string) => void
+  /** 账号头像（data URL | null，null = 默认图） */
+  setProfileAvatar: (avatar: string | null) => void
   /** 设置会话内容宽度上限（px，0 = 不限制） */
   setConversationWidth: (width: number) => void
 
@@ -168,6 +177,8 @@ export const useChatStore = create<ChatState>()(
       // Theme state
       theme: 'dark',
       stageBg: null,
+      profileName: '',
+      profileAvatar: null,
       conversationWidth: 0,
 
       // Sessions state
@@ -251,6 +262,8 @@ export const useChatStore = create<ChatState>()(
         set({ theme: next })
       },
       setStageBg: (bg) => set({ stageBg: bg }),
+      setProfileName: (name) => set({ profileName: name }),
+      setProfileAvatar: (avatar) => set({ profileAvatar: avatar }),
       setConversationWidth: (width) =>
         set({ conversationWidth: Math.min(CONVERSATION_WIDTH_MAX, Math.max(0, Math.round(width))) }),
 
@@ -332,6 +345,8 @@ export const useChatStore = create<ChatState>()(
       partialize: (state) => ({
         theme: state.theme,
         stageBg: state.stageBg,
+        profileName: state.profileName,
+        profileAvatar: state.profileAvatar,
         conversationWidth: state.conversationWidth,
         sessions: state.sessions,
         sessionModes: state.sessionModes,

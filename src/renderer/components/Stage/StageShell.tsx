@@ -6,6 +6,7 @@ import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
 import { SidebarToggleIcon } from '../SidebarToggleIcon'
 import { StageAvatar } from './StageAvatar'
+import { AccountPanel } from './AccountPanel'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
 import { ThinkSpot } from './ThinkSpot'
 import { ToolSpot } from './ToolSpot'
@@ -23,6 +24,7 @@ interface Props {
 export function StageShell({ claude, onOpenSettings }: Props) {
   const setViewMode = useStageStore((s) => s.setViewMode)
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
   const stageBg = useChatStore((s) => s.stageBg)
 
   // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
@@ -72,7 +74,7 @@ export function StageShell({ claude, onOpenSettings }: Props) {
         </div>
 
         <div className="stage-topbar-right" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <StageAvatar onOpenSettings={onOpenSettings} />
+          <StageAvatar onOpenSettings={onOpenSettings} onOpenAccount={() => setAccountOpen(true)} />
         </div>
       </div>
 
@@ -140,6 +142,9 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
       {/* 选中文字的上下文 AI 操作条（stage：旁白/卡片文字划选） */}
       <SelectionActions onAction={claude.send} />
+
+      {/* 账号面板：头像菜单「账号」入口的独立毛玻璃浮层 */}
+      {accountOpen && <AccountPanel onClose={() => setAccountOpen(false)} />}
     </div>
   )
 }

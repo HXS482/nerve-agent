@@ -1806,6 +1806,33 @@ button, a, input, textarea, select {
   border-color: var(--stage-border-active);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
 }
+/* 悬浮名字胶囊：hover 时从头像下方浮现（缩放 + 上浮 + 渐现）。
+   挂在按钮内、定位到按钮下方，随按钮 hover 联动触发 */
+.stage-avatar-name {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--stage-glass-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--stage-border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-on-surface);
+  opacity: 0;
+  transform: translateY(-4px) scale(0.92);
+  transform-origin: top right;
+  transition: opacity 0.18s ease-out, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.stage-avatar-btn:hover .stage-avatar-name {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
 .stage-avatar-menu {
   position: absolute;
   top: calc(100% + 8px);
@@ -3764,6 +3791,182 @@ pre.hljs {
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+/* ── 账号面板（Stage 头像菜单「账号」入口）：独立高斯模糊浮层 ──
+   全屏覆盖层挂 App 根层级（不嵌顶栏/设置），mask 接管外点关闭；
+   面板本体走 AskUser 卡同款玻璃（--stage-glass + blur 12px） */
+.account-panel-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.account-panel-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fade-in-simple 0.15s ease-out;
+}
+.account-panel {
+  pointer-events: auto;
+  position: relative;
+  width: min(320px, calc(100vw - 48px));
+  border-radius: 16px;
+  background: var(--stage-glass);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--stage-border);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48), 0 2px 10px rgba(0, 0, 0, 0.22);
+  padding: 18px 18px 14px;
+}
+/* 头部：56px 大头像 + 昵称/落款 + 右上关闭 */
+.account-avatar-btn {
+  width: 56px;
+  height: 56px;
+  padding: 2px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid var(--stage-border-strong);
+  background: var(--stage-glass);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+.account-avatar-btn:hover {
+  border-color: var(--stage-border-active);
+  background: var(--stage-glass-strong);
+}
+.account-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+  display: block;
+}
+.account-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-on-surface-variant);
+  background: var(--stage-glass-strong);
+}
+.account-panel .account-id {
+  position: absolute;
+  top: 20px;
+  left: 88px;
+  right: 44px;
+  min-width: 0;
+}
+.account-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-outline-variant);
+}
+.account-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  min-width: 0;
+  padding: 0;
+  justify-content: center;
+  border-radius: 7px;
+}
+/* 表单区 */
+.account-form {
+  margin-top: 16px;
+}
+.account-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-outline-variant);
+  margin-bottom: 6px;
+}
+.account-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--stage-border);
+  background: var(--stage-glass);
+  color: var(--text-on-surface);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  caret-color: var(--accent-primary);
+  transition: border-color 0.15s;
+}
+.account-input:focus {
+  border-color: var(--stage-border-strong);
+}
+.account-input::placeholder {
+  color: var(--text-outline-variant);
+}
+.account-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 8px;
+}
+.account-btn {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  font-size: 12px;
+}
+/* 底部操作条 */
+.account-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stage-border-faint);
+}
+.account-save {
+  padding: 6px 18px;
+  border: none;
+  border-radius: 9px;
+  background: var(--accent-primary);
+  color: var(--accent-on-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.account-save:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.account-save:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.account-save:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* ── AskUser 问答卡片（agent 结构化提问） ── */

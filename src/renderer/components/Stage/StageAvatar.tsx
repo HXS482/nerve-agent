@@ -3,17 +3,22 @@ import { useChatStore } from '../../stores/chatStore'
 
 interface Props {
   onOpenSettings: () => void
+  onOpenAccount: () => void
 }
 
 // Stage 顶栏账号头像：点击弹二级菜单（账号 / 主题切换 / 设置）
 // 关闭走 document mousedown 而不是全屏遮罩：顶栏是 z-30 层，遮罩被压在里面，
 // 点会话 FAB（z-55）、时间轴（z-35）这些更上面的层就关不掉菜单
-export function StageAvatar({ onOpenSettings }: Props) {
+export function StageAvatar({ onOpenSettings, onOpenAccount }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const theme = useChatStore((s) => s.theme)
   const setTheme = useChatStore((s) => s.setTheme)
+  const profileName = useChatStore((s) => s.profileName)
+  const profileAvatar = useChatStore((s) => s.profileAvatar)
   const isLight = theme === 'light'
+  // 胶囊文案：未设昵称时回退 Admin；头像未设时回退内置默认图
+  const displayName = profileName.trim() || 'Admin'
 
   useEffect(() => {
     if (!open) return
@@ -28,8 +33,8 @@ export function StageAvatar({ onOpenSettings }: Props) {
     <div className="stage-avatar-root" ref={ref}>
       {open && (
         <div className="stage-avatar-menu">
-          {/* 账号体系还没接，点了只收起菜单 */}
-          <button className="fab-menu-item" onClick={() => setOpen(false)}>
+          {/* 账号面板：独立毛玻璃浮层（AccountPanel，挂 StageShell 根层级） */}
+          <button className="fab-menu-item" onClick={() => { setOpen(false); onOpenAccount() }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="8" r="4" />
               <path d="M4 21v-1a7 7 0 0114 0v1" />
@@ -67,9 +72,16 @@ export function StageAvatar({ onOpenSettings }: Props) {
       <button
         className="stage-avatar-btn"
         onClick={() => setOpen((v) => !v)}
-        title="账号"
+        aria-label="账号"
       >
-        <img src="/assets/avatar.jpg" alt="账号" className="stage-avatar-img" draggable={false} />
+        <img
+          src={profileAvatar || '/assets/avatar.jpg'}
+          alt={displayName}
+          className="stage-avatar-img"
+          draggable={false}
+        />
+        {/* 悬浮名字胶囊：hover 从头像下方浮现（账号体系未接，昵称在设置面板配置） */}
+        <span className="stage-avatar-name" aria-hidden>{displayName}</span>
       </button>
     </div>
   )
