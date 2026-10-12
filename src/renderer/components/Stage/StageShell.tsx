@@ -7,6 +7,7 @@ import { StageSessions } from './StageSessions'
 import { SidebarToggleIcon } from '../SidebarToggleIcon'
 import { StageAvatar } from './StageAvatar'
 import { GrokBot } from '../GrokBot/GrokBot'
+import { useBotStatus } from '../../hooks/useBotStatus'
 import { AccountPanel } from './AccountPanel'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
 import { ThinkSpot } from './ThinkSpot'
@@ -28,6 +29,9 @@ export function StageShell({ claude, onOpenSettings }: Props) {
   const [accountOpen, setAccountOpen] = useState(false)
   const stageBg = useChatStore((s) => s.stageBg)
   const isLight = useChatStore((s) => s.theme) === 'light'
+  // 小球跟着本轮任务状态走：转环=真在干活，脉动=等模型，眨眼=刚收尾，红点=挂了
+  const stageSessionId = useStageStore((s) => s.stageSessionId)
+  const botStatus = useBotStatus(stageSessionId)
 
   // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
   useEffect(() => {
@@ -82,14 +86,14 @@ export function StageShell({ claude, onOpenSettings }: Props) {
 
         {/* 居中 Grok Bot 头像：点击返回 chat 模式（挂在 stage-shell 上，不进拖拽区） */}
         <button
-          className="task-spinner-wrap task-orb-btn"
+          className="bot-switch-btn"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           onClick={() => setViewMode('chat')}
           title="返回聊天模式"
         >
           <GrokBot
             size={44}
-            status="idle"
+            status={botStatus}
             color={isLight ? '#0a0a0c' : '#f1efe9'}
             paper={isLight ? '#eef1f6' : '#0a0a0a'}
           />

@@ -454,6 +454,8 @@ export function useClaude() {
       clearWatchdog()
       flushPendingText()
       useSubagentTracker.getState().completeAll()
+      // 标记这一轮是"挂了"而不是"跑完"：Grok Bot 的收尾判据（done vs error）靠它区分
+      useChatStore.getState().noteRunError()
       addMessage({
         id: `err-${Date.now()}`,
         role: 'system',
@@ -735,6 +737,7 @@ export function useClaude() {
           content: [{ type: 'text', text: '主进程心跳中断，本轮已按卡死处理并取消。' }],
           timestamp: Date.now(),
         })
+        useChatStore.getState().noteRunError()
         demoteInProgressTodos(pendingWorkspace.current)
         setLoading(false)
       }, HEARTBEAT_CHECK_MS)
@@ -745,6 +748,7 @@ export function useClaude() {
       } catch (err: unknown) {
         clearWatchdog()
         const msg = err instanceof Error ? err.message : 'Failed to send message'
+        useChatStore.getState().noteRunError()
         addMessage({
           id: `err-${Date.now()}`,
           role: 'system',

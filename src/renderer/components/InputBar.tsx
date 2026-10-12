@@ -66,7 +66,6 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const [effortMenuOpen, setEffortMenuOpen] = useState(false)
   const effortRootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const setOrbState = useChatStore((s) => s.setOrbState)
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
@@ -108,19 +107,6 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
     setHasVoice(true)
     setInput((prev) => (prev ? prev + ' ' + text : text))
   })
-
-  // Sync orb state with loading
-  useEffect(() => {
-    if (isLoading) {
-      setOrbState('thinking')
-      const timer = setTimeout(() => {
-        setOrbState('morphing')
-      }, 10000)
-      return () => clearTimeout(timer)
-    } else {
-      setOrbState('idle')
-    }
-  }, [isLoading, setOrbState])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -223,7 +209,6 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
     if (!input.trim() || isLoading) return
     if (voice.isRecording) voice.stop()
     const prompt = hasVoice ? `[语音指令] ${input.trim()}` : input.trim()
-    setOrbState('active')
     onSend(prompt, attachments.length > 0 ? attachments : undefined)
     setInput('')
     setHasVoice(false)

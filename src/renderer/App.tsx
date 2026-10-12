@@ -14,6 +14,8 @@ import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import { ApprovalBar } from './components/ApprovalBar'
 import { SelectionActions } from './components/SelectionActions'
+import { GrokBot } from './components/GrokBot/GrokBot'
+import { useBotStatus } from './hooks/useBotStatus'
 import { AskUserCard } from './components/AskUserCard'
 import { ResizeBorder } from './components/ResizeBorder'
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -35,6 +37,9 @@ export default function App() {
   const toggleRightSidebar = useChatStore((s) => s.toggleRightSidebar)
   const theme = useChatStore((s) => s.theme)
   const stageBg = useChatStore((s) => s.stageBg)
+  const currentSessionId = useChatStore((s) => s.currentSessionId)
+  // 小球跟着本轮任务状态走（与 Stage 同一套派生：转环/脉动/眨眼/红点）
+  const botStatus = useBotStatus(currentSessionId)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const resizing = useRef(false)
@@ -195,29 +200,19 @@ export default function App() {
           </div>
         </div>
 
-        {/* 光亮小球：点击进入 Stage 模式（独立于拖拽顶栏，直接挂在 main 上） */}
+        {/* Grok Bot 头像：点击进入 Stage 模式（与 Stage 里返回 chat 的那只是同一只） */}
         <button
-          className="task-spinner-wrap task-orb-btn"
+          className="bot-switch-btn"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           onClick={() => setViewMode('stage')}
           title="进入产物空间"
         >
-          <div className="task-loader">
-            <svg width={100} height={100} viewBox="0 0 100 100">
-              <defs>
-                <mask id="tl-clipping">
-                  <polygon points="0,0 100,0 100,100 0,100" fill="black" />
-                  <polygon points="25,25 75,25 50,75" fill="white" />
-                  <polygon points="50,25 75,75 25,75" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                </mask>
-              </defs>
-            </svg>
-            <div className="task-loader-box" />
-          </div>
+          <GrokBot
+            size={44}
+            status={botStatus}
+            color={theme === 'light' ? '#0a0a0c' : '#f1efe9'}
+            paper={theme === 'light' ? '#eef1f6' : '#0a0a0a'}
+          />
         </button>
 
         {/* Chat area */}

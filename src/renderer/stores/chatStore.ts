@@ -35,6 +35,8 @@ interface ChatState {
   // Chat
   messages: ChatMessage[]
   isLoading: boolean
+  /** 最近一次运行期错误的时间戳（0 = 还没出过错）。Grok Bot 靠它闪红点，错误收尾不等于跑完 */
+  lastRunErrorAt: number
   currentSessionId: string | null
   config: ClaudeConfig
   sidebarOpen: boolean
@@ -77,10 +79,6 @@ interface ChatState {
   petColorScheme: string
   petSkinId: string
 
-  // Orb state
-  orbState: 'idle' | 'active' | 'thinking' | 'morphing'
-  orbMorphTimer: number | null
-
   // Right sidebar
   rightSidebarOpen: boolean
   rightSidebarWidth: number
@@ -102,6 +100,7 @@ interface ChatState {
   addMessage: (msg: ChatMessage) => void
   updateLastMessage: (updater: (msg: ChatMessage) => ChatMessage, sessionId?: string) => void
   setLoading: (loading: boolean) => void
+  noteRunError: (at?: number) => void
   setSessionId: (id: string | null) => void
   setConfig: (config: Partial<ClaudeConfig>) => void
   setSidebarOpen: (open: boolean) => void
@@ -143,9 +142,6 @@ interface ChatState {
   setPetColorScheme: (scheme: string) => void
   setPetSkinId: (id: string) => void
 
-  // Orb actions
-  setOrbState: (state: 'idle' | 'active' | 'thinking' | 'morphing') => void
-
   // Right sidebar actions
   setRightSidebarOpen: (open: boolean) => void
   setRightSidebarWidth: (width: number) => void
@@ -164,6 +160,7 @@ export const useChatStore = create<ChatState>()(
       // Chat state
       messages: [],
       isLoading: false,
+      lastRunErrorAt: 0,
       currentSessionId: null,
       config: {
         model: 'sonnet',
@@ -202,10 +199,6 @@ export const useChatStore = create<ChatState>()(
       petColorScheme: 'purple',
       petSkinId: 'default',
 
-      // Orb state
-      orbState: 'idle',
-      orbMorphTimer: null,
-
       // Right sidebar
       rightSidebarOpen: false,
       rightSidebarWidth: 280,
@@ -242,6 +235,7 @@ export const useChatStore = create<ChatState>()(
           return { messages: msgs }
         }),
       setLoading: (loading) => set({ isLoading: loading }),
+      noteRunError: (at) => set({ lastRunErrorAt: at ?? Date.now() }),
       setSessionId: (id) => set({ currentSessionId: id }),
       setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -307,19 +301,6 @@ export const useChatStore = create<ChatState>()(
       // Pet actions
       setPetColorScheme: (scheme) => set({ petColorScheme: scheme }),
       setPetSkinId: (id) => set({ petSkinId: id }),
-
-      // Orb actions
-      setOrbState: (orbState) => {
-        if (orbState === 'active') {
-          // Start morph timer when entering active state
-          const orbMorphTimer = Date.now()
-          set({ orbState, orbMorphTimer })
-        } else if (orbState === 'idle') {
-          set({ orbState, orbMorphTimer: null })
-        } else {
-          set({ orbState })
-        }
-      },
 
       // Right sidebar actions
       setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),

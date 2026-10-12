@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from 'react'
 import { BotEngine, type BotFrame } from './engine'
-import { NOTIF_BLUE } from './decor'
+import { NOTIF_ANGLE, NOTIF_BLUE, NOTIF_DIST, NOTIF_R } from './decor'
 import { mixHex } from './skins'
 import { DEMI_VIEWBOX, RAYON } from './repere'
 import type { StateId } from './states'
@@ -24,6 +24,7 @@ interface Props {
   color?: string
   paper?: string
   className?: string
+  /** 由 useBotStatus 派生（idle/thinking/busy/done/error），不要在调用处写死 */
   status?: BotStatus
 }
 
@@ -38,6 +39,17 @@ const STATUS_STATES: Record<BotStatus, StateId[]> = {
   done: ['wink', 'idle'],
   error: ['alert', 'idle'],
 }
+
+/**
+ * 出错红点：位置沿用通知蓝点的实测几何（-42° 圆周上），颜色是产品红而非视频实测值，
+ * 所以留在这里、不往 decor.ts 那堆测量常量里塞。不走进 applyFrame ——
+ * 它是"这一轮挂了"的状态徽标，不是动画帧的一部分。
+ */
+const ERROR_RED = '#ff3b30'
+const ERROR_DOT_A = (NOTIF_ANGLE * Math.PI) / 180
+const ERROR_DOT_X = Math.cos(ERROR_DOT_A) * NOTIF_DIST * RAYON
+const ERROR_DOT_Y = Math.sin(ERROR_DOT_A) * NOTIF_DIST * RAYON
+const ERROR_DOT_R = NOTIF_R * RAYON
 
 /** 状态保持时长（秒），对齐 bloub 的实测节奏。 */
 const HOLD: Partial<Record<StateId, number>> = {
@@ -216,6 +228,17 @@ function GrokBotImpl({ size = 40, color = '#0a0a0c', paper = '#f9f9f9', classNam
 
       {/* 通知蓝点（压在身体上） */}
       <circle data-gb="notif" fill={NOTIF_BLUE} display="none" />
+
+      {/* 出错红点：仅 error 状态出现，闪烁由 CSS 驱动（gb-error-dot） */}
+      {status === 'error' && (
+        <circle
+          className="gb-error-dot"
+          cx={ERROR_DOT_X}
+          cy={ERROR_DOT_Y}
+          r={ERROR_DOT_R}
+          fill={ERROR_RED}
+        />
+      )}
 
       {/* 前景粒子（! 的点等） */}
       <g data-gb="dots-front" />
