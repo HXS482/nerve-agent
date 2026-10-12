@@ -6,6 +6,7 @@ import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
 import { SidebarToggleIcon } from '../SidebarToggleIcon'
 import { StageAvatar } from './StageAvatar'
+import { GrokBot } from '../GrokBot/GrokBot'
 import { AccountPanel } from './AccountPanel'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
 import { ThinkSpot } from './ThinkSpot'
@@ -26,6 +27,7 @@ export function StageShell({ claude, onOpenSettings }: Props) {
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const stageBg = useChatStore((s) => s.stageBg)
+  const isLight = useChatStore((s) => s.theme) === 'light'
 
   // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
   useEffect(() => {
@@ -78,29 +80,19 @@ export function StageShell({ claude, onOpenSettings }: Props) {
         </div>
       </div>
 
-        {/* 居中小球：点击返回 chat 模式（挂在 stage-shell 上，不进拖拽区） */}
+        {/* 居中 Grok Bot 头像：点击返回 chat 模式（挂在 stage-shell 上，不进拖拽区） */}
         <button
           className="task-spinner-wrap task-orb-btn"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           onClick={() => setViewMode('chat')}
           title="返回聊天模式"
         >
-          <div className="task-loader">
-            <svg width={100} height={100} viewBox="0 0 100 100">
-              <defs>
-                <mask id="tl-clipping">
-                  <polygon points="0,0 100,0 100,100 0,100" fill="black" />
-                  <polygon points="25,25 75,25 50,75" fill="white" />
-                  <polygon points="50,25 75,75 25,75" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                  <polygon points="35,35 65,35 50,65" fill="white" />
-                </mask>
-              </defs>
-            </svg>
-            <div className="task-loader-box" />
-          </div>
+          <GrokBot
+            size={44}
+            status="idle"
+            color={isLight ? '#0a0a0c' : '#f1efe9'}
+            paper={isLight ? '#eef1f6' : '#0a0a0a'}
+          />
         </button>
 
       {/* 会话抽屉 */}
