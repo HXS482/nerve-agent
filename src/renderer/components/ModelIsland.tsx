@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useChatStore } from '../stores/chatStore'
+import { SidebarToggleIcon } from './SidebarToggleIcon'
 
 interface Props {
   currentModel: string
@@ -83,16 +84,15 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
       >
         {!sidebarOpen && onToggleSidebar && (
           <>
-            <svg
-              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              className="cursor-pointer hover:text-[var(--text-on-surface)] transition-colors shrink-0"
+            {/* 与侧栏头部共用同一枚图标（SidebarToggleIcon），只在尺寸上不同 */}
+            <span
+              className="flex items-center cursor-pointer hover:text-[var(--text-on-surface)] transition-colors shrink-0"
               style={{ marginLeft: -4 }}
               onClick={(e) => { e.stopPropagation(); onToggleSidebar() }}
               title="Open sidebar"
             >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-            </svg>
+              <SidebarToggleIcon size={12} />
+            </span>
             <div className="w-px h-3 shrink-0" style={{ background: 'var(--border-default)' }} />
           </>
         )}
