@@ -6,6 +6,8 @@ interface ProviderEntry {
   type: 'anthropic' | 'openai' | 'google'
   baseURL: string
   authToken: string
+  /** 该 provider 下可选的模型名，UI / gateway 读它来列模型 */
+  models?: string[]
   cached?: { client: any; providerType: 'anthropic' | 'openai' }
 }
 
@@ -13,18 +15,28 @@ export class ProviderRegistry {
   private providers = new Map<string, ProviderEntry>()
 
   constructor(settings: ClaudeSettings) {
-    // Default anthropic provider from settings
+    this.loadFromSettings(settings)
+  }
+
+  /**
+   * 唯一的装载路径 —— constructor 与 reload() 共用，避免两条路径行为不一致。
+   *
+   * 'anthropic' 的 baseURL/authToken 只认 settings（来自 env.ANTHROPIC_BASE_URL /
+   * ANTHROPIC_AUTH_TOKEN），settings.json 里 providers.anthropic 的 baseURL 可能是
+   * 缺 /v1 后缀的旧值，所以这里跳过它，别让它覆盖 env。
+   */
+  private loadFromSettings(settings: ClaudeSettings) {
+    this.providers.clear()
+
     this.providers.set('anthropic', {
       type: 'anthropic',
       baseURL: settings.baseURL,
       authToken: settings.authToken,
     })
 
-    // Load additional providers from settings
-    if (settings.providers) {
-      for (const [id, config] of Object.entries(settings.providers)) {
-        this.providers.set(id, config)
-      }
+    for (const [id, config] of Object.entries(settings.providers || {})) {
+      if (id === 'anthropic') continue
+      this.providers.set(id, config)
     }
   }
 
@@ -76,7 +88,8 @@ export class ProviderRegistry {
       if (providerId === 'anthropic') {
         throw new Error(`Provider "${providerId}" not configured`)
       }
-      // Fallback to anthropic for unknown providers
+      // Fallback to anthropic for unknown providers — 打日志，别静默换
+      console.warn(`[ProviderRegistry] provider "${providerId}" not configured, falling back to "anthropic"`)
       if (this.providers.has('anthropic')) {
         return this.getClientAndModel('anthropic', modelId)
       }
@@ -121,21 +134,7 @@ export class ProviderRegistry {
   }
 
   reload(settings: ClaudeSettings) {
-    // Intentionally discards all cached clients — callers get fresh SDK
-    // clients built from the updated settings on next getClientAndModel() call.
-    this.providers.clear()
-    this.providers.set('anthropic', {
-      type: 'anthropic',
-      baseURL: settings.baseURL,
-      authToken: settings.authToken,
-    })
-    if (settings.providers) {
-      for (const [id, config] of Object.entries(settings.providers)) {
-        // Skip 'anthropic' — already set from settings.baseURL/authToken above.
-        // The providers.anthropic entry in JSON may have a stale baseURL (missing /v1 suffix).
-        if (id === 'anthropic') continue
-        this.providers.set(id, config)
-      }
-    }
+    // 丢弃所有缓存 client —— 下次 getClientAndModel() 会用新 settings 重建 SDK client。
+    this.loadFromSettings(settings)
   }
 }

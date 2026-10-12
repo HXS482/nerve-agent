@@ -491,14 +491,34 @@ export class AgentCore {
 
   /**
    * 解析 provider
+   *
+   * 返回的必须是 registry 里真实存在的 provider id。早先的实现按 model 名前缀直接
+   * 返回 'openai' / 'google'，但 settings.json 的 providers 一般不会用这两个 id，
+   * 于是 getClientAndModel 找不到就兜底到 anthropic —— 拿 Anthropic SDK 去打一个
+   * OpenAI 兼容端点。现在改成按 type 从已注册的 provider 里挑。
    */
   private resolveProvider(): string {
-    return this.config.provider
-      || (this.config.model.startsWith('gpt') || this.config.model.startsWith('o1') || this.config.model.startsWith('o3') || this.config.model.startsWith('o4')
-        ? 'openai'
-        : this.config.model.startsWith('gemini')
-          ? 'google'
-          : this.settings.defaultProvider || 'anthropic')
+    if (this.config.provider) return this.config.provider
+
+    const providers = this.registry.listProviders()
+    const preferred = this.settings.defaultProvider
+      ? providers.find((p) => p.id === this.settings.defaultProvider)
+      : undefined
+
+    // model 名前缀 → provider type 推断
+    const guessedType: 'openai' | 'google' | undefined =
+      /^(gpt|o[134])/.test(this.config.model) ? 'openai'
+        : this.config.model.startsWith('gemini') ? 'google'
+          : undefined
+
+    if (guessedType) {
+      // defaultProvider 类型对得上就优先用它，否则取第一个同类型的 provider
+      if (preferred?.type === guessedType) return preferred.id
+      const sameType = providers.find((p) => p.type === guessedType)
+      if (sameType) return sameType.id
+    }
+
+    return preferred?.id || 'anthropic'
   }
 
   /**
