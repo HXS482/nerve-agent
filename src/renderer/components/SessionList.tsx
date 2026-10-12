@@ -47,6 +47,169 @@ const PLATFORM_META: Record<string, { label: string; color: string; icon: React.
   },
 }
 
+interface SessionRowProps {
+  session: Session
+  isActive: boolean
+  branches?: Branch[]
+  /** 分支列表是否展开 */
+  expanded: boolean
+  /** 分支列表缩进：Recent 与 Channels 的层级深度不同 */
+  branchIndent: number
+  onSelect: (session: Session) => void
+  onToggleExpand: (sessionId: string, e: React.MouseEvent) => void
+  onDelete: (sessionId: string) => void
+  /** 缺省不显示「移至 Stage」（Channels 下的会话本来就归好了） */
+  onMoveToStage?: (sessionId: string) => void
+}
+
+/**
+ * 单个会话行，Recent 与 Channels 共用同一份渲染。
+ *
+ * 「时间 + 操作」是一格：操作绝对定位盖在时间上，hover 时时间淡出、按钮原地浮出。
+ * 按钮不占布局，时间才能贴住右边缘——原先两个列表各写一遍，隐形的删除按钮仍在占位，
+ * 把时间顶离右边缘约 24px，右边空出一段没有信息的槽。
+ * 同理展开箭头槽固定 12px（无分支的行留等宽占位），行与行的左边缘才在一条线上。
+ */
+function SessionRow({
+  session,
+  isActive,
+  branches,
+  expanded,
+  branchIndent,
+  onSelect,
+  onToggleExpand,
+  onDelete,
+  onMoveToStage,
+}: SessionRowProps) {
+  const visibleBranches = branches && branches.length > 1 ? branches : undefined
+
+  return (
+    <div>
+      <div
+        onClick={() => onSelect(session)}
+        className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
+        style={{
+          padding: '5px 2px',
+          marginLeft: '-4px',
+          marginRight: '-4px',
+          borderRadius: '9px',
+          background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
+        }}
+        onMouseEnter={(e) => {
+          if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)'
+        }}
+        onMouseLeave={(e) => {
+          if (!isActive) e.currentTarget.style.background = 'transparent'
+        }}
+      >
+        {visibleBranches ? (
+          <button
+            onClick={(e) => onToggleExpand(session.id, e)}
+            className="shrink-0 flex items-center justify-center transition-colors cursor-pointer"
+            style={{
+              width: 12, height: 12,
+              color: 'var(--text-outline-variant)',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+            }}
+          >
+            <svg
+              width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+              style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+            >
+              <path d="M6 4l4 4-4 4" />
+            </svg>
+          </button>
+        ) : (
+          <span style={{ width: 12, flexShrink: 0 }} />
+        )}
+
+        <span
+          className={isActive ? 'animate-pulse-soft' : ''}
+          style={{
+            width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+            background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
+            display: 'block',
+          }}
+        />
+        <span
+          className="text-[11px] flex-1 truncate"
+          style={{
+            color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
+            fontWeight: isActive ? 500 : 400,
+          }}
+        >
+          {session.title}
+        </span>
+
+        {/* 时间与操作同格：操作绝对定位，不把时间挤开 */}
+        <span className="relative flex items-center shrink-0">
+          <span
+            className="text-[10px] transition-opacity group-hover:opacity-0"
+            style={{ color: 'var(--text-on-surface-variant)', fontVariantNumeric: 'tabular-nums' }}
+          >
+            {formatSessionTime(session.updatedAt || session.createdAt)}
+          </span>
+          {/* 藏起来时不能吃点击：按钮正压在时间上，否则点时间会误触删除 */}
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto">
+            {onMoveToStage && !session.mode && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onMoveToStage(session.id) }}
+                className="flex items-center justify-center rounded transition-colors"
+                style={{ width: 16, height: 16, color: 'var(--text-outline-variant)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                title="移至 Stage"
+              >
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(session.id) }}
+              className="flex items-center justify-center rounded transition-colors"
+              style={{ width: 16, height: 16, color: 'var(--text-outline-variant)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              title="Delete"
+            >
+              <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
+          </span>
+        </span>
+      </div>
+
+      {expanded && visibleBranches && (
+        <div style={{ paddingLeft: branchIndent }}>
+          {visibleBranches.map((b) => (
+            <div
+              key={b.name}
+              className="flex items-center gap-1.5"
+              style={{
+                padding: '3px 6px',
+                fontSize: 11,
+                color: b.active ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
+                fontWeight: b.active ? 500 : 400,
+              }}
+            >
+              <span style={{
+                width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
+                background: b.active ? '#27C93F' : 'var(--text-outline-variant)',
+                display: 'block',
+              }} />
+              <span className="truncate">{b.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SessionList({ currentSessionId, onSelectSession, searchQuery = '', mode }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const deleteSession = useChatStore((s) => s.deleteSession)
@@ -74,6 +237,18 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
   const toggleExpand = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setExpandedSession(expandedSession === sessionId ? null : sessionId)
+  }
+
+  // 删除要连后端会话一起摘掉；两个列表传的是同一个回调
+  const handleDelete = (sessionId: string) => {
+    deleteSession(sessionId)
+    window.claude.deleteSessionRemote(sessionId).catch(() => {})
+  }
+
+  // 历史 modeless 会话（mechanism 生效前丢失标记）手动归位到 Stage
+  const handleMoveToStage = (sessionId: string) => {
+    markSessionMode(sessionId, 'stage')
+    updateSession(sessionId, { mode: 'stage' })
   }
 
   // Separate local (recent) sessions from channel sessions
@@ -147,147 +322,20 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
         </span>
       </button>
 
-      {!isRecentCollapsed && recentSessions.map((session) => {
-        const isActive = session.id === currentSessionId
-        const branches = sessionBranches[session.id]
-        const isExpanded = expandedSession === session.id && branches && branches.length > 1
-
-        return (
-          <div key={session.id}>
-            <div
-              onClick={() => onSelectSession(session)}
-              className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
-              style={{
-                padding: '5px 2px',
-                marginLeft: '-4px',
-                marginRight: '-4px',
-                borderRadius: '9px',
-                background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)'
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) e.currentTarget.style.background = 'transparent'
-              }}
-            >
-              {branches && branches.length > 1 ? (
-                <button
-                  onClick={(e) => toggleExpand(session.id, e)}
-                  className="shrink-0 flex items-center justify-center transition-colors cursor-pointer"
-                  style={{
-                    width: 12, height: 12,
-                    color: 'var(--text-outline-variant)',
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                  }}
-                >
-                  <svg
-                    width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                    style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
-                  >
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                </button>
-              ) : (
-                <span style={{ width: 4, flexShrink: 0 }} />
-              )}
-
-              <span
-                className={isActive ? 'animate-pulse-soft' : ''}
-                style={{
-                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                  background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
-                  display: 'block',
-                }}
-              />
-              <span
-                className="text-[12px] flex-1 truncate"
-                style={{
-                  color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
-                  fontWeight: isActive ? 500 : 400,
-                }}
-              >
-                {session.title}
-              </span>
-              <span
-                className="text-[10px] shrink-0"
-                style={{ color: 'var(--text-on-surface-variant)', fontVariantNumeric: 'tabular-nums' }}
-              >
-                {formatSessionTime(session.updatedAt || session.createdAt)}
-              </span>
-              {/* 历史 modeless 会话（mechanism 生效前丢失标记）手动归位到 Stage */}
-              {!session.mode && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    markSessionMode(session.id, 'stage')
-                    updateSession(session.id, { mode: 'stage' })
-                  }}
-                  className="shrink-0 flex items-center justify-center rounded transition-all"
-                  style={{
-                    width: 16, height: 16,
-                    color: 'var(--text-outline-variant)',
-                    opacity: 0,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
-                  title="移至 Stage"
-                >
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M13 6l6 6-6 6" />
-                  </svg>
-                </button>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  deleteSession(session.id)
-                  window.claude.deleteSessionRemote(session.id).catch(() => {})
-                }}
-                className="shrink-0 flex items-center justify-center rounded transition-all"
-                style={{
-                  width: 16, height: 16,
-                  color: 'var(--text-outline-variant)',
-                  opacity: 0,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
-                title="Delete"
-              >
-                <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M4 4l8 8M12 4l-8 8" />
-                </svg>
-              </button>
-            </div>
-
-            {isExpanded && branches && (
-              <div style={{ paddingLeft: 28 }}>
-                {branches.map((b) => (
-                  <div
-                    key={b.name}
-                    className="flex items-center gap-1.5"
-                    style={{
-                      padding: '3px 6px',
-                      fontSize: 11,
-                      color: b.active ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
-                      fontWeight: b.active ? 500 : 400,
-                    }}
-                  >
-                    <span style={{
-                      width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
-                      background: b.active ? '#27C93F' : 'var(--text-outline-variant)',
-                      display: 'block',
-                    }} />
-                    <span className="truncate">{b.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      })}
+      {!isRecentCollapsed && recentSessions.map((session) => (
+        <SessionRow
+          key={session.id}
+          session={session}
+          isActive={session.id === currentSessionId}
+          branches={sessionBranches[session.id]}
+          expanded={expandedSession === session.id}
+          branchIndent={28}
+          onSelect={onSelectSession}
+          onToggleExpand={toggleExpand}
+          onDelete={handleDelete}
+          onMoveToStage={handleMoveToStage}
+        />
+      ))}
 
       {/* Channels — collapsible */}
       {channelGroups.size > 0 && (
@@ -361,118 +409,19 @@ export function SessionList({ currentSessionId, onSelectSession, searchQuery = '
                   </span>
                 </button>
 
-                {!isCollapsed && groupSessions.map((session) => {
-                  const isActive = session.id === currentSessionId
-                  const branches = sessionBranches[session.id]
-                  const isExpanded = expandedSession === session.id && branches && branches.length > 1
-
-                  return (
-                    <div key={session.id}>
-                      <div
-                        onClick={() => onSelectSession(session)}
-                        className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
-                        style={{
-                          padding: '5px 2px',
-                          marginLeft: '-4px',
-                          marginRight: '-4px',
-                          borderRadius: '9px',
-                          background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)'
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isActive) e.currentTarget.style.background = 'transparent'
-                        }}
-                      >
-                        {branches && branches.length > 1 ? (
-                          <button
-                            onClick={(e) => toggleExpand(session.id, e)}
-                            className="shrink-0 flex items-center justify-center transition-colors cursor-pointer"
-                            style={{
-                              width: 12, height: 12,
-                              color: 'var(--text-outline-variant)',
-                              background: 'transparent',
-                              border: 'none',
-                              padding: 0,
-                            }}
-                          >
-                            <svg
-                              width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                              style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
-                            >
-                              <path d="M6 4l4 4-4 4" />
-                            </svg>
-                          </button>
-                        ) : (
-                          <span style={{ width: 12, flexShrink: 0 }} />
-                        )}
-
-                        <span
-                          className={isActive ? 'animate-pulse-soft' : ''}
-                          style={{
-                            width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                            background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
-                            display: 'block',
-                          }}
-                        />
-                        <span
-                          className="text-[12px] flex-1 truncate"
-                          style={{
-                            color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)',
-                            fontWeight: isActive ? 500 : 400,
-                          }}
-                        >
-                          {session.title}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteSession(session.id)
-                            window.claude.deleteSessionRemote(session.id).catch(() => {})
-                          }}
-                          className="shrink-0 flex items-center justify-center rounded transition-all"
-                          style={{
-                            width: 16, height: 16,
-                            color: 'var(--text-outline-variant)',
-                            opacity: 0,
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-surface-container-high)' }}
-                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent' }}
-                          title="Delete"
-                        >
-                          <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                            <path d="M4 4l8 8M12 4l-8 8" />
-                          </svg>
-                        </button>
-                      </div>
-
-                      {isExpanded && branches && (
-                        <div style={{ paddingLeft: 42 }}>
-                          {branches.map((b) => (
-                            <div
-                              key={b.name}
-                              className="flex items-center gap-1.5"
-                              style={{
-                                padding: '3px 6px',
-                                fontSize: 11,
-                                color: b.active ? 'var(--accent-primary)' : 'var(--text-outline-variant)',
-                                fontWeight: b.active ? 500 : 400,
-                              }}
-                            >
-                              <span style={{
-                                width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
-                                background: b.active ? '#27C93F' : 'var(--text-outline-variant)',
-                                display: 'block',
-                              }} />
-                              <span className="truncate">{b.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                {!isCollapsed && groupSessions.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    isActive={session.id === currentSessionId}
+                    branches={sessionBranches[session.id]}
+                    expanded={expandedSession === session.id}
+                    branchIndent={42}
+                    onSelect={onSelectSession}
+                    onToggleExpand={toggleExpand}
+                    onDelete={handleDelete}
+                  />
+                ))}
               </div>
             )
           })}
