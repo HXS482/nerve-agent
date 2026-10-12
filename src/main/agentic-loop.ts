@@ -330,7 +330,16 @@ async function callWithRetry(
     } catch (streamErr: any) {
       if (streamErr?.name === 'AbortError' || abortSignal?.aborted) {
         // 父级取消 → 静默收尾；单次调用被我们自己的 180s 掐断 → 不能假装说完了
-        if (!abortSignal?.aborted) throw streamErr
+        if (!abortSignal?.aborted) {
+          // 零输出的超时 = 网关瞬时挂起（没吐过字、没执行过工具，重发是幂等的），按可重试错误处理
+          if (streamErr?.noOutput && attempt < MAX_RETRIES) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 5000)
+            console.warn(`[AgenticLoop] attempt ${attempt + 1} timed out with no output, retrying in ${delay}ms`)
+            await sleep(delay)
+            continue
+          }
+          throw streamErr
+        }
         return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
       }
 
@@ -353,7 +362,16 @@ async function callWithRetry(
         lastError = nonStreamErr
 
         if (nonStreamErr?.name === 'AbortError' || abortSignal?.aborted) {
-          if (!abortSignal?.aborted) throw nonStreamErr
+          if (!abortSignal?.aborted) {
+            // 非流式同样有零输出超时重试（callNonStreaming 标记 noOutput）
+            if (nonStreamErr?.noOutput && attempt < MAX_RETRIES) {
+              const delay = Math.min(1000 * Math.pow(2, attempt), 5000)
+              console.warn(`[AgenticLoop] attempt ${attempt + 1} timed out with no output, retrying in ${delay}ms`)
+              await sleep(delay)
+              continue
+            }
+            throw nonStreamErr
+          }
           return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
         }
 
@@ -475,7 +493,10 @@ async function callStreaming(
     }
     // 流是被我们自己的 180s 超时掐断的（父级没取消）：当错误上抛，别悄悄收工
     if (callAbort.signal.aborted && !abortSignal?.aborted) {
-      throw Object.assign(new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`), { name: 'AbortError' })
+      throw Object.assign(
+        new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`),
+        { name: 'AbortError', noOutput: eventCount === 0 },
+      )
     }
   } finally {
     clearTimeout(timeout)
@@ -522,7 +543,10 @@ async function callNonStreaming(
   } catch (err: any) {
     // 同 callStreaming：自家超时掐断的调用不能当正常返回
     if (!abortSignal?.aborted && (err?.name === 'AbortError' || callAbort.signal.aborted)) {
-      throw Object.assign(new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`), { name: 'AbortError' })
+      throw Object.assign(
+        new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`),
+        { name: 'AbortError', noOutput: true },
+      )
     }
     throw err
   } finally {
@@ -560,6 +584,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
   let totalInput = 0
   let totalOutput = 0
   let continuations = 0
+  let timeoutRetries = 0 // 零输出超时的重试余额（跨步共享，任何一步正常返回即恢复）
   const todoNudge: TodoNudgeState = { used: false, since: 0 }
 
   for (let step = 0; step < maxSteps; step++) {
@@ -630,7 +655,16 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       abortSignal?.removeEventListener('abort', onParentAbort)
       if (err?.name === 'AbortError' || abortSignal?.aborted) {
         // 父级取消照旧；自家 180s 超时掐断的调用不能当正常说完
-        if (!abortSignal?.aborted) throw new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`)
+        if (!abortSignal?.aborted) {
+          if (timeoutRetries < MAX_RETRIES) {
+            timeoutRetries++
+            const delay = Math.min(1000 * Math.pow(2, timeoutRetries - 1), 5000)
+            console.warn(`[AgenticLoop] step ${step} timed out with no output, retrying (${timeoutRetries}/${MAX_RETRIES}) in ${delay}ms`)
+            await sleep(delay)
+            continue
+          }
+          throw Object.assign(new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`), { name: 'AbortError', noOutput: true })
+        }
         return { stopReason: 'end_turn', usage: { inputTokens: totalInput, outputTokens: totalOutput } }
       }
       throw err
@@ -688,7 +722,18 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
     // 流是被我们自己的 180s 超时掐断的（父级没取消）：当错误上抛，别拿半截内容当正常收尾
     if (callAbort.signal.aborted && !abortSignal?.aborted) {
-      throw new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`)
+      const noOutput = toolCallAccumulators.size === 0 && !fullContent && !fullReasoning
+      if (noOutput && timeoutRetries < MAX_RETRIES) {
+        timeoutRetries++
+        const delay = Math.min(1000 * Math.pow(2, timeoutRetries - 1), 5000)
+        console.warn(`[AgenticLoop] step ${step} timed out with no output, retrying (${timeoutRetries}/${MAX_RETRIES}) in ${delay}ms`)
+        await sleep(delay)
+        continue
+      }
+      throw Object.assign(
+        new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`),
+        { name: 'AbortError', noOutput },
+      )
     }
 
     // Build assistant message for history
@@ -710,6 +755,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
     if (toolCallAccumulators.size === 0) {
       messages.push({ role: 'assistant', content: fullContent || '', ...(fullReasoning ? { reasoning: fullReasoning } : {}) })
+      timeoutRetries = 0
       return {
         stopReason: finishReason === 'length' ? 'max_tokens' : 'end_turn',
         usage: { inputTokens: totalInput, outputTokens: totalOutput },
@@ -724,6 +770,8 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
         usage: { inputTokens: totalInput, outputTokens: totalOutput },
       }
     }
+
+    timeoutRetries = 0 // 这一步成功产出 tool_calls，重试余额恢复
 
     // Execute tool calls with timeout
     assistantMsg.tool_calls = []
