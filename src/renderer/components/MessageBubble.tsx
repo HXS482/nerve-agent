@@ -284,31 +284,36 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
 })
 
 function FileReferenceCard({ filePath }: { filePath: string }) {
-  const fileName = filePath.split(/[/\\]/).pop() || filePath
-  const ext = fileName.split('.').pop()?.toUpperCase() || ''
+  const fileName = filePath.split(/[\\]/).pop() || filePath
 
   const handleOpen = () => {
     window.claude.openInBrowser('file', filePath)
   }
 
+  /* 裸行：不套容器（无边框/底色/内边距），只剩 图标+文件名，点哪儿都是打开。
+     完整路径放 title 兜底；行内截断，不撑破消息列。 */
   return (
-    <div
-      className="flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-opacity hover:opacity-80"
-      style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-container-low)' }}
+    <button
+      type="button"
+      className="flex items-center gap-2 max-w-full cursor-pointer transition-opacity hover:opacity-80"
       onClick={handleOpen}
+      title={filePath}
+      style={{ background: 'transparent', border: 'none', padding: '3px 0', textAlign: 'left' }}
     >
-      <svg className="shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        className="shrink-0"
+        width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-warning)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      >
         <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
         <polyline points="14 2 14 8 20 8" />
       </svg>
-      <div className="flex-1 min-w-0">
-        <div className="truncate" style={{ fontSize: '13px', color: 'var(--text-on-surface)' }}>{fileName}</div>
-        <div style={{ fontSize: '11px', color: 'var(--text-outline)' }}>
-          {ext ? `文档 · ${ext}` : '文档'}
-        </div>
-      </div>
-      <span className="shrink-0" style={{ fontSize: '11px', color: 'var(--text-outline)' }}>打开方式 ▾</span>
-    </div>
+      <span
+        className="truncate"
+        style={{ fontSize: '12.5px', lineHeight: 1.35, color: 'var(--text-on-surface)' }}
+      >
+        {fileName}
+      </span>
+    </button>
   )
 }
 
