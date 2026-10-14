@@ -27,6 +27,15 @@ async function ensureNerveDir() {
 
 // --- Settings ---
 
+export interface ProviderConfig {
+  type: 'anthropic' | 'openai' | 'google'
+  baseURL: string
+  authToken: string
+  models?: string[]
+  /** 该 provider 下单个模型的 context window（token），可覆盖全局（第三方网关常用） */
+  modelContextWindows?: Record<string, number>
+}
+
 export interface ClaudeSettings {
   baseURL: string
   authToken: string
@@ -37,7 +46,12 @@ export interface ClaudeSettings {
   provider?: string
   effort?: string
   permissionMode?: string
-  providers?: Record<string, { type: 'anthropic' | 'openai' | 'google'; baseURL: string; authToken: string; models?: string[] }>
+  /**
+   * 上下文窗口覆盖（token 数）。模型不在 CONTEXT_WINDOWS 表里、或表里的值不对时用。
+   * 例如公司代理网关的 GLM-5.3-Flash 实际是 512000，靠这个字段顶掉兜底的 200000。
+   */
+  contextWindow?: number
+  providers?: Record<string, ProviderConfig>
   defaultProvider?: string
   extraction?: { baseURL: string; authToken: string; model: string }
   soul?: string
@@ -114,6 +128,7 @@ export function loadSettings(): ClaudeSettings {
       permissionMode: data.permissionMode || undefined,
       providers: data.providers || undefined,
       defaultProvider: data.defaultProvider || undefined,
+      contextWindow: typeof data.contextWindow === 'number' ? data.contextWindow : undefined,
       extraction: data.extraction || undefined,
       soul: loadSoul(data),
       persona: typeof data.persona === 'string' ? data.persona : undefined,
@@ -233,7 +248,7 @@ export async function getNerveSettings() {
   }
 }
 
-export async function saveNerveSettings(settings: { baseURL?: string; authToken?: string; modelAliases?: Record<string, string>; sttEndpoint?: string; sttApiKey?: string; sttModel?: string; providers?: Record<string, { type: string; baseURL: string; authToken: string; models?: string[] }>; defaultProvider?: string; soul?: string; persona?: string }) {
+export async function saveNerveSettings(settings: { baseURL?: string; authToken?: string; modelAliases?: Record<string, string>; sttEndpoint?: string; sttApiKey?: string; sttModel?: string; providers?: Record<string, { type: string; baseURL: string; authToken: string; models?: string[] }>; defaultProvider?: string; contextWindow?: number; soul?: string; persona?: string }) {
   await ensureNerveDir()
   const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
 
@@ -272,6 +287,9 @@ export async function saveNerveSettings(settings: { baseURL?: string; authToken?
   // Providers config
   if (settings.providers !== undefined) existing.providers = settings.providers
   if (settings.defaultProvider !== undefined) existing.defaultProvider = settings.defaultProvider
+
+  // Context window 覆盖
+  if (settings.contextWindow !== undefined) existing.contextWindow = settings.contextWindow
 
   // Soul (agent persona / system prompt)
   if (settings.soul !== undefined) existing.soul = settings.soul

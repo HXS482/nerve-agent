@@ -371,7 +371,10 @@ app.whenReady().then(async () => {
       const offloadBridge = new OffloadBridge({
         client: offloadClient,
         model: offloadSettings.extraction.model || 'deepseek-chat',
-        contextWindow: 128_000,
+        // 这里压的是发往 extraction 模型的上下文，跟主模型（GLM）的窗口无关：
+        // 原先是写死的 128_000，现在优先读全局 contextWindow（用户配的就是当前在用的模型），
+        // 否则留在 128_000 —— 宁可晚压缩，也别拿错误的窗口提前把历史切碎。
+        contextWindow: offloadSettings.contextWindow ?? 128_000,
         compressRatio: 0.6,
       })
       claude.setOffloadBridge(offloadBridge)

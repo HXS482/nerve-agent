@@ -53,6 +53,11 @@ export class MemoryTdaiCore {
       offload: {
         enabled: memSettings?.offload?.enabled ?? false,
         model: memSettings?.offload?.model,
+        // 主模型的上下文窗口。vendor 侧的 getContextWindow() 依次查
+        // config.models.providers[...].contextWindow → config.models.contextWindow
+        // → 这里的 defaultContextWindow，都读不到就会拿 200000 去算压缩阈值
+        // （mild 0.5 / aggressive 0.85）—— 对 512000 的模型等于提前一半就压缩。
+        defaultContextWindow: settings.contextWindow,
       },
       llm: {
         enabled: true,

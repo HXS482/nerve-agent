@@ -25,7 +25,7 @@ import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
-import { CONTEXT_WINDOWS, COST_PER_TOKEN } from './model-constants'
+import { COST_PER_TOKEN, FALLBACK_CONTEXT_WINDOW, lookupContextWindow } from './model-constants'
 
 // 前向声明，避免循环依赖
 export type { OutputChannel }
@@ -157,6 +157,32 @@ export class AgentCore {
       return this.settings.defaultModel
     }
     return resolved
+  }
+
+  /**
+   * 解析当前模型的上下文窗口（token）。优先级：
+   *   1. settings.contextWindow —— 全局覆盖，公司代理/自建网关的私有模型走这条
+   *   2. settings.providers[provider].modelContextWindows[model] —— 按 provider 细分
+   *   3. CONTEXT_WINDOWS 查表（支持前缀匹配，如 'GLM-5.3-Flash' 命中 'glm-5.3'）
+   *   4. FALLBACK_CONTEXT_WINDOW
+   *
+   * 历史实现直接 CONTEXT_WINDOWS[model] || 200000，模型不在表里就静默兜底，
+   * 用量环把 512000 的模型当 200000 显示（占用看起来偏高、且提前染红）。
+   */
+  private resolveContextWindow(modelId: string, providerId?: string): number {
+    const s = this.settings as unknown as {
+      contextWindow?: number
+      providers?: Record<string, { modelContextWindows?: Record<string, number> }>
+    }
+    if (typeof s.contextWindow === 'number' && s.contextWindow > 0) return s.contextWindow
+
+    const byProvider = providerId ? s.providers?.[providerId]?.modelContextWindows : undefined
+    if (byProvider) {
+      const exact = byProvider[modelId]
+      if (typeof exact === 'number' && exact > 0) return exact
+    }
+
+    return lookupContextWindow(modelId) ?? FALLBACK_CONTEXT_WINDOW
   }
 
   private async loadConversationHistory(sessionId: string): Promise<Array<{ role: string; content: unknown }>> {
@@ -830,7 +856,7 @@ export class AgentCore {
 
     const pricing = COST_PER_TOKEN[this.resolveModel(this.config.model)] || { input: 0.003, output: 0.015 }
     const cost = ((usage.inputTokens) * pricing.input + (usage.outputTokens) * pricing.output) / 1000
-    const maxContextTokens = CONTEXT_WINDOWS[this.resolveModel(this.config.model)] || 200000
+    const maxContextTokens = this.resolveContextWindow(this.resolveModel(this.config.model), this.config.provider)
 
     // 循环在步边界被 break（用户取消）也会走到这里：别报成 complete
     const cancelled = ctx.abort.signal.aborted
@@ -1055,7 +1081,7 @@ export class AgentCore {
       inputTokens,
       outputTokens,
       totalTokens: contextTokens,
-      maxContextTokens: CONTEXT_WINDOWS[modelId] || 200000,
+      maxContextTokens: this.resolveContextWindow(modelId, this.config.provider),
     }
   }
 
