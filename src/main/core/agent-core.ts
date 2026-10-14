@@ -750,7 +750,7 @@ export class AgentCore {
    * 处理结果和保存
    */
   private async handleResult(
-    result: { usage: { inputTokens: number; outputTokens: number }; stopReason: string; textDeltas: string[]; fullThinkingParts: string[]; allToolCalls: Array<{ id: string; name: string; input: unknown }>; allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> },
+    result: { usage: { inputTokens: number; outputTokens: number; contextTokens: number }; stopReason: string; textDeltas: string[]; fullThinkingParts: string[]; allToolCalls: Array<{ id: string; name: string; input: unknown }>; allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> },
     sessionId: string,
     payload: SendMessagePayload,
     channel: OutputChannel,
@@ -804,7 +804,13 @@ export class AgentCore {
       type: 'assistant',
       message: { content },
       timestamp: new Date().toISOString(),
-      usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+      // contextTokens = 最后一次 LLM 调用的实际上下文占用（input+output），用量环读它；
+      // inputTokens/outputTokens 保持累计消耗语义，供 Usage 面板统计
+      usage: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        contextTokens: usage.contextTokens ?? (usage.inputTokens + usage.outputTokens),
+      },
     }])
     await store.append({ sessionId }, [{ type: 'tag', tag: 'gui' }])
 
@@ -1007,18 +1013,39 @@ export class AgentCore {
     return store.listBranches(sessionId)
   }
 
+  /**
+   * 当前**上下文占用** —— 用量环（ContextRing）读的就是这个值。
+   *
+   * 取最后一条 assistant 条目的 contextTokens（= 最后一次 LLM 调用的 input+output）。
+   * 历史实现是把整个会话所有 assistant 条目的 usage 累加，那是「会话累计消耗」而非
+   * 「当前占用」：它单调增长、必然超过 context window，被渲染层 Math.min(ratio, 1)
+   * 夹到 1 之后就会永久显示 100% 红。
+   *
+   * 旧数据没有 contextTokens 字段，回退用该条的 inputTokens + outputTokens。
+   *
+   * 跳过零值条目：被用户取消 / 调用超时的轮次会落一条 usage 全 0 的空回复，
+   * 它没有消耗任何上下文，若恰好是最后一条会误报成 0%。
+   */
   async getSessionUsage(sessionId: string) {
     const store = await this.ensureSessionStore()
     const entries = await store.load({ sessionId })
+
     let inputTokens = 0
     let outputTokens = 0
+    let contextTokens = 0
 
     if (entries) {
-      for (const e of entries as any[]) {
-        if (e.type === 'assistant' && e.usage) {
-          inputTokens += e.usage.inputTokens || 0
-          outputTokens += e.usage.outputTokens || 0
-        }
+      for (let i = (entries as any[]).length - 1; i >= 0; i--) {
+        const e = (entries as any[])[i]
+        if (e.type !== 'assistant' || !e.usage) continue
+        const inp = e.usage.inputTokens || 0
+        const out = e.usage.outputTokens || 0
+        const ctx = e.usage.contextTokens ?? (inp + out)
+        if (ctx <= 0) continue // 空回复（取消/超时），无实际占用
+        inputTokens = inp
+        outputTokens = out
+        contextTokens = ctx
+        break
       }
     }
 
@@ -1027,7 +1054,7 @@ export class AgentCore {
     return {
       inputTokens,
       outputTokens,
-      totalTokens: inputTokens + outputTokens,
+      totalTokens: contextTokens,
       maxContextTokens: CONTEXT_WINDOWS[modelId] || 200000,
     }
   }

@@ -31,7 +31,12 @@ export interface AgenticLoopParams {
 
 export interface AgenticLoopResult {
   stopReason: 'end_turn' | 'tool_use' | 'max_steps' | 'max_tokens'
-  usage: { inputTokens: number; outputTokens: number }
+  /**
+   * inputTokens/outputTokens = 本轮循环内**所有** LLM 调用之和（累计消耗语义，Usage 面板的累计统计依赖它）。
+   * contextTokens = 循环结束时上下文**实际占用量** = 最后一次 LLM 调用的 input + 该次调用的 output。
+   * 两者语义不同：前者单调增长，不能拿来当「上下文还剩多少」，否则必然被夹到 100%。
+   */
+  usage: { inputTokens: number; outputTokens: number; contextTokens: number }
 }
 
 /**
@@ -116,6 +121,8 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
 
   let totalInput = 0
   let totalOutput = 0
+  // 上下文实际占用：最后一次 LLM 调用的 input + 该次调用的 output（区别于累计的 totalInput/totalOutput）
+  let lastCallContext = 0
   let continuations = 0
   const todoNudge: TodoNudgeState = { used: false, since: 0 }
 
@@ -166,6 +173,7 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
 
     totalInput += result.usage.inputTokens
     totalOutput += result.usage.outputTokens
+    lastCallContext = result.usage.contextTokens
 
     // Append assistant message to history
     const pushedAssistant = result.content.length > 0
@@ -176,7 +184,7 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
     // 撞上 max_tokens：别当"正常说完"收工，接着往下跑
     if (result.stopReason === 'max_tokens') {
       if (continuations >= MAX_CONTINUATIONS) {
-        return { stopReason: 'max_tokens', usage: { inputTokens: totalInput, outputTokens: totalOutput } }
+        return { stopReason: 'max_tokens', usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext } }
       }
       continuations++
       // 截断轮里没拿到 tool_result 的 tool_use 留着会被 API 拒；其余内容（含只有 thinking 的）保留，
@@ -202,7 +210,7 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
     if (result.stopReason !== 'tool_use') {
       return {
         stopReason: result.stopReason,
-        usage: { inputTokens: totalInput, outputTokens: totalOutput },
+        usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext },
       }
     }
 
@@ -296,14 +304,14 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
 
   return {
     stopReason: 'max_steps',
-    usage: { inputTokens: totalInput, outputTokens: totalOutput },
+    usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext },
   }
 }
 
 interface CallResult {
   content: any[]
   stopReason: 'end_turn' | 'tool_use' | 'max_tokens'
-  usage: { inputTokens: number; outputTokens: number }
+  usage: { inputTokens: number; outputTokens: number; contextTokens: number }
 }
 
 interface StreamCallbacks {
@@ -321,7 +329,7 @@ async function callWithRetry(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (abortSignal?.aborted) {
-      return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0, contextTokens: 0 } }
     }
 
     try {
@@ -340,7 +348,7 @@ async function callWithRetry(
           }
           throw streamErr
         }
-        return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+        return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0, contextTokens: 0 } }
       }
 
       // If streaming fails (proxy doesn't support SSE), fall back to non-streaming
@@ -372,7 +380,7 @@ async function callWithRetry(
             }
             throw nonStreamErr
           }
-          return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+          return { content: [], stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0, contextTokens: 0 } }
         }
 
         const isRetryable = !nonStreamErr?.status || nonStreamErr.status >= 500 || nonStreamErr.status === 429
@@ -503,7 +511,7 @@ async function callStreaming(
     abortSignal?.removeEventListener('abort', onParentAbort)
   }
 
-  return { content, stopReason, usage: { inputTokens, outputTokens } }
+  return { content, stopReason, usage: { inputTokens, outputTokens, contextTokens: inputTokens + outputTokens } }
 }
 
 async function callNonStreaming(
@@ -539,7 +547,7 @@ async function callNonStreaming(
       if (block.type === 'thinking') callbacks.onThinkingDelta?.(block.thinking)
     }
 
-    return { content, stopReason, usage: { inputTokens, outputTokens } }
+    return { content, stopReason, usage: { inputTokens, outputTokens, contextTokens: inputTokens + outputTokens } }
   } catch (err: any) {
     // 同 callStreaming：自家超时掐断的调用不能当正常返回
     if (!abortSignal?.aborted && (err?.name === 'AbortError' || callAbort.signal.aborted)) {
@@ -583,12 +591,18 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
   let totalInput = 0
   let totalOutput = 0
+  // 上下文实际占用：最后一次 LLM 调用的 input + 该次调用的 output（区别于累计的 totalInput/totalOutput）
+  let lastCallContext = 0
   let continuations = 0
   let timeoutRetries = 0 // 零输出超时的重试余额（跨步共享，任何一步正常返回即恢复）
   const todoNudge: TodoNudgeState = { used: false, since: 0 }
 
   for (let step = 0; step < maxSteps; step++) {
     if (abortSignal?.aborted) break
+
+    // OpenAI 的 usage 是逐 chunk 累加的，按 step 归零才能得到「本次调用」的量
+    let stepInput = 0
+    let stepOutput = 0
 
     // Offload: compress old messages before LLM call
     await onBeforeStep?.(messages)
@@ -665,7 +679,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
           }
           throw Object.assign(new Error(`API 调用超过 ${Math.round(API_TIMEOUT_MS / 1000)} 秒未返回，本轮已中断`), { name: 'AbortError', noOutput: true })
         }
-        return { stopReason: 'end_turn', usage: { inputTokens: totalInput, outputTokens: totalOutput } }
+        return { stopReason: 'end_turn', usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext } }
       }
       throw err
     }
@@ -682,6 +696,9 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       // Usage-only chunk (final chunk with include_usage) has empty choices
       totalInput += chunk.usage?.prompt_tokens ?? 0
       totalOutput += chunk.usage?.completion_tokens ?? 0
+      stepInput += chunk.usage?.prompt_tokens ?? 0
+      stepOutput += chunk.usage?.completion_tokens ?? 0
+      lastCallContext = stepInput + stepOutput
 
       const choice = chunk.choices[0]
       if (!choice) continue
@@ -758,7 +775,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       timeoutRetries = 0
       return {
         stopReason: finishReason === 'length' ? 'max_tokens' : 'end_turn',
-        usage: { inputTokens: totalInput, outputTokens: totalOutput },
+        usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext },
       }
     }
 
@@ -767,7 +784,7 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
       messages.push(assistantMsg)
       return {
         stopReason: abortSignal?.aborted ? 'end_turn' : 'max_tokens',
-        usage: { inputTokens: totalInput, outputTokens: totalOutput },
+        usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext },
       }
     }
 
@@ -869,6 +886,6 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
   return {
     stopReason: 'max_steps',
-    usage: { inputTokens: totalInput, outputTokens: totalOutput },
+    usage: { inputTokens: totalInput, outputTokens: totalOutput, contextTokens: lastCallContext },
   }
 }

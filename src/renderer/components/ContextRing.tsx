@@ -43,7 +43,7 @@ export function ContextRing({ compact = false }: { compact?: boolean }) {
   if (!currentSessionId) return null
 
   const totalTokens = usage?.totalTokens ?? 0
-  const maxTokens = usage?.maxContextTokens ?? 150000
+  const maxTokens = usage?.maxContextTokens ?? 200000
   const remainingTokens = Math.max(0, maxTokens - totalTokens)
   const ratio = Math.min(totalTokens / maxTokens, 1)
   const offset = CIRCUMFERENCE * (1 - ratio)

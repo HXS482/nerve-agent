@@ -4,7 +4,7 @@ import { runAgenticLoop } from './agentic-loop'
 export interface SubagentResult {
   text: string
   toolCalls: Array<{ name: string; input: unknown; output?: unknown }>
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: { inputTokens: number; outputTokens: number; contextTokens?: number }
   truncated?: boolean
 }
 
@@ -155,7 +155,7 @@ export async function runSubagent(
     return {
       text: `[Subagent error: ${err.message}]`,
       toolCalls: [],
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: { inputTokens: 0, outputTokens: 0, contextTokens: 0 },
     }
   } finally {
     clearTimeout(timeout)
