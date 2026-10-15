@@ -523,63 +523,74 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
       },
     },
     GenerateImage: {
-      description: 'Generate an image from a text prompt using SiliconFlow API (Kwai-Kolors). Saves to .nerve/gallery/. Requires SILICONFLOW_API_KEY in settings. Call this tool exactly once per image the user asked for — if the user asks for one image, generate exactly one. Do NOT produce multiple variations of the same request unless the user explicitly asks for several images.',
+      description: 'Generate an image from a text prompt and save it to .nerve/gallery/. Backends: tries SiliconFlow (Kwai-Kolors, needs SILICONFLOW_API_KEY with balance) first, and automatically falls back to Pollinations (free, no API key) if SiliconFlow is unset, out of balance, or unavailable. Call this tool exactly once per image the user asked for — if the user asks for one image, generate exactly one. Do NOT produce multiple variations of the same request unless the user explicitly asks for several images.',
       input_schema: zodToInputSchema(generateImageSchema),
       execute: async ({ prompt, size = '1024x1024' }: { prompt: string; size?: string; quality?: string }) => {
+        // 尺寸映射：sf = SiliconFlow 的 image_size，w/h = Pollinations 的像素尺寸
+        const SIZE_MAP: Record<string, { sf: string; w: number; h: number }> = {
+          '1024x1024': { sf: '1024x1024', w: 1024, h: 1024 },
+          '1024x1792': { sf: '960x1280', w: 1024, h: 1792 },
+          '1792x1024': { sf: '768x1024', w: 1792, h: 1024 },
+        }
+        const dims = SIZE_MAP[size] || SIZE_MAP['1024x1024']
+
+        // 1) 优先 SiliconFlow（Kolors 出图质量更好）。key 缺失/余额不足/任何失败都自动降级，
+        //    避免像以前那样余额为 0 就直接整个工具挂掉。
+        const apiKey = process.env.SILICONFLOW_API_KEY
+        if (apiKey) {
+          try {
+            const res = await fetch('https://api.siliconflow.cn/v1/images/generations', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'Kwai-Kolors/Kolors',
+                prompt,
+                negative_prompt: 'blurry, bad anatomy, deformed, extra limbs, low quality, watermark, text',
+                image_size: dims.sf,
+                num_inference_steps: 25,
+                guidance_scale: 7.5,
+              }),
+            })
+            if (!res.ok) {
+              const body = await res.text().catch(() => '')
+              console.warn(`[GenerateImage] SiliconFlow ${res.status} — falling back to Pollinations: ${body.slice(0, 200)}`)
+            } else {
+              const json = await res.json() as any
+              const imageUrl = json?.data?.[0]?.url
+              if (!imageUrl) {
+                console.warn('[GenerateImage] SiliconFlow returned no image URL — falling back to Pollinations')
+              } else {
+                const imgRes = await fetch(imageUrl)
+                if (imgRes.ok) {
+                  const buffer = Buffer.from(await imgRes.arrayBuffer())
+                  // saveImage 内部会拼一次时间戳，这里给干净名字（否则 gen-<ts>-<ts>.png 会让模型误判结果重复）
+                  const saved = saveImage('gen.png', buffer, prompt)
+                  return { path: saved.path, filename: saved.filename, prompt, provider: 'siliconflow', savedTo: 'gallery' }
+                }
+                console.warn(`[GenerateImage] SiliconFlow image download failed ${imgRes.status} — falling back to Pollinations`)
+              }
+            }
+          } catch (err: any) {
+            console.warn(`[GenerateImage] SiliconFlow failed (${err?.message || 'unknown'}) — falling back to Pollinations`)
+          }
+        }
+
+        // 2) 兜底 Pollinations：免 key，直接 GET 拿图（参数走 query，model 参数实测被忽略，不传）
         try {
-          const apiKey = process.env.SILICONFLOW_API_KEY
-          if (!apiKey) {
-            return { error: 'SILICONFLOW_API_KEY not configured. Add it to ~/.nerve/settings.json env section.' }
-          }
-
-          // Map DALL-E sizes to SiliconFlow sizes
-          const sizeMap: Record<string, string> = {
-            '1024x1024': '1024x1024',
-            '1024x1792': '960x1280',
-            '1792x1024': '768x1024',
-          }
-          const imageSize = sizeMap[size] || '1024x1024'
-
-          const res = await fetch('https://api.siliconflow.cn/v1/images/generations', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'Kwai-Kolors/Kolors',
-              prompt,
-              negative_prompt: 'blurry, bad anatomy, deformed, extra limbs, low quality, watermark, text',
-              image_size: imageSize,
-              num_inference_steps: 25,
-              guidance_scale: 7.5,
-            }),
-          })
-
+          const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${dims.w}&height=${dims.h}&nologo=true`
+          const res = await fetch(url)
           if (!res.ok) {
-            const body = await res.text().catch(() => '')
-            return { error: `SiliconFlow API error ${res.status}: ${body.slice(0, 300)}` }
+            return { error: `SiliconFlow unavailable and Pollinations returned ${res.status}. Add a SILICONFLOW_API_KEY with balance to ~/.nerve/settings.json env, or retry later.` }
           }
-
-          const json = await res.json() as any
-          const imageUrl = json?.data?.[0]?.url
-          if (!imageUrl) {
-            return { error: 'No image URL in SiliconFlow response' }
+          const buffer = Buffer.from(await res.arrayBuffer())
+          if (buffer.length < 1000) {
+            return { error: 'Image generation failed: Pollinations returned an empty or too-small body' }
           }
-
-          // Download image
-          const imgRes = await fetch(imageUrl)
-          if (!imgRes.ok) {
-            return { error: `Image download failed: ${imgRes.status}` }
-          }
-
-          const arrayBuffer = await imgRes.arrayBuffer()
-          const buffer = Buffer.from(arrayBuffer)
-          // saveImage 内部会拼一次时间戳，这里给干净名字（否则 gen-<ts>-<ts>.png 会让模型误判结果重复）
-          const filename = `gen.png`
-          const saved = saveImage(filename, buffer, prompt)
-
-          return { path: saved.path, filename: saved.filename, prompt, savedTo: 'gallery' }
+          const saved = saveImage('gen.png', buffer, prompt)
+          return { path: saved.path, filename: saved.filename, prompt, provider: 'pollinations', savedTo: 'gallery' }
         } catch (err: any) {
           return { error: `Image generation failed: ${(err.message || 'unknown').slice(0, 500)}` }
         }
