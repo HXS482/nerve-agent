@@ -4,9 +4,8 @@ import { ContentBlockView } from '../MessageBubble'
 import { StageCodeCard } from './StageCodeCard'
 import { ImageGeneration } from './ImageGeneration'
 import { WebScreen } from './WebScreen'
-import { WebSearch, type WebSource } from '../WebSearch'
 
-export type StageCardKind = 'text' | 'image' | 'file' | 'code' | 'web' | 'websearch'
+export type StageCardKind = 'text' | 'image' | 'file' | 'code' | 'web'
 
 export interface StageCardData {
   id: string
@@ -27,10 +26,6 @@ export interface StageCardData {
   label?: string
   /** kind = 'web'：源文件路径（轮内同路径迭代 Write 合并的身份键） */
   path?: string
-  /** kind = 'websearch'：搜索到的来源（WebSearch 组件的 sources） */
-  sources?: WebSource[]
-  /** kind = 'websearch'：搜索关键词（执行中显示 Searching "…"） */
-  query?: string
   timestamp: number
 }
 
@@ -61,13 +56,6 @@ export const StageCard = memo(function StageCard({ card, annotations }: { card: 
       )}
       {card.kind === 'web' && card.html != null && (
         <WebScreen title={card.label} html={card.html} />
-      )}
-      {card.kind === 'websearch' && (
-        <WebSearch
-          sources={card.sources ?? []}
-          status={card.streaming ? 'searching' : 'done'}
-          query={card.query}
-        />
       )}
       {card.kind === 'code' && card.code != null && (
         <StageCodeCard language={card.language} code={card.code} fileName={card.label} caption={card.caption ?? annotations?.join('\n')} status={card.streaming ? 'streaming' : 'complete'} />

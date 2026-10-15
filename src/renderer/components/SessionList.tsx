@@ -85,9 +85,12 @@ function SessionRow({
 
   return (
     <div>
+      {/* 不写 width:100%（w-full）：width 非 auto 时 LTR 下 margin-right 会被
+          浏览器过约束重算，-4px 失效，行块右缩成 12px 边距、左 4px——不对称。
+          块级 auto 宽 + 两侧对称负 margin 才能左右各外悬 4px（同 Usage 卡片） */}
       <div
         onClick={() => onSelect(session)}
-        className="group flex items-center gap-2 w-full text-left transition-colors cursor-pointer"
+        className="group flex items-center gap-2 text-left transition-colors cursor-pointer"
         style={{
           padding: '5px 2px',
           marginLeft: '-4px',

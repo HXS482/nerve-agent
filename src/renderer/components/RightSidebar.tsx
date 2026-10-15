@@ -523,13 +523,12 @@ export function RightSidebar() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: width + 8, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className="fixed top-1 bottom-1 right-1 z-40 flex flex-col overflow-hidden"
+          className="fixed top-0.5 bottom-0.5 right-0.5 z-40 flex flex-col overflow-hidden"
           style={{
             width,
             background: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--app-shell-radius)',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
           }}
         >
           {/* Resize handle — left edge */}

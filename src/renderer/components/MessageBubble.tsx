@@ -611,6 +611,7 @@ const MARKDOWN_COMPONENTS = {
       style={{ color: 'var(--accent-primary)', borderBottom: '1px solid transparent', transition: 'border-color 0.15s' }}
       onMouseEnter={(e) => { e.currentTarget.style.borderBottomColor = 'var(--accent-primary)' }}
       onMouseLeave={(e) => { e.currentTarget.style.borderBottomColor = 'transparent' }}
+      onClick={(e) => { e.preventDefault(); window.claude?.openInBrowser?.('url', href) }}
     >
       {children}
     </a>

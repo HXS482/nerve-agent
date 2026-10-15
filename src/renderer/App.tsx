@@ -12,6 +12,7 @@ import { ProjectPalette } from './components/ProjectPalette'
 import { Gallery } from './components/Gallery'
 import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
+import { SidebarToggleIcon } from './components/SidebarToggleIcon'
 import { ApprovalBar } from './components/ApprovalBar'
 import { SelectionActions } from './components/SelectionActions'
 import { GrokBot } from './components/GrokBot/GrokBot'
@@ -121,7 +122,7 @@ export default function App() {
         style={{
           margin: '2px',
           marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '2px',
-          marginRight: rightSidebarOpen ? `${rightSidebarWidth + 8}px` : '2px',
+          marginRight: rightSidebarOpen ? `${rightSidebarWidth + 4}px` : '2px',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--app-shell-radius)',
@@ -182,10 +183,7 @@ export default function App() {
               className="p-1.5 rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
               title="Toggle right sidebar"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M15 3v18" />
-              </svg>
+              <SidebarToggleIcon />
             </button>
             <div className="w-px h-4" style={{ background: 'var(--border-default)' }} />
             <button

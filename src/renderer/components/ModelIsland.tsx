@@ -84,14 +84,14 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
       >
         {!sidebarOpen && onToggleSidebar && (
           <>
-            {/* 与侧栏头部共用同一枚图标（SidebarToggleIcon），只在尺寸上不同 */}
+            {/* 与侧栏头部共用同一枚图标（SidebarToggleIcon），同尺寸 */}
             <span
               className="flex items-center cursor-pointer hover:text-[var(--text-on-surface)] transition-colors shrink-0"
               style={{ marginLeft: -4 }}
               onClick={(e) => { e.stopPropagation(); onToggleSidebar() }}
               title="Open sidebar"
             >
-              <SidebarToggleIcon size={12} />
+              <SidebarToggleIcon />
             </span>
             <div className="w-px h-3 shrink-0" style={{ background: 'var(--border-default)' }} />
           </>

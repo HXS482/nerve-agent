@@ -113,6 +113,17 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // 不让页面内链接把主窗口整个带走：renderer 没拦到的 <a> 会走默认导航，
+  // 无边框窗口没有后退按钮，一旦导航到外站就回不来了。域内放行（dev 热更、
+  // file:// 自身 hash 路由），站外一律转交系统浏览器。
+  window.webContents.on('will-navigate', (event, url) => {
+    const devUrl = process.env['ELECTRON_RENDERER_URL']
+    if (devUrl && url.startsWith(devUrl)) return
+    if (url.startsWith('file://') || url.startsWith('devtools://')) return
+    event.preventDefault()
+    if (/^https?:/i.test(url)) shell.openExternal(url)
+  })
+
   window.on('page-title-updated', (event) => {
     event.preventDefault()
     window.setTitle('')
