@@ -585,7 +585,17 @@ export class AgentCore {
 
     // MCP 工具名冲突解决：与内置工具或其他 MCP 工具重名时加 serverName__ 前缀
     const resolvedMcp = resolveMcpToolNames(mcpTools, new Set(Object.keys(builtinTools)))
-    const mcpToolsRecord = Object.fromEntries(resolvedMcp.map((r) => [r.finalName, r.tool]))
+    const mcpExecByKey = new Map(
+      this.mcpPool.getDetailedExecutors().map((e) => [`${e.serverName}::${e.toolName}`, e.execute] as const)
+    )
+    // 子代理（Task）拿的就是这一份：条目必须带上 execute，
+    // 否则 runSubagent 只注册 def 不注册 executor，子代理看得见调不动
+    const mcpToolsRecord = Object.fromEntries(
+      resolvedMcp.map((r) => [
+        r.finalName,
+        { ...(r.tool as Record<string, unknown>), execute: mcpExecByKey.get(`${r.serverName}::${r.toolName}`) },
+      ])
+    )
 
     const orchestratorTools = getOrchestratorTools({
       client,
@@ -658,9 +668,6 @@ export class AgentCore {
     for (const [name, tool] of Object.entries(orchestratorTools)) {
       allToolExecutors.set(name, (tool as any).execute)
     }
-    const mcpExecByKey = new Map(
-      this.mcpPool.getDetailedExecutors().map((e) => [`${e.serverName}::${e.toolName}`, e.execute] as const)
-    )
     for (const r of keptMcp) {
       const exec = mcpExecByKey.get(`${r.serverName}::${r.toolName}`)
       if (exec) allToolExecutors.set(r.finalName, exec)

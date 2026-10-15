@@ -14,6 +14,7 @@ export interface SubagentConfig {
   providerType: 'anthropic' | 'openai'
   systemPrompt: string
   projectDir: string
+  /** MCP 工具条目，需带 execute（见 agent-core buildTools）；只有元数据的条目会被跳过 */
   mcpTools?: Record<string, unknown>
   effort?: string
   maxSteps?: number
@@ -52,15 +53,26 @@ export async function runSubagent(
     toolExecutors.set(name, tool.execute)
   }
 
-  // Add MCP tools if provided
+  // Add MCP tools if provided — def 与 executor 必须成对注册：
+  // 只推 def 会让子代理「看得见调不动」（agentic-loop 报 Tool "x" not found），
+  // 模型随即改用 Bash/curl 手搓 JSON-RPC 绕路
   if (config.mcpTools) {
     for (const [name, tool] of Object.entries(config.mcpTools)) {
       const t = tool as any
+      if (typeof t.execute !== 'function') {
+        console.warn(`[Subagent] MCP tool "${name}" has no executor; skipped`)
+        continue
+      }
+      if (toolExecutors.has(name)) {
+        console.warn(`[Subagent] MCP tool "${name}" conflicts with a builtin tool; skipped`)
+        continue
+      }
       toolDefs.push({
         name,
         description: t.description || '',
         input_schema: t.parameters || t.input_schema || {},
       })
+      toolExecutors.set(name, t.execute)
     }
   }
 
