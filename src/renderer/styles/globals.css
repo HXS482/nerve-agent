@@ -4342,3 +4342,29 @@ pre.hljs {
 .selection-bar-send:active {
   transform: scale(0.94);
 }
+
+/* ===== WebSearch 组件补丁 ===== */
+
+/* 组件的 `dark:` 前缀默认跟随系统偏好，而本 app 的主题是 [data-theme] 属性。
+   这里把暗色变体重新绑定到 app 主题上，组件的 ~40 处 dark: 才能跟着 app 切主题。 */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* 组件用 font-runde（原 Next 项目里的字体），nerve 没有这个 family。
+   回退到 app 的 sans，避免 font-runde 成为无效类。 */
+@theme {
+  --font-runde: var(--font-sans);
+}
+
+[data-slot="web-search"] {
+  --web-search-ink: #868593;
+  --web-search-shine: #000;
+}
+
+/* 用属性选择器绑定，保证浅色主题下也覆盖（tailwind 的 dark: 变体管不到这里的自定义变量） */
+[data-theme="light"] [data-slot="web-search"] {
+  --web-search-shine: #000;
+}
+
+[data-theme="dark"] [data-slot="web-search"] {
+  --web-search-shine: #fff;
+}

@@ -262,6 +262,8 @@ function assistantContribution(msg: ChatMessage, isLastMsg: boolean, isLoading =
   // 生成结果落盘路径的独立副本（completedGens 会被 image 分支 shift 消费，prune 需要完整列表）
   const genResultPaths: string[] = []
   let genIdx = 0
+  // WebSearch（插件工具 websearch__web_search）：未出结果落「搜索中」卡，结果到达同 id 换成 source 列表
+  let wsIdx = 0
   // Write 写入的代码文件：用于给同消息的代码块卡关联真实文件名（不单独落卡，避免与围栏代码块重复）
   const writeFiles: { fileName: string; content: string }[] = []
   // 结果与图片块分两条 IPC 事件到达，中间空窗期占位卡必须保持生成中状态（不卸载），
@@ -284,6 +286,29 @@ function assistantContribution(msg: ChatMessage, isLastMsg: boolean, isLoading =
             } catch { /* result 不是 JSON */ }
             completedGens.push({ n, input: p.use.input, paths: genResultPaths.slice() })
           }
+          return
+        }
+        // WebSearch（插件）：命中即落卡。未出结果 → searching（组件自带环 + skeleton）；
+        // 出结果 → 解析 sources → done。插件工具名形如 'websearch__web_search'。
+        if (/(^|__)web_search$/.test(p.use.name ?? '') || p.use.name === 'WebSearch') {
+          const n = wsIdx++
+          const q = typeof p.use.input?.query === 'string' ? p.use.input.query : undefined
+          let sources: import('../components/WebSearch').WebSource[] = []
+          if (p.result && !p.result.is_error) {
+            try {
+              const rc = JSON.parse(typeof p.result.content === 'string' ? p.result.content : '{}')
+              if (Array.isArray(rc?.sources)) sources = rc.sources
+            } catch { /* result 不是 JSON */ }
+          }
+          artifactCards.push({
+            id: `${msg.id}:ws${n}`,
+            kind: 'websearch',
+            sources,
+            query: q,
+            // 无结果且不是错误 = 仍在搜（与 GenerateImage 占位卡同一套「空窗期」语义）
+            streaming: !p.result || (p.result.is_error ? false : sources.length === 0),
+            timestamp: msg.timestamp,
+          })
           return
         }
         // Write 生成 .html（可交互网页/小游戏）→ WebScreen 卡，写入完成后出现
