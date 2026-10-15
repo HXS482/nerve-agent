@@ -214,7 +214,7 @@ export class McpPool {
 
     const configs = await loadMcpServerConfigs()
     const config = configs[name]
-    if (!config || config.type !== 'stdio') return
+    if (!config || (!isRemoteMcpConfig(config) && config.type !== 'stdio')) return
 
     let client: InstanceType<typeof Client> | undefined
     try {
@@ -348,7 +348,7 @@ export class McpPool {
   async syncWithConfig(): Promise<void> {
     if (this.closed) return
     const configs = await loadMcpServerConfigs()
-    const wanted = Object.entries(configs).filter(([, c]) => c.type === 'stdio')
+    const wanted = Object.entries(configs).filter(([, c]) => isRemoteMcpConfig(c) || c.type === 'stdio')
     const wantedNames = new Set(wanted.map(([n]) => n))
 
     // 已删除的服务器：断开并清状态

@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest'
-import { resolveMcpToolNames } from '../mcp-pool'
+import { describe, it, expect, vi } from 'vitest'
+import { McpPool, resolveMcpToolNames } from '../mcp-pool'
+
+const { loadMcpServerConfigs } = vi.hoisted(() => ({ loadMcpServerConfigs: vi.fn() }))
+
+vi.mock('../settings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../settings')>()
+  return { ...actual, loadMcpServerConfigs }
+})
 
 describe('resolveMcpToolNames', () => {
   it('keeps bare names when there is no conflict', () => {
@@ -46,5 +53,57 @@ describe('resolveMcpToolNames', () => {
     ], new Set(['Read']))
     expect(out[0].tool).toEqual({ description: 'd' })
     expect(out[0].serverName).toBe('fs')
+  })
+})
+
+describe('McpPool hot sync — remote (http) servers', () => {
+  const REMOTE = { type: 'http', url: 'https://huggingface.co/mcp' }
+
+  function seedRemote(pool: McpPool, name: string, config: unknown) {
+    const client = { close: vi.fn().mockResolvedValue(undefined), listTools: vi.fn() }
+    ;(pool as any).pool.set(name, {
+      client,
+      tools: {},
+      lastHealthCheck: Date.now(),
+      drainMode: false,
+      inflightCalls: 0,
+      configJson: JSON.stringify(config),
+    })
+    return client
+  }
+
+  it('keeps an unchanged remote server connected on hot sync', async () => {
+    const pool = new McpPool()
+    const client = seedRemote(pool, 'huggingface', REMOTE)
+    loadMcpServerConfigs.mockResolvedValue({ huggingface: REMOTE })
+
+    await pool.syncWithConfig()
+
+    expect((pool as any).pool.has('huggingface')).toBe(true)
+    expect(client.close).not.toHaveBeenCalled()
+  })
+
+  it('reconnects a remote server whose config changed instead of dropping it', async () => {
+    const pool = new McpPool()
+    const client = seedRemote(pool, 'huggingface', { type: 'http', url: 'https://old.example/mcp' })
+    const connect = vi.spyOn(pool as any, 'connectWithTimeout').mockResolvedValue(undefined)
+    const next = { type: 'http', url: 'https://new.example/mcp' }
+    loadMcpServerConfigs.mockResolvedValue({ huggingface: next })
+
+    await pool.syncWithConfig()
+
+    expect(connect).toHaveBeenCalledWith('huggingface', next)
+    expect(client.close).toHaveBeenCalled()
+  })
+
+  it('reconnects a dropped remote server in the background', async () => {
+    const pool = new McpPool()
+    const fakeClient = { listTools: vi.fn().mockResolvedValue({ tools: [] }), close: vi.fn() }
+    vi.spyOn(pool as any, 'connectServer').mockResolvedValue(fakeClient)
+    loadMcpServerConfigs.mockResolvedValue({ huggingface: REMOTE })
+
+    await (pool as any).reconnect('huggingface')
+
+    expect((pool as any).pool.has('huggingface')).toBe(true)
   })
 })
