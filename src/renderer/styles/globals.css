@@ -1232,7 +1232,9 @@ button, a, input, textarea, select {
   padding: 56px 24px 90px;
 }
 .writing-card {
-  width: min(480px, 100%);
+  /* 窗口态 480px 比例合适；全屏时按 40vw 跟着放大（封顶 720px 保行长可读），
+     不再是固定宽——否则窗口越大卡越窄，比例失衡 */
+  width: min(clamp(480px, 40vw, 720px), 100%);
   max-height: 100%;
   /* 重生成清空时保持原有体量，不缩成一条加载条 */
   min-height: min(52vh, 480px);
@@ -1421,9 +1423,10 @@ button, a, input, textarea, select {
   background: var(--stage-scroll);
   border-radius: 2px;
 }
-/* 写作卡内文字比旁白层稍收敛：正文阅读排版 */
+/* 写作卡内文字比旁白层稍收敛：正文阅读排版。
+   字号随卡宽微升（窗口 12.5px，全屏 40vw 卡到上限时 14px），行长比例不变 */
 .writing-card .narration-line {
-  font-size: 12.5px;
+  font-size: clamp(12.5px, 1.05vw, 14px);
   line-height: 1.85;
   text-shadow: none;
   margin: 0 0 0.8em;
@@ -1434,7 +1437,8 @@ button, a, input, textarea, select {
 }
 .writing-card .narration-code .prose,
 .writing-card .narration-code code {
-  font-size: 11px;
+  /* 与正文 .narration-line 的 clamp 同步：窗口 11px → 全屏 12px */
+  font-size: clamp(11px, 0.9vw, 12px);
 }
 
 /* 弹幕批注：产物卡上沿的半透明小条 */
