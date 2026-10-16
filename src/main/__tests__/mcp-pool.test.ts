@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { McpPool, resolveMcpToolNames } from '../mcp-pool'
+import { McpPool, isPoolableConfig, resolveMcpToolNames } from '../mcp-pool'
 
 const { loadMcpServerConfigs } = vi.hoisted(() => ({ loadMcpServerConfigs: vi.fn() }))
 
@@ -105,5 +105,23 @@ describe('McpPool hot sync — remote (http) servers', () => {
     await (pool as any).reconnect('huggingface')
 
     expect((pool as any).pool.has('huggingface')).toBe(true)
+  })
+})
+
+// 三处（connectAll / reconnect / syncWithConfig）共用的准入判定，
+// 这里单独钉住它的语义，免得再出现「改了一处漏了两处」
+describe('isPoolableConfig', () => {
+  it('accepts a local stdio server', () => {
+    expect(isPoolableConfig({ type: 'stdio', command: 'npx' })).toBe(true)
+  })
+
+  it('accepts any config carrying a url, whatever the type string says', () => {
+    for (const type of ['http', 'sse', 'streamablehttp', 'stdio']) {
+      expect(isPoolableConfig({ type, url: 'https://huggingface.co/mcp' })).toBe(true)
+    }
+  })
+
+  it('rejects a config that is neither stdio nor remote', () => {
+    expect(isPoolableConfig({ type: 'websocket' })).toBe(false)
   })
 })

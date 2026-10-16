@@ -67,6 +67,16 @@ function buildSafeEnv(): Record<string, string> {
   return env
 }
 
+/**
+ * 池能接的服务器配置：远端（有 url）或本地 stdio。
+ * connectAll / reconnect / syncWithConfig 三处共用这一个判定——原先三份重复的
+ * `isRemoteMcpConfig(c) || c.type === 'stdio'` 漏改过两处：f4311e6 加了远端传输，
+ * 但 reconnect 与 syncWithConfig 仍是 stdio 硬判定，远端 server 一保存设置就掉线。
+ */
+export function isPoolableConfig(config: McpServerConfig): boolean {
+  return isRemoteMcpConfig(config) || config.type === 'stdio'
+}
+
 export class McpPool {
   private pool = new Map<string, PooledClient>()
   private healthTimer: ReturnType<typeof setInterval> | null = null
@@ -95,7 +105,7 @@ export class McpPool {
 
   private async connectAll(): Promise<void> {
     const configs = await loadMcpServerConfigs()
-    const entries = Object.entries(configs).filter(([, c]) => isRemoteMcpConfig(c) || c.type === 'stdio')
+    const entries = Object.entries(configs).filter(([, c]) => isPoolableConfig(c))
 
     // Connect to all servers in parallel with per-server timeout
     await Promise.allSettled(
@@ -214,7 +224,7 @@ export class McpPool {
 
     const configs = await loadMcpServerConfigs()
     const config = configs[name]
-    if (!config || (!isRemoteMcpConfig(config) && config.type !== 'stdio')) return
+    if (!config || !isPoolableConfig(config)) return
 
     let client: InstanceType<typeof Client> | undefined
     try {
@@ -348,7 +358,7 @@ export class McpPool {
   async syncWithConfig(): Promise<void> {
     if (this.closed) return
     const configs = await loadMcpServerConfigs()
-    const wanted = Object.entries(configs).filter(([, c]) => isRemoteMcpConfig(c) || c.type === 'stdio')
+    const wanted = Object.entries(configs).filter(([, c]) => isPoolableConfig(c))
     const wantedNames = new Set(wanted.map(([n]) => n))
 
     // 已删除的服务器：断开并清状态
