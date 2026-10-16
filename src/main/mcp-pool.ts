@@ -17,7 +17,14 @@ interface PooledClient {
 
 const HEALTH_CHECK_INTERVAL = 60_000
 const MAX_RECONNECT_DELAY = 30_000
-const CONNECT_TIMEOUT = 5_000
+/**
+ * 单个 server 的连接/握手超时。
+ * 原来 5s 余量为零：实测 4 个 server 并发就要 2~4.5s（github 4499ms），
+ * stdio 的 `npx -y` 首次还得下载包 —— 网络一抖动就全判失败。
+ */
+const CONNECT_TIMEOUT = 30_000
+/** ensureConnected 单次等待连接结束的上限；连接正常时几秒内就返回 */
+const CONNECT_WAIT_MAX = 30_000
 const FAILED_RETRY_INTERVAL = 60_000
 
 export interface McpServerStatus {
@@ -89,17 +96,25 @@ export class McpPool {
   private lastFailRetry = 0
 
   async ensureConnected(): Promise<McpToolEntry[]> {
-    // 有失败服务器且距上次重试超过间隔 → 后台重连（connectAll 跳过已连接的）
-    const shouldRetryFailed = this.failed.size > 0 && Date.now() - this.lastFailRetry > FAILED_RETRY_INTERVAL
+    const now = Date.now()
+    // 有失败服务器且距上次尝试超过间隔 → 才重连（connectAll 会跳过已连接的）
+    const shouldRetryFailed = this.failed.size > 0 && now - this.lastFailRetry > FAILED_RETRY_INTERVAL
+
+    // 已有连接、且没有待重试的失败 → 直接返回
     if (this.pool.size > 0 && !shouldRetryFailed) return this.getDetailedTools()
 
+    // 一个都没连上、又没到重试间隔 → 直接返回当前的（空）结果。
+    // 否则每轮 agent 循环都会重新连一遍，每轮白等一次连接超时。
+    if (this.pool.size === 0 && this.failed.size > 0 && !shouldRetryFailed) return this.getDetailedTools()
+
     if (!this.connectPromise) {
-      if (shouldRetryFailed) this.lastFailRetry = Date.now()
+      this.lastFailRetry = now
       this.connectPromise = this.connectAll().finally(() => { this.connectPromise = null })
     }
 
-    // Give it a brief window to grab fast servers, then return whatever we have
-    await Promise.race([this.connectPromise, sleep(500)])
+    // 等连接真正结束再取工具：原来的 500ms 窗口比连接本身（2~4.5s）还短，
+    // 等于当轮永远拿不到 MCP 工具。
+    await Promise.race([this.connectPromise, sleep(CONNECT_WAIT_MAX)])
     return this.getDetailedTools()
   }
 
@@ -120,35 +135,63 @@ export class McpPool {
 
     this.connecting.add(name)
     try {
-      const client = await Promise.race([
-        this.connectServer(name, config),
-        sleep(CONNECT_TIMEOUT).then(() => { throw new Error('connect timeout') }),
+      this.pool.set(name, await this.buildClient(name, config))
+      this.failed.delete(name)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // 失败的服务器跳过工具注入，但记录状态供 UI 展示与后续节流重试
+      this.failed.set(name, msg)
+      console.error(`[McpPool] "${name}" connect failed: ${msg}`)
+    } finally {
+      this.connecting.delete(name)
+    }
+  }
+
+  /**
+   * 建连 + 拉工具，返回可直接入池的 entry。connect 与 listTools 都带超时。
+   * 失败时保证不留 client 与子进程 —— connectWithTimeout / reconnect / replaceServer 共用。
+   */
+  private async buildClient(name: string, config: McpServerConfig): Promise<PooledClient> {
+    let client: InstanceType<typeof Client> | undefined
+    let connecting: Promise<InstanceType<typeof Client>> | undefined
+    try {
+      connecting = this.connectServer(name, config).then((c) => {
+        client = c
+        return c
+      })
+      const connected = await Promise.race([
+        connecting,
+        sleep(CONNECT_TIMEOUT).then(() => { throw new Error(`connect timeout (>${CONNECT_TIMEOUT}ms)`) }),
       ])
       const { tools: toolList } = await Promise.race([
-        client.listTools(),
-        sleep(CONNECT_TIMEOUT).then(() => { throw new Error('tools timeout') }),
+        connected.listTools(),
+        sleep(CONNECT_TIMEOUT).then(() => { throw new Error(`tools timeout (>${CONNECT_TIMEOUT}ms)`) }),
       ])
-      const toolsMap: Record<string, unknown> = {}
+      const tools: Record<string, unknown> = {}
       for (const tool of toolList) {
-        toolsMap[tool.name] = {
+        tools[tool.name] = {
           description: tool.description,
           parameters: tool.inputSchema,
         }
       }
-      this.pool.set(name, {
-        client,
-        tools: toolsMap,
+      return {
+        client: connected,
+        tools,
         lastHealthCheck: Date.now(),
         drainMode: false,
         inflightCalls: 0,
         configJson: JSON.stringify(config),
-      })
-      this.failed.delete(name)
+      }
     } catch (err) {
-      // 失败的服务器跳过工具注入，但记录状态供 UI 展示与后续节流重试
-      this.failed.set(name, err instanceof Error ? err.message : String(err))
-    } finally {
-      this.connecting.delete(name)
+      // 超时/失败都要收尾：连接可能仍在后台跑，子进程已经 spawn 出来了。
+      // 不关掉的话它会作为僵尸常驻（实测残留过 29 分钟）。
+      if (client) {
+        try { await client.close() } catch { /* ignore */ }
+      } else {
+        // 超时发生在 connectServer 返回之前 —— 等底层落定后立刻关掉
+        void connecting?.then((c) => c.close().catch(() => {}), () => {})
+      }
+      throw err
     }
   }
 
@@ -226,28 +269,10 @@ export class McpPool {
     const config = configs[name]
     if (!config || !isPoolableConfig(config)) return
 
-    let client: InstanceType<typeof Client> | undefined
     try {
-      client = await this.connectServer(name, config)
-      const { tools: toolList } = await client.listTools()
-      const tools: Record<string, unknown> = {}
-      for (const tool of toolList) {
-        tools[tool.name] = { description: tool.description, parameters: tool.inputSchema }
-      }
-      this.pool.set(name, {
-        client,
-        tools,
-        lastHealthCheck: Date.now(),
-        drainMode: false,
-        inflightCalls: 0,
-        configJson: JSON.stringify(config),
-      })
+      this.pool.set(name, await this.buildClient(name, config))
       this.failed.delete(name)
     } catch (err) {
-      // Close client if it was created but tools() failed
-      if (client) {
-        try { await client.close() } catch { /* ignore */ }
-      }
       if (attempt < 3 && !this.closed) {
         const delay = Math.min(1000 * Math.pow(2, attempt), MAX_RECONNECT_DELAY)
         await new Promise((r) => setTimeout(r, delay))
@@ -307,23 +332,9 @@ export class McpPool {
 
     await this.drainServer(name)
 
-    const client = await this.connectServer(name, newConfig)
-    const { tools: toolList } = await client.listTools()
-    const toolsMap: Record<string, unknown> = {}
-    for (const tool of toolList) {
-      toolsMap[tool.name] = { description: tool.description, parameters: tool.inputSchema }
-    }
-
-    const newEntry: PooledClient = {
-      client,
-      tools: toolsMap,
-      lastHealthCheck: Date.now(),
-      drainMode: false,
-      inflightCalls: 0,
-      configJson: JSON.stringify(newConfig),
-    }
-
+    const newEntry = await this.buildClient(name, newConfig)
     this.pool.set(name, newEntry)
+    this.failed.delete(name)
 
     const deadline = setTimeout(() => {
       old.client.close().catch(() => {})
