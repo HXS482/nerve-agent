@@ -71,7 +71,7 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-blur: none;
 
-  --dynamic-island-bg: rgba(19, 19, 19, 0.85);
+  --dynamic-island-bg: rgba(13, 13, 13, 0.72);
   --dynamic-island-border: rgba(255, 255, 255, 0.1);
   --dynamic-island-blur: blur(20px) saturate(180%);
 
@@ -88,7 +88,7 @@
   --window-alpha-floor: rgba(248, 249, 250, 0.01);
   --bg-background: #f8f9fa;
   --bg-mica: rgba(248,249,250,0.15);
-  --bg-mica-sidebar: rgba(248,249,250,0.6);
+  --bg-mica-sidebar: rgba(248,249,250,0.32);
   --bg-surface: #ffffff;
   --bg-surface-dim: #f0f0f0;
   --bg-surface-bright: #ffffff;
@@ -142,11 +142,11 @@
   --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.16);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.08);
 
-  --glass-bg: #ffffff;
+  --glass-bg: #f2f5f9;
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-blur: none;
 
-  --dynamic-island-bg: rgba(255, 255, 255, 0.55);
+  --dynamic-island-bg: rgba(255, 255, 255, 0.30);
   --dynamic-island-border: rgba(0, 0, 0, 0.1);
   --dynamic-island-blur: blur(20px) saturate(180%);
 
@@ -350,11 +350,11 @@ button, a, input, textarea, select {
 :root {
   --stage-paper: #030303;
   --stage-frame: #0a0a0a;
-  --stage-frost: rgba(255, 255, 255, 0.05);
+  --stage-frost: rgba(255, 255, 255, 0.03);
   --stage-ring: rgba(255, 255, 255, 0.22);
   --stage-window-border: rgba(255, 255, 255, 0.10);
-  --stage-glass: rgba(255, 255, 255, 0.05);
-  --stage-glass-strong: rgba(255, 255, 255, 0.10);
+  --stage-glass: rgba(255, 255, 255, 0.02);
+  --stage-glass-strong: rgba(255, 255, 255, 0.05);
   --stage-border-faint: rgba(255, 255, 255, 0.07);
   --stage-border: rgba(255, 255, 255, 0.10);
   --stage-border-strong: rgba(255, 255, 255, 0.18);
@@ -369,8 +369,8 @@ button, a, input, textarea, select {
   --stage-frost: rgba(0, 0, 0, 0.04);
   --stage-ring: rgba(0, 0, 0, 0.16);
   --stage-window-border: rgba(0, 0, 0, 0.12);
-  --stage-glass: rgba(255, 255, 255, 0.45);
-  --stage-glass-strong: rgba(255, 255, 255, 0.62);
+  --stage-glass: rgba(255, 255, 255, 0.12);
+  --stage-glass-strong: rgba(255, 255, 255, 0.20);
   --stage-border-faint: rgba(0, 0, 0, 0.07);
   --stage-border: rgba(0, 0, 0, 0.10);
   --stage-border-strong: rgba(0, 0, 0, 0.2);
