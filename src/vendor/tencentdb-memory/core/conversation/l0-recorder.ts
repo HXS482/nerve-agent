@@ -484,13 +484,22 @@ export async function readConversationMessagesGroupedBySessionId(
   // by recordedAt, but messages within may not be perfectly sorted by timestamp.
   allMessages.sort((a, b) => a.msg.timestamp - b.msg.timestamp);
 
-  // Truncate to newest `limit` messages (keep tail)
+  // Take the OLDEST `limit` messages after the cursor (not the newest).
+  // Taking the tail and then advancing the cursor to the newest record would
+  // skip everything in between when the backlog exceeds the window.
+  //
+  // Extend past a recorded_at boundary when several messages share the same
+  // write timestamp (a capture turn writes user+assistant together). Cutting
+  // inside that group would strand the rest behind a strict `>` cursor.
   let selected = allMessages;
   if (limit != null && limit > 0 && allMessages.length > limit) {
+    const boundary = allMessages[limit - 1].msg.recordedAtMs;
+    let end = limit;
+    while (end < allMessages.length && allMessages[end].msg.recordedAtMs === boundary) end++;
     logger?.debug?.(
-      `${TAG} readConversationMessagesGroupedBySessionId: truncating ${allMessages.length} → ${limit} (newest)`,
+      `${TAG} readConversationMessagesGroupedBySessionId: truncating ${allMessages.length} → ${end} (oldest-first)`,
     );
-    selected = allMessages.slice(-limit);
+    selected = allMessages.slice(0, end);
   }
 
   // Re-group by sessionId

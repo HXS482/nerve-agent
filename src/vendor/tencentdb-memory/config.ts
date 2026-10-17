@@ -38,6 +38,16 @@ export interface ExtractionConfig {
   enableDedup: boolean;
   /** Max memories per session (default: 20) */
   maxMemoriesPerSession: number;
+  /**
+   * 单次提取送入 LLM 的新消息条数上限（默认 10）。
+   *
+   * 注意：L1 runner 拉取 L0 的条数必须等于「本值 + maxBackgroundMessages」，
+   * 否则拉进来了却不送给模型的消息会被游标越过 —— 那是静默丢消息的来源。
+   * 积压较多时调大本值，让一次提取吃完。
+   */
+  maxMessagesPerExtraction: number;
+  /** 作为上下文背景一并送入的较早消息条数（默认 5） */
+  maxBackgroundMessages: number;
   /** LLM model for extraction, format: "provider/model" (falls back to OpenClaw default model when omitted) */
   model?: string;
 }
@@ -465,6 +475,8 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
       enabled: bool(extractionGroup, "enabled") ?? true,
       enableDedup: bool(extractionGroup, "enableDedup") ?? true,
       maxMemoriesPerSession: num(extractionGroup, "maxMemoriesPerSession") ?? 20,
+      maxMessagesPerExtraction: num(extractionGroup, "maxMessagesPerExtraction") ?? 10,
+      maxBackgroundMessages: num(extractionGroup, "maxBackgroundMessages") ?? 5,
       model: optStr(extractionGroup, "model"),
     },
     persona: {

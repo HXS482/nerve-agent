@@ -8,7 +8,7 @@
 import { TdaiCore } from '../vendor/tencentdb-memory/core/tdai-core'
 import { parseConfig } from '../vendor/tencentdb-memory/config'
 import { NerveHostAdapter } from './nerve-host-adapter'
-import type { ClaudeSettings } from './settings'
+import { resolveModelId, type ClaudeSettings } from './settings'
 import type { RecallResult, CaptureResult, CompletedTurn } from '../vendor/tencentdb-memory/core/types'
 
 const TAG = '[MemoryTdai]'
@@ -24,18 +24,47 @@ export class MemoryTdaiCore {
   }
 
   constructor(projectDir: string, settings: ClaudeSettings, sessionId?: string) {
+    const memSettings = settings.memoryTDAI
+
+    // 记忆层做 L1/L2/L3 提取时用的模型，优先级：
+    //   memoryTDAI.extraction.model（记忆层专用覆盖）
+    //   → extraction.model（顶层提取覆盖，与 baseURL/authToken 同组）
+    //   → settings.model（主模型）
+    // 每一级都要过 resolveModelId：settings.model 存的是别名（如 "fable"），
+    // 直接发出去就是 404。原先这一级还硬编码成 'deepseek-chat'，对任何非
+    // DeepSeek 端点同样是必然 404 —— 而失败只打一行 error 日志，整条
+    // L1→L2→L3 会长期静默 extracted=0。
+    const extractionModel =
+      resolveModelId(settings, memSettings?.extraction?.model) ||
+      resolveModelId(settings, settings.extraction?.model) ||
+      resolveModelId(settings, settings.model) ||
+      resolveModelId(settings, settings.defaultModel) ||
+      ''
+    if (!extractionModel) {
+      this.logger.warn(
+        '未解析出记忆提取模型（settings.model 与 memoryTDAI.extraction.model 均为空），L1 提取会失败',
+      )
+    }
+
     this.adapter = new NerveHostAdapter({
       projectDir,
       sessionId: sessionId || '',
       settings,
+      extractionModel,
     })
 
-    const memSettings = settings.memoryTDAI
     const tdaiConfig = parseConfig({
       capture: { enabled: memSettings?.enabled !== false },
       extraction: {
         enabled: memSettings?.enabled !== false,
-        model: memSettings?.extraction?.model,
+        model: extractionModel,
+        maxMessagesPerExtraction: memSettings?.extraction?.maxMessagesPerExtraction,
+        maxBackgroundMessages: memSettings?.extraction?.maxBackgroundMessages,
+      },
+      // 画像重生成阈值。不接出来的话 vendor 默认 50 —— 个人 agent 记忆增长慢，
+      // 等于画像一生成就冻住，用户后来讲的都进不去。
+      persona: {
+        triggerEveryN: memSettings?.persona?.triggerEveryN,
       },
       recall: {
         enabled: true,
@@ -63,7 +92,7 @@ export class MemoryTdaiCore {
         enabled: true,
         baseUrl: settings.extraction?.baseURL || settings.baseURL?.replace(/\/v1$/, '') || '',
         apiKey: settings.extraction?.authToken || settings.authToken || '',
-        model: settings.extraction?.model || 'deepseek-chat',
+        model: extractionModel,
       },
       storeBackend: 'sqlite',
     })

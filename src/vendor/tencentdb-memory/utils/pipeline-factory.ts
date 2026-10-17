@@ -288,6 +288,16 @@ export function createL1Runner(opts: {
       `${TAG} [l1] Session ${sessionKey}: l1_cursor=${runnerState.last_l1_cursor || "(start)"}`,
     );
 
+    // 每轮只拉「游标之后最老的一批」，条数正好等于单次可提取上限。
+    // 底层查询已改为 ASC（见 sqlite.ts queryL0ForL1 / l0-recorder）：
+    //   · DESC + LIMIT 只会看到最新 N 条，游标一跳，夹在中间的旧消息永远丢失；
+    //   · 把 maxBackgroundMessages 也算进 fetch 更糟 —— 提取器只会把最后
+    //     maxMessagesPerExtraction 条当 new，前面那些进了 prompt 也被禁止提取，
+    //     随后被游标越过。
+    // 现在这一批全部可提取，游标只覆盖真正处理过的消息，积压再多也只是多跑几轮。
+    // （背景上下文改由 previousSceneName 承接；不再从同一窗口里借。）
+    const l1FetchLimit = cfg.extraction.maxMessagesPerExtraction;
+
     try {
       let groups: Array<{ sessionId: string; messages: ConversationMessage[] }>;
       let maxRecordedAtMs = 0;
@@ -296,7 +306,7 @@ export function createL1Runner(opts: {
         const l1Cursor = runnerState.last_l1_cursor > 0
           ? runnerState.last_l1_cursor
           : undefined;
-        const dbGroups = await vectorStore.queryL0GroupedBySessionId(sessionKey, l1Cursor);
+        const dbGroups = await vectorStore.queryL0GroupedBySessionId(sessionKey, l1Cursor, l1FetchLimit);
         groups = dbGroups.map((g) => ({
           sessionId: g.sessionId,
           messages: g.messages.map((m) => ({
@@ -320,7 +330,7 @@ export function createL1Runner(opts: {
           pluginDataDir,
           runnerState.last_l1_cursor || undefined,
           logger,
-          50,
+          l1FetchLimit,
         );
         groups = jsonlGroups.map((g) => ({
           sessionId: g.sessionId,
@@ -347,6 +357,7 @@ export function createL1Runner(opts: {
       let totalExtracted = 0;
       let totalStored = 0;
       let lastSceneName: string | undefined;
+      let failedGroups = 0;
 
       for (const group of groups) {
         logger.debug?.(
@@ -362,6 +373,8 @@ export function createL1Runner(opts: {
           options: {
             enableDedup: cfg.extraction.enableDedup,
             maxMemoriesPerSession: cfg.extraction.maxMemoriesPerSession,
+            maxMessagesPerExtraction: cfg.extraction.maxMessagesPerExtraction,
+            maxBackgroundMessages: cfg.extraction.maxBackgroundMessages,
             model: cfg.extraction.model,
             previousSceneName: lastSceneName ?? (runnerState.last_scene_name || undefined),
             vectorStore,
@@ -374,11 +387,22 @@ export function createL1Runner(opts: {
           instanceId: getInstanceId?.(),
         });
 
+        if (!l1Result.success) failedGroups++;
         totalExtracted += l1Result.extractedCount;
         totalStored += l1Result.storedCount;
         if (l1Result.lastSceneName) {
           lastSceneName = l1Result.lastSceneName;
         }
+      }
+
+      // 有分组失败就整批不推进游标，并抛出去让 scheduler 走重试路径
+      // （pipeline-manager 会保留这批消息、arm 一次 L1 重试，且不推进 warmup/L2）。
+      // 推进了就等于把没提取成功的消息永久判为「已处理」—— 一次 429、一次网络抖动
+      // 足以静默吞掉整批对话，而且没有任何补偿。
+      if (failedGroups > 0) {
+        throw new Error(
+          `${failedGroups}/${groups.length} group(s) failed L1 extraction — cursor not advanced, messages kept for retry`,
+        );
       }
 
       // Use maxRecordedAtMs (write time) as cursor — always positive, TCVDB-safe

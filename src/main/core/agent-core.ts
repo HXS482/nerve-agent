@@ -19,6 +19,7 @@ import { McpPool, McpToolEntry, resolveMcpToolNames } from '../mcp-pool'
 import { getOrchestratorTools } from '../orchestrator'
 import { runAgenticLoop } from '../agentic-loop'
 import { MemoryTdaiCore } from '../memory-tdai'
+import { createMemoryTools } from '../memory-tools'
 import { OffloadBridge } from '../offload-bridge'
 import { HookRegistry } from '../hook-registry'
 import type { OutputChannel } from './output-channel'
@@ -426,16 +427,20 @@ export class AgentCore {
 
     // Memory recall via TencentDB (3s timeout to allow sqlite-vec init + FTS5 + file I/O)
     if (this.memoryCore) {
+      // 兜底定时器必须在 recall 正常返回后清掉。Promise.race 不会取消败者，
+      // 原先没有 clearTimeout，于是每轮都会在 3 秒后打印一条「timed out」，
+      // 而实际 recall 往往只要几毫秒 —— 排障时这条假日志会把人带偏。
+      let recallTimer: ReturnType<typeof setTimeout> | undefined
       try {
         const start = Date.now()
         const recall = await Promise.race([
           this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
-          new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) =>
-            setTimeout(() => {
+          new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) => {
+            recallTimer = setTimeout(() => {
               console.warn(`[Nerve] memory recall timed out after 3000ms — no memories injected this turn`)
               r({})
-            }, 3000),
-          ),
+            }, 3000)
+          }),
         ])
         const elapsed = Date.now() - start
         if (elapsed > 1000) console.log(`[Nerve] memory recall took ${elapsed}ms`)
@@ -443,6 +448,8 @@ export class AgentCore {
         if (recall.prependContext) messages.push({ role: 'user', content: recall.prependContext })
       } catch (err) {
         console.warn('[Nerve] memory recall failed:', err)
+      } finally {
+        if (recallTimer) clearTimeout(recallTimer)
       }
     }
 
@@ -582,6 +589,13 @@ export class AgentCore {
         askChannel.sendFlowItem('todo', JSON.stringify(todos), { sessionId })
       },
     } : undefined)
+
+    // TDAI 记忆工具：auto-recall 早就把它们写进了系统提示词，却从未注册 ——
+    // 模型被明确告知可以调，实际撞空。合并进 builtinTools 后，下面的
+    // 冲突判定（拿 Object.keys(builtinTools) 做保留名）与 executor 注册会一并带上。
+    if (this.memoryCore) {
+      Object.assign(builtinTools, createMemoryTools(this.memoryCore))
+    }
 
     // MCP 工具名冲突解决：与内置工具或其他 MCP 工具重名时加 serverName__ 前缀
     const resolvedMcp = resolveMcpToolNames(mcpTools, new Set(Object.keys(builtinTools)))

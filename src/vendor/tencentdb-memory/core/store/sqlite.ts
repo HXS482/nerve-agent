@@ -715,11 +715,15 @@ export class VectorStore implements IMemoryStore {
     // L0 query statements for L1 runner (newest-first + LIMIT to bound memory)
     // Sort/filter by recorded_at (write time) instead of timestamp (conversation time)
     // because L1 cursor uses recorded_at semantics. ISO 8601 string comparison preserves time order.
+    // 取「游标之后最老的一批」，而不是最新的一批。
+    // DESC + LIMIT 在积压超过窗口时会只能看到最新的 N 条；L1 处理完这一批后
+    // 把游标推到最新，夹在中间的旧消息就永远不再被查询到。ASC 保证每一轮
+    // 都从游标处顺序前进，积压再多也只是多跑几轮。
     this.stmtL0QueryAll = this.db.prepare(`
       SELECT record_id, session_key, session_id, role, message_text, recorded_at, timestamp
       FROM l0_conversations
       WHERE session_key = ?
-      ORDER BY recorded_at DESC
+      ORDER BY recorded_at ASC
       LIMIT ?
     `);
 
@@ -727,7 +731,7 @@ export class VectorStore implements IMemoryStore {
       SELECT record_id, session_key, session_id, role, message_text, recorded_at, timestamp
       FROM l0_conversations
       WHERE session_key = ? AND recorded_at > ?
-      ORDER BY recorded_at DESC
+      ORDER BY recorded_at ASC
       LIMIT ?
     `);
 
@@ -749,7 +753,10 @@ export class VectorStore implements IMemoryStore {
       // text in `content` and raw text in `content_original` / `message_text_original`.
       // FTS5 virtual tables don't support ALTER TABLE ADD COLUMN, so we must
       // drop and recreate. The data will be repopulated by `rebuildFtsIndex()`.
-      const needsFtsRebuild = this.migrateFtsTablesIfNeeded();
+      // 除了 v1→v2 迁移，分词器本身变了也要重建：索引列存的是「分词后的字符串」。
+      // 之前 @node-rs/jieba 没安装时，所有记录都是以整段原文写进 FTS 的；
+      // 装上 jieba 后查询端会按词切分，而旧索引没切 —— 旧记忆依然查不到。
+      const needsFtsRebuild = this.migrateFtsTablesIfNeeded() || this.needsJiebaReindex();
 
       // L1 FTS5 virtual table (v2 schema)
       this.db.exec(`
@@ -917,6 +924,40 @@ export class VectorStore implements IMemoryStore {
     this.db.prepare(
       "INSERT INTO embedding_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run("embedding_provider_info", JSON.stringify(meta));
+  }
+
+  /** Generic key/value read from the embedding_meta table. */
+  private readMeta(key: string): string | null {
+    try {
+      const row = this.db
+        .prepare("SELECT value FROM embedding_meta WHERE key = ?")
+        .get(key) as { value: string } | undefined;
+      return row?.value ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Generic key/value write to the embedding_meta table. */
+  private writeMeta(key: string, value: string): void {
+    this.db.prepare(
+      "INSERT INTO embedding_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run(key, value);
+  }
+
+  /**
+   * Whether the FTS index was built with a different tokenizer than the one
+   * available now (almost always: jieba was missing at build time and has
+   * since been installed). A rebuild is required because the indexed column
+   * stores the segmented text, not the raw one.
+   */
+  private needsJiebaReindex(): boolean {
+    try {
+      const current = getJieba() ? "jieba" : "fallback";
+      return this.readMeta("fts_tokenizer") !== current;
+    } catch {
+      return false;
+    }
   }
 
   /** Allowed table names for row counting (whitelist to prevent SQL injection). */
@@ -1871,14 +1912,26 @@ export class VectorStore implements IMemoryStore {
       return [];
     }
     try {
-      // Query newest-first (DESC) with LIMIT, then reverse to chronological order
+      // SQL is ASC (oldest-first from the cursor). Fetch a few extra rows so we
+      // can extend the batch past a recorded_at boundary: one capture turn
+      // writes user+assistant with the SAME recorded_at, and cutting between
+      // them would leave the remainder behind a strictly-greater cursor
+      // (`recorded_at > cursor`) — i.e. lost forever.
+      const rawLimit = limit + 8;
       let rows: Array<Record<string, unknown>>;
       if (afterRecordedAtMs && afterRecordedAtMs > 0) {
         // Convert epoch ms to ISO string for recorded_at comparison
         const afterRecordedAtIso = new Date(afterRecordedAtMs).toISOString();
-        rows = this.stmtL0QueryAfter.all(sessionKey, afterRecordedAtIso, limit) as Array<Record<string, unknown>>;
+        rows = this.stmtL0QueryAfter.all(sessionKey, afterRecordedAtIso, rawLimit) as Array<Record<string, unknown>>;
       } else {
-        rows = this.stmtL0QueryAll.all(sessionKey, limit) as Array<Record<string, unknown>>;
+        rows = this.stmtL0QueryAll.all(sessionKey, rawLimit) as Array<Record<string, unknown>>;
+      }
+
+      if (rows.length > limit) {
+        const boundary = rows[limit - 1].recorded_at;
+        let end = limit;
+        while (end < rows.length && rows[end].recorded_at === boundary) end++;
+        rows = rows.slice(0, end);
       }
 
       this.logger?.info(
@@ -1886,7 +1939,7 @@ export class VectorStore implements IMemoryStore {
         `limit=${limit}, returned ${rows.length} row(s)`,
       );
 
-      // Reverse: SQL returns newest-first (DESC), callers expect chronological order
+      // Already chronological (ASC) — no reverse needed.
       return rows.map((r) => ({
         record_id: r.record_id as string,
         session_key: r.session_key as string,
@@ -1895,7 +1948,7 @@ export class VectorStore implements IMemoryStore {
         message_text: r.message_text as string,
         recorded_at: (r.recorded_at as string) || "",
         timestamp: (r.timestamp as number) || 0,
-      })).reverse();
+      }));
     } catch (err) {
       this.logger?.warn(
         `${TAG} [L0-query] FAILED (non-fatal, returning empty): ${err instanceof Error ? err.message : String(err)}`,
@@ -2054,6 +2107,67 @@ export class VectorStore implements IMemoryStore {
     } catch (err) {
       this.logger?.warn(
         `${TAG} [L1-fts-search] FAILED (non-fatal, returning empty): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Return the most recent L1 memories, regardless of query text.
+   *
+   * Used as a recall fallback when keyword/FTS matching yields nothing —
+   * otherwise a semantically phrased question ("我是谁") injects zero
+   * memories even though the store is non-empty. Reads `l1_records`
+   * directly (source of truth, no FTS dependency).
+   *
+   * **Fault-tolerant**: returns an empty array on any error.
+   */
+  searchRecentL1(limit = 5): FtsSearchResult[] {
+    if (this.degraded) return [];
+    try {
+      const rows = this.db.prepare(`
+        SELECT record_id, content, type, priority, scene_name,
+               session_key, session_id, timestamp_str,
+               COALESCE(timestamp_start, '') AS timestamp_start,
+               COALESCE(timestamp_end, '') AS timestamp_end,
+               COALESCE(metadata_json, '{}') AS metadata_json
+        FROM l1_records
+        ORDER BY COALESCE(NULLIF(l1_records.timestamp_start, ''),
+                          NULLIF(l1_records.timestamp_str, ''), '') DESC,
+                 l1_records.rowid DESC
+        LIMIT ?
+      `).all(limit) as Array<{
+        record_id: string;
+        content: string;
+        type: string;
+        priority: number;
+        scene_name: string;
+        session_key: string;
+        session_id: string;
+        timestamp_str: string;
+        timestamp_start: string;
+        timestamp_end: string;
+        metadata_json: string;
+      }>;
+
+      return rows.map((r) => ({
+        record_id: r.record_id,
+        content: r.content,
+        type: r.type,
+        priority: r.priority,
+        scene_name: r.scene_name,
+        // No relevance score — callers must only use this as a fallback.
+        score: 0,
+        timestamp_str: r.timestamp_str,
+        timestamp_start: r.timestamp_start,
+        timestamp_end: r.timestamp_end,
+        session_key: r.session_key,
+        session_id: r.session_id,
+        metadata_json: r.metadata_json,
+      }));
+    } catch (err) {
+      this.logger?.warn(
+        `${TAG} [L1-recent] FAILED (non-fatal, returning empty): ${err instanceof Error ? err.message : String(err)}`,
       );
       return [];
     }
@@ -2253,6 +2367,10 @@ export class VectorStore implements IMemoryStore {
           );
         }
       }
+
+      // Record which tokenizer this index was built with, so we only rebuild
+      // again if it actually changes (e.g. jieba installed/removed).
+      this.writeMeta("fts_tokenizer", getJieba() ? "jieba" : "fallback");
 
       this.logger?.info(
         `${TAG} FTS5 rebuild complete: L1=${l1Count}/${l1Rows.length}, L0=${l0Count}/${l0Rows.length}`,

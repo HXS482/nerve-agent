@@ -272,6 +272,11 @@ export interface IMemoryStore {
 
   searchL1Vector(queryEmbedding: Float32Array, topK?: number, queryText?: string): MaybePromise<L1SearchResult[]>;
   searchL1Fts(ftsQuery: string, limit?: number): MaybePromise<L1FtsResult[]>;
+  /**
+   * Most recent L1 memories, ignoring the query. Optional capability used as a
+   * recall fallback when lexical matching returns nothing.
+   */
+  searchRecentL1?(limit?: number): MaybePromise<L1FtsResult[]>;
   searchL1Hybrid?(params: {
     query?: string;
     queryEmbedding?: Float32Array;

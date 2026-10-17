@@ -8,7 +8,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import OpenAI from 'openai'
 import { NerveLLMRunnerFactory } from './nerve-llm-runner'
-import type { ClaudeSettings } from './settings'
+import { resolveModelId, type ClaudeSettings } from './settings'
 import type {
   HostAdapter,
   RuntimeContext,
@@ -20,6 +20,8 @@ export interface NerveHostAdapterOptions {
   projectDir: string
   sessionId: string
   settings: ClaudeSettings
+  /** 记忆提取用的模型 id，由 MemoryTdaiCore 统一解析后传入（见 memory-tdai.ts） */
+  extractionModel?: string
 }
 
 export class NerveHostAdapter implements HostAdapter {
@@ -49,7 +51,15 @@ export class NerveHostAdapter implements HostAdapter {
       baseURL: extractionConfig?.baseURL || opts.settings.baseURL?.replace(/\/v1$/, '') || 'https://api.openai.com/v1',
       apiKey: extractionConfig?.authToken || opts.settings.authToken || '',
     })
-    const model = extractionConfig?.model || 'deepseek-chat'
+    // 不再在这里兜底一个硬编码模型名 —— 那正是 L1 提取 404 的来源。
+    // 调用方不传时，按 settings 里的覆盖项/主模型回落，且一律过 resolveModelId
+    // （settings.model 是别名如 "fable"，不是可发给网关的 id）。
+    const model =
+      opts.extractionModel ||
+      resolveModelId(opts.settings, extractionConfig?.model) ||
+      resolveModelId(opts.settings, opts.settings.model) ||
+      resolveModelId(opts.settings, opts.settings.defaultModel) ||
+      ''
 
     this.runnerFactory = new NerveLLMRunnerFactory({
       client,

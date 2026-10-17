@@ -59,7 +59,15 @@ export interface ClaudeSettings {
   memoryTDAI?: {
     enabled: boolean
     embedding?: { provider: string; baseUrl: string; apiKey: string; model: string; dimensions: number }
-    extraction?: { model?: string }
+    extraction?: {
+      model?: string
+      /** 单次提取送进 LLM 的新消息条数上限（vendor 默认 10）。积压多时调大，一次吃完 */
+      maxMessagesPerExtraction?: number
+      /** 作为上下文背景一并送入的较早消息条数（vendor 默认 5） */
+      maxBackgroundMessages?: number
+    }
+    /** 画像（L3）重生成阈值。vendor 默认攒够 50 条新记忆才更新，对个人 agent 太钝 */
+    persona?: { triggerEveryN?: number }
     recall?: { strategy: 'embedding' | 'keyword' | 'hybrid'; maxResults: number }
     offload?: { enabled: boolean; model?: string }
   }
@@ -137,6 +145,22 @@ export function loadSettings(): ClaudeSettings {
   } catch {
     return defaults
   }
+}
+
+/**
+ * 把 settings.model 解析成真正发给 provider 的模型 id。
+ *
+ * settings.json 里 `model` 存的是**别名**（如 "fable"），不是模型 id —— nerve 的
+ * model picker 会把当前选择以别名形式写回该字段。主 agent 路径经
+ * ClaudeService.resolveModel() 查 modelAliases 解析后才发出去；任何绕开它的
+ * 调用方都必须走这里，否则别名会原样丢给网关，换来一个
+ * 「magpie knows no model "fable"」的 404。
+ *
+ * 传入的若不是别名（已是完整 id），modelAliases 查不到，原样返回。
+ */
+export function resolveModelId(settings: ClaudeSettings, id?: string): string {
+  if (!id) return ''
+  return settings.modelAliases?.[id] ?? id
 }
 
 export function injectSettingsEnv(): void {

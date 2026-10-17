@@ -224,6 +224,10 @@ export async function extractL1Memories(params: {
 
   // Step 2: Batch Conflict Detection + Write
   let storedRecords: MemoryRecord[];
+  // 写入失败必须让整批算失败。原先单条写失败只 warn，批次照样 success=true，
+  // pipeline 随即推进游标 —— 那条记忆既不在 JSONL 的语义里也不在 SQLite 里，
+  // 而且再也不会被重提。宁可重试（dedup 会合并重复），也不能静默吞掉。
+  let writeFailures = 0;
 
   if (enableDedup) {
     try {
@@ -239,7 +243,7 @@ export async function extractL1Memories(params: {
         llmRunner: options.llmRunner,
       });
 
-      storedRecords = await applyDecisions({
+      const applied = await applyDecisions({
         memoriesWithIds,
         decisions,
         baseDir,
@@ -249,15 +253,26 @@ export async function extractL1Memories(params: {
         vectorStore: options.vectorStore,
         embeddingService: options.embeddingService,
       });
+      storedRecords = applied.records;
+      writeFailures = applied.failures;
     } catch (err) {
       logger?.warn?.(`${TAG} Batch dedup failed, storing all as new: ${err instanceof Error ? err.message : String(err)}`);
-      storedRecords = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
+      const applied = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
+      storedRecords = applied.records;
+      writeFailures = applied.failures;
     }
   } else {
-    storedRecords = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
+    const applied = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
+    storedRecords = applied.records;
+    writeFailures = applied.failures;
   }
 
-  logger?.info(`${TAG} Extraction complete: extracted=${extracted.length}, stored=${storedRecords.length}`);
+  const success = writeFailures === 0;
+
+  logger?.info(
+    `${TAG} Extraction complete: extracted=${extracted.length}, stored=${storedRecords.length}` +
+    (writeFailures > 0 ? `, writeFailures=${writeFailures} (batch marked failed — cursor will not advance)` : ``),
+  );
 
   // ── l1_extraction metric ──
   if (metricInstanceId && logger) {
@@ -278,13 +293,13 @@ export async function extractL1Memories(params: {
       })),
       memoriesByType,
       totalDurationMs: Date.now() - l1StartMs,
-      success: true,
-      error: null,
+      success,
+      error: success ? null : `${writeFailures} memory write(s) failed`,
     });
   }
 
   return {
-    success: true,
+    success,
     extractedCount: extracted.length,
     storedCount: storedRecords.length,
     records: storedRecords,
@@ -350,14 +365,20 @@ async function callLlmExtraction(params: {
     });
   }
 
-  return parseExtractionResult(result, logger);
+  const scenes = parseExtractionResult(result, logger);
+  if (scenes === null) {
+    // 模型没按格式回 JSON。这里当失败抛出，而不是返回空数组：空数组会被上层
+    // 当作「成功、只是 0 条记忆」，游标照常推进，整批消息就此静默消失。
+    throw new Error("LLM extraction returned unparseable output (no JSON array)");
+  }
+  return scenes;
 }
 
 /**
  * Parse the LLM's JSON response into SceneSegment array.
  * Expected format: [{scene_name, message_ids, memories: [...]}]
  */
-function parseExtractionResult(raw: string, logger?: Logger): SceneSegment[] {
+function parseExtractionResult(raw: string, logger?: Logger): SceneSegment[] | null {
   try {
     // Strip markdown code block wrappers if present
     let cleaned = raw.trim();
@@ -374,7 +395,7 @@ function parseExtractionResult(raw: string, logger?: Logger): SceneSegment[] {
       logger?.warn?.(
         `${TAG} [l1-debug] NO_JSON taskId=l1-extraction, rawLen=${raw.length}, cleanedLen=${cleaned.length}, rawFull=${JSON.stringify(rawPreview)}${raw.length > 2048 ? `…(+${raw.length - 2048})` : ""}`,
       );
-      return [];
+      return null;
     }
 
     // Sanitize control characters inside JSON string literals that LLM may produce
@@ -383,7 +404,7 @@ function parseExtractionResult(raw: string, logger?: Logger): SceneSegment[] {
 
     if (!Array.isArray(parsed)) {
       logger?.warn?.(`${TAG} Extraction response is not an array`);
-      return [];
+      return null;
     }
 
     const scenes: SceneSegment[] = [];
@@ -410,8 +431,11 @@ function parseExtractionResult(raw: string, logger?: Logger): SceneSegment[] {
 
     return scenes;
   } catch (err) {
+    // JSON.parse / sanitize 抛异常同样属于「模型没按格式回 JSON」。这里也返回
+    // null（而不是空数组）：空数组会被 callLlmExtraction 当作成功、被 pipeline
+    // 当作「这批消息处理完了」，游标照推，整批对话就此静默消失。
     logger?.warn?.(`${TAG} Failed to parse extraction result: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    return null;
   }
 }
 
@@ -431,9 +455,10 @@ async function applyDecisions(params: {
   logger?: Logger;
   vectorStore?: IMemoryStore;
   embeddingService?: EmbeddingService;
-}): Promise<MemoryRecord[]> {
+}): Promise<{ records: MemoryRecord[]; failures: number }> {
   const { memoriesWithIds, decisions, baseDir, sessionKey, sessionId, logger, vectorStore, embeddingService } = params;
   const storedRecords: MemoryRecord[] = [];
+  let failures = 0;
 
   // Build a map from record_id → decision
   const decisionMap = new Map<string, DedupDecision>();
@@ -462,15 +487,18 @@ async function applyDecisions(params: {
 
       if (record) {
         storedRecords.push(record);
+      } else {
+        failures++;
       }
     } catch (err) {
+      failures++;
       logger?.warn?.(
         `${TAG} Write failed for memory "${memoryWithId.content.slice(0, 50)}...": ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
 
-  return storedRecords;
+  return { records: storedRecords, failures };
 }
 
 /**
@@ -484,8 +512,9 @@ async function storeAllDirectly(
   logger?: Logger,
   vectorStore?: IMemoryStore,
   embeddingService?: EmbeddingService,
-): Promise<MemoryRecord[]> {
+): Promise<{ records: MemoryRecord[]; failures: number }> {
   const storedRecords: MemoryRecord[] = [];
+  let failures = 0;
 
   for (const memoryWithId of memoriesWithIds) {
     try {
@@ -505,15 +534,18 @@ async function storeAllDirectly(
       });
       if (record) {
         storedRecords.push(record);
+      } else {
+        failures++;
       }
     } catch (err) {
+      failures++;
       logger?.warn?.(
         `${TAG} Write failed for memory "${memoryWithId.content.slice(0, 50)}...": ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
 
-  return storedRecords;
+  return { records: storedRecords, failures };
 }
 
 // ============================

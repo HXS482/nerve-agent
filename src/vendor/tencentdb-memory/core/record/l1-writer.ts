@@ -226,6 +226,7 @@ export async function writeMemory(params: {
 
   // === Vector Store dual-write ===
   if (vectorStore) {
+    let vectorWriteOk = true;
     try {
       logger?.debug?.(
         `${TAG} [vec-dual-write] START id=${record.id}, contentLen=${record.content.length}, ` +
@@ -253,11 +254,18 @@ export async function writeMemory(params: {
 
       const upsertOk = await vectorStore.upsertL1(record, embedding);
       logger?.debug?.(`${TAG} [vec-dual-write] upsert result=${upsertOk} id=${record.id}`);
+      if (!upsertOk) vectorWriteOk = false;
     } catch (err) {
-      // Vector write failure should NOT block the main JSONL write
+      vectorWriteOk = false;
+      // JSONL 已经落盘，但 SQLite/FTS 没写进去 —— 而检索读的是后者。
+      // 以往这里只 warn，调用方把整批当成功、推进游标，这条记忆就永远
+      // 查不到了。标记失败，让上层按批重试（JSONL 多一行审计记录无妨）。
       logger?.warn?.(
         `${TAG} [vec-dual-write] FAILED (JSONL already written) id=${record.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+    if (!vectorWriteOk) {
+      throw new Error(`VectorStore write failed for memory ${record.id} — JSONL has it, SQLite/FTS does not`);
     }
   } else {
     logger?.debug?.(

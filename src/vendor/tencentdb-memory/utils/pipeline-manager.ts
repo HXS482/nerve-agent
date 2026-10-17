@@ -220,6 +220,13 @@ export class MemoryPipelineManager {
   // Per-session state
   private readonly sessionStates = new Map<string, PipelineSessionState>();
   private readonly sessionTimers = new Map<string, SessionTimerState>();
+  /**
+   * Sessions whose next L1 run must execute even when the in-memory counters
+   * are zero. Used by startup recovery: unprocessed messages live in L0 behind
+   * the cursor, but `conversation_count` only tracks the current process and
+   * may have been reset (or never incremented for a skipped batch).
+   */
+  private readonly forceL1Sessions = new Set<string>();
 
   // Per-session message buffer: messages accumulated since last L1 run
   private readonly messageBuffers = new Map<string, CapturedMessage[]>();
@@ -601,7 +608,11 @@ export class MemoryPipelineManager {
     const buffer = this.messageBuffers.get(sessionKey);
     const state = this.sessionStates.get(sessionKey);
 
-    if ((!buffer || buffer.length === 0) && (!state || state.conversation_count === 0)) {
+    if (
+      (!buffer || buffer.length === 0) &&
+      (!state || state.conversation_count === 0) &&
+      !this.forceL1Sessions.has(sessionKey)
+    ) {
       this.logger?.debug?.(
         `${TAG} [${sessionKey}] L1 idle timeout but no pending messages or conversations`,
       );
@@ -618,14 +629,22 @@ export class MemoryPipelineManager {
   // Internal: L1 queue
   // ============================
 
-  private enqueueL1(sessionKey: string, triggerReason: "threshold" | "idle_timeout" | "flush" = "threshold"): void {
+  private enqueueL1(
+    sessionKey: string,
+    triggerReason: "threshold" | "idle_timeout" | "flush" | "recovery" = "threshold",
+    force = false,
+  ): void {
     const timers = this.getOrCreateTimers(sessionKey);
 
     // Don't double-queue
     if (timers.l1Queued) {
       this.logger?.debug?.(`${TAG} [${sessionKey}] L1 already queued, skipping`);
+      // Still honour a later forced request — the queued task will check the flag.
+      if (force) this.forceL1Sessions.add(sessionKey);
       return;
     }
+
+    if (force) this.forceL1Sessions.add(sessionKey);
 
     // Cancel idle timer if running (threshold beat it)
     timers.l1Idle.cancel();
@@ -669,13 +688,20 @@ export class MemoryPipelineManager {
    */
   private async runL1(sessionKey: string): Promise<void> {
     const state = this.sessionStates.get(sessionKey);
-    if (!state) return;
+    if (!state) {
+      this.forceL1Sessions.delete(sessionKey);
+      return;
+    }
 
     // Drain the message buffer (take ownership, clear the shared ref)
     const buffer = this.messageBuffers.get(sessionKey) ?? [];
     this.messageBuffers.set(sessionKey, []);
 
-    if (buffer.length === 0 && state.conversation_count === 0) {
+    // Forced runs (startup recovery) must query the store even with zero
+    // in-memory counters — the backlog may predate this process.
+    const force = this.forceL1Sessions.delete(sessionKey);
+
+    if (!force && buffer.length === 0 && state.conversation_count === 0) {
       this.logger?.debug?.(`${TAG} [${sessionKey}] L1 skipped: no messages and no pending conversations`);
       return;
     }
@@ -695,14 +721,23 @@ export class MemoryPipelineManager {
     }
 
     try {
-      await this.l1Runner({
+      const l1Result = await this.l1Runner({
         sessionKey,
         msg: buffer,
         bg_msg: [], // reserved for future use
       });
 
+      // A forced recovery run that found no backlog should not advance the
+      // warm-up threshold or arm L2 — nothing was actually processed.
+      if (force && (l1Result?.processedCount ?? 0) === 0 && state.conversation_count === 0) {
+        this.logger?.debug?.(`${TAG} [${sessionKey}] Recovery L1 found no backlog — state unchanged`);
+        return;
+      }
+
+      // Report what the runner actually processed — L1 reads from the store,
+      // so `buffer` is always empty here and would always log 0.
       this.logger?.debug?.(
-        `${TAG} [${sessionKey}] L1 complete: processed ${buffer.length} messages`,
+        `${TAG} [${sessionKey}] L1 complete: processed ${l1Result?.processedCount ?? 0} messages`,
       );
     } catch (err) {
       this.logger?.error(
@@ -717,6 +752,9 @@ export class MemoryPipelineManager {
 
       // Re-arm L1 idle timer for automatic retry (with max retry limit)
       const timers = this.getOrCreateTimers(sessionKey);
+      // A forced recovery run has nothing in the in-memory buffer, so the
+      // retry gate must be re-opened explicitly.
+      if (force) this.forceL1Sessions.add(sessionKey);
       timers.l1RetryCount += 1;
       if (timers.l1RetryCount <= this.L1_MAX_RETRIES) {
         timers.l1Idle.schedule(this.L1_RETRY_DELAY_MS, () => this.onL1IdleTimeout(sessionKey));
@@ -1086,30 +1124,35 @@ export class MemoryPipelineManager {
   /**
    * Recovery: re-enqueue sessions that have pending work from before restart.
    *
-   * On restart, message buffers are empty (in-memory only). Sessions with
-   * non-zero conversation_count had messages that were either:
-   * 1. Already processed by L1 (l2_pending_l1_count > 0) → arm L2 timer
-   * 2. Never reached L1 (conversation_count > 0, messages lost) → arm L2
-   *    as best-effort recovery
+   * On restart, message buffers are empty (in-memory only), but the messages
+   * themselves are NOT lost: they live in L0 behind the per-session L1 cursor.
+   * So:
+   * 1. conversation_count > 0 → L1 never consumed them. Re-enqueue L1; it will
+   *    read the backlog straight from the store and advance the cursor only
+   *    after a successful extraction.
+   * 2. Only l2_pending_l1_count > 0 → L1 already ran; arm the L2 timer.
    *
-   * We arm L2 timers (with delay) rather than enqueuing immediately,
-   * because the pipeline may be starting during management commands.
+   * Previously case 1 zeroed conversation_count and armed L2, which marked the
+   * backlog as processed without ever extracting it — permanently losing it.
    */
   private recoverPendingSessions(): void {
     for (const [sessionKey, state] of this.sessionStates) {
-      if (state.conversation_count === 0 && state.l2_pending_l1_count === 0) continue;
-
       this.logger?.debug?.(
         `${TAG} [${sessionKey}] Recovery: conversation_count=${state.conversation_count}, ` +
-        `l2_pending_l1_count=${state.l2_pending_l1_count}, arming L2 timer`,
+        `l2_pending_l1_count=${state.l2_pending_l1_count} — probing L1 backlog`,
       );
 
-      // Reset conversation_count since we can't recover the messages
-      state.l2_pending_l1_count = Math.max(state.l2_pending_l1_count, state.conversation_count);
-      state.conversation_count = 0;
+      // Always let L1 look behind its cursor, even when the counters are zero.
+      // The counters are in-process only; a batch skipped by an older build
+      // (DESC+LIMIT window, parse failure) leaves conversation_count at 0 while
+      // real messages still sit in L0 after last_l1_cursor. A no-backlog probe
+      // is a single SQL query and does not touch warm-up or L2.
+      this.enqueueL1(sessionKey, "recovery", true);
 
-      // Arm L2 timer with delay (gives the system time to fully start)
-      this.advanceL2Timer(sessionKey);
+      // L1 already consumed something before the restart — L2 still owes a run.
+      if (state.conversation_count === 0 && state.l2_pending_l1_count > 0) {
+        this.advanceL2Timer(sessionKey);
+      }
     }
   }
 

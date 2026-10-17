@@ -439,7 +439,24 @@ async function searchByKeyword(
     }
   }
 
-  // FTS5 not available or returned no results — skip in-memory fallback to avoid O(N) full scan
+  // Nothing matched lexically. Returning [] here means a semantically phrased
+  // question ("我是谁", "你还记得我吗") injects zero memories even though the
+  // store is non-empty. Fall back to the most recent memories — bounded by
+  // maxResults, and only when the store offers the capability.
+  if (vectorStore?.searchRecentL1) {
+    try {
+      const recent = await vectorStore.searchRecentL1(maxResults);
+      if (recent.length > 0) {
+        logger?.debug?.(
+          `${TAG} [keyword] no lexical match — falling back to ${recent.length} most recent memories`,
+        );
+        return recent.map((r) => formatMemoryLine(ftsResultToFormatable(r)));
+      }
+    } catch (err) {
+      logger?.warn?.(`${TAG} [keyword] recent-memory fallback failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   logger?.debug?.(`${TAG} [keyword] FTS5 unavailable or no results, skipping keyword search`);
   return [];
 }

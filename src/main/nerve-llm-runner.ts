@@ -238,11 +238,11 @@ export class NerveLLMRunnerFactory implements LLMRunnerFactory {
   }
 
   createRunner(opts?: LLMRunnerCreateOptions): LLMRunner {
-    let model = this.model
-    if (opts?.modelRef) {
-      const slashIdx = opts.modelRef.indexOf('/')
-      model = slashIdx > 0 ? opts.modelRef.slice(slashIdx + 1) : opts.modelRef
-    }
+    // vendor 约定 modelRef 是 "provider/model"，所以上游实现会按第一个 '/' 切掉
+    // 前半段。但 nerve 直连的是 OpenAI 兼容网关，模型 id 本身含 '/'（如
+    // deepseek/deepseek-v4-pro）—— 切一刀就把合法模型名改坏，配置填得再对也 404。
+    // 这里整串透传。
+    const model = opts?.modelRef || this.model
 
     return new NerveLLMRunner({
       client: this.client,
