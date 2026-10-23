@@ -17,6 +17,8 @@ export interface AgenticLoopParams {
   toolExecutors: Map<string, (args: any) => Promise<any>>
   maxSteps?: number
   maxTokens?: number
+  /** 思考强度档位（low/medium/high/xhigh/max）；决定是否向模型请求思考及其深度 */
+  effort?: string
   abortSignal?: AbortSignal
   onTextDelta?: (text: string) => void
   onThinkingDelta?: (thinking: string) => void
@@ -58,6 +60,39 @@ const MAX_RETRIES = 2
 // 就能吃满 16K，不续跑的话整轮可能一个字都吐不出来就"完成"了。
 const MAX_CONTINUATIONS = 3
 const CONTINUE_PROMPT = '（上一轮输出达到 max_tokens 上限被截断。请从中断处继续，直接接着写或继续调用工具，不要重复已完成的部分。）'
+
+/** 思考强度 → thinking 预算（Anthropic 要求 budget_tokens ≥ 1024 且小于 max_tokens） */
+const THINKING_BUDGET_BY_EFFORT: Record<string, number> = {
+  low: 1024,
+  medium: 4096,
+  high: 8192,
+  xhigh: 12288,
+  max: 15360,
+}
+
+/**
+ * 显式请求思考。
+ *
+ * 推理模型（DeepSeek V4.1 这类）只有请求里带 thinking 才吐 reasoning；不请求时
+ * 网关返回纯文本，前端 ThinkSpot 拿不到任何思考内容。output_config.effort 是
+ * 深度旋钮，thinking 只负责开关。
+ */
+function thinkingParams(effort: string | undefined, maxTokens: number): Record<string, unknown> | null {
+  if (!effort) return null
+  const budget = THINKING_BUDGET_BY_EFFORT[effort]
+  if (!budget || maxTokens <= budget) return null
+  return {
+    thinking: { type: 'enabled', budget_tokens: budget },
+    output_config: { effort },
+  }
+}
+
+/** 网关/模型不认 thinking 参数（400/422 且错误信息指向这些字段）→ 可以退回无思考重试 */
+function isThinkingRejected(err: any): boolean {
+  const status = err?.status ?? err?.statusCode
+  if (status !== 400 && status !== 422) return false
+  return /thinking|reasoning|effort|output_config/i.test(String(err?.message || ''))
+}
 
 /** 截断那一轮里没拿到 tool_result 的 tool_use 会被 API 拒绝，续跑前剔掉 */
 function withoutUnfinishedToolUse(content: any[]): any[] {
@@ -124,6 +159,7 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
   // 上下文实际占用：最后一次 LLM 调用的 input + 该次调用的 output（区别于累计的 totalInput/totalOutput）
   let lastCallContext = 0
   let continuations = 0
+  let reasoningWanted = thinkingParams(params.effort, params.maxTokens ?? 16384) !== null
   const todoNudge: TodoNudgeState = { used: false, since: 0 }
 
   for (let step = 0; step < maxSteps; step++) {
@@ -148,7 +184,8 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
           ...msg,
           content: msg.content.map((b: any) => {
             if (b.type === 'thinking' && b.thinking) {
-              return { type: 'thinking', thinking: b.thinking, reasoning_content: b.thinking }
+              // 保留 signature 等原生字段：真 Anthropic 回放 thinking 块时缺签名会被拒
+              return { ...b, reasoning_content: b.thinking }
             }
             return b
           }),
@@ -157,7 +194,7 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
       return msg
     })
 
-    const apiParams = {
+    const apiParams: Record<string, any> = {
       model: modelId,
       max_tokens: params.maxTokens ?? 16384,
       system: system || undefined,
@@ -165,11 +202,29 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
       tools: anthropicTools as any,
     }
 
+    // 首轮按档位带 thinking；某次被网关拒绝后就对整轮关掉，别每步白撞一次 400
+    if (reasoningWanted) {
+      Object.assign(apiParams, thinkingParams(params.effort, apiParams.max_tokens))
+    }
+
     // Try streaming first — fall back to non-streaming if proxy doesn't support it
-    const result = await callWithRetry(anthropic, apiParams, abortSignal, {
-      onTextDelta,
-      onThinkingDelta,
-    })
+    let result: CallResult
+    try {
+      result = await callWithRetry(anthropic, apiParams, abortSignal, {
+        onTextDelta,
+        onThinkingDelta,
+      })
+    } catch (err) {
+      if (!reasoningWanted || !isThinkingRejected(err)) throw err
+      console.warn('[AgenticLoop] provider rejected thinking params, retrying without reasoning:', (err as Error).message)
+      reasoningWanted = false
+      delete apiParams.thinking
+      delete apiParams.output_config
+      result = await callWithRetry(anthropic, apiParams, abortSignal, {
+        onTextDelta,
+        onThinkingDelta,
+      })
+    }
 
     totalInput += result.usage.inputTokens
     totalOutput += result.usage.outputTokens
@@ -418,6 +473,7 @@ async function callStreaming(
   let currentBlock: any = null
   let currentText = ''
   let currentThinking = ''
+  let currentSignature = ''
   let currentJsonInput = ''
 
   try {
@@ -446,6 +502,7 @@ async function callStreaming(
         } else if (block.type === 'thinking') {
           currentBlock = { type: 'thinking', thinking: '' }
           currentThinking = ''
+          currentSignature = ''
         } else if (block.type === 'tool_use') {
           currentBlock = { type: 'tool_use', id: block.id, name: block.name, input: '' }
           currentJsonInput = ''
@@ -458,6 +515,8 @@ async function callStreaming(
           const t = (event.delta as any).thinking || (event.delta as any).reasoning_content || ''
           currentThinking += t
           callbacks.onThinkingDelta?.(t)
+        } else if (event.delta.type === 'signature_delta') {
+          currentSignature += (event.delta as any).signature || ''
         } else if (event.delta.type === 'input_json_delta') {
           currentJsonInput += event.delta.partial_json
         }
@@ -467,7 +526,12 @@ async function callStreaming(
             content.push({ type: 'text', text: currentText || currentBlock.text || '' })
           } else if (currentBlock.type === 'thinking') {
             const thinkingText = currentThinking || currentBlock.thinking || ''
-            content.push({ type: 'thinking', thinking: thinkingText, reasoning_content: thinkingText })
+            content.push({
+              type: 'thinking',
+              thinking: thinkingText,
+              reasoning_content: thinkingText,
+              ...(currentSignature ? { signature: currentSignature } : {}),
+            })
           } else if (currentBlock.type === 'tool_use') {
             let parsedInput: any = {}
             let jsonOk = true
@@ -490,7 +554,12 @@ async function callStreaming(
         content.push({ type: 'text', text: currentText || '' })
       } else if (currentBlock.type === 'thinking') {
         const t = currentThinking || ''
-        content.push({ type: 'thinking', thinking: t, reasoning_content: t })
+        content.push({
+          type: 'thinking',
+          thinking: t,
+          reasoning_content: t,
+          ...(currentSignature ? { signature: currentSignature } : {}),
+        })
       } else if (currentBlock.type === 'tool_use') {
         let parsedInput: any = {}
         let jsonOk = true

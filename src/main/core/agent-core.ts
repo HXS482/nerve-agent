@@ -724,6 +724,7 @@ export class AgentCore {
       tools: allToolDefs,
       toolExecutors: allToolExecutors,
       maxSteps: 50,
+      effort: this.config.effort,
       abortSignal: ctx.abort.signal,
       onTextDelta: (text) => {
         textDeltas.push(text)

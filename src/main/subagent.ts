@@ -100,6 +100,7 @@ export async function runSubagent(
       toolExecutors,
       maxSteps: config.maxSteps ?? 20,
       maxTokens: config.maxTokens,
+      effort: config.effort,
       abortSignal: localAbort.signal,
       onToolCall: config.onToolCall,
       onToolResult: config.onToolResult,
