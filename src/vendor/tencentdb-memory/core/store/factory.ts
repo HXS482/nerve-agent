@@ -44,7 +44,14 @@ export async function createStoreBundle(
   const { logger } = options;
 
   // ── BM25 local encoder ──
-  const bm25Encoder = await createBM25Encoder(config.bm25, logger);
+  // Only the TCVDB backend consumes sparse vectors. The sqlite backend does
+  // lexical retrieval with FTS5 (which has its own BM25), so loading the
+  // encoder there buys nothing and costs ~3s + hundreds of MB: the pretrained
+  // params are an 82MB JSON that gets parsed into JS objects at startup.
+  const bm25Encoder =
+    config.storeBackend === "tcvdb"
+      ? await createBM25Encoder(config.bm25, logger)
+      : undefined;
 
   switch (config.storeBackend) {
     case "tcvdb": {
@@ -73,8 +80,7 @@ export async function createStoreBundle(
 
       logger?.debug?.(
         `${TAG} Store created: backend=sqlite, dbPath=${dbPath}, dimensions=${dims}, ` +
-        `embedding=${embeddingService ? "enabled" : "disabled"}, ` +
-        `bm25=${bm25Encoder ? "enabled" : "disabled"}`,
+        `embedding=${embeddingService ? "enabled" : "disabled"}`,
       );
 
       return {
