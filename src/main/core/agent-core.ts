@@ -26,6 +26,7 @@ import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
+import { composeSystemPrompt } from './system-prompt'
 import { COST_PER_TOKEN, FALLBACK_CONTEXT_WINDOW, lookupContextWindow } from './model-constants'
 
 // 前向声明，避免循环依赖
@@ -417,13 +418,10 @@ export class AgentCore {
 
     const messages = [...history]
 
-    // 构建系统提示：soul（行为准则）+ persona（人设/说话风格），均在设置面板维护
-    let systemPrompt = this.settings.soul || ''
-    if (this.settings.persona) systemPrompt += '\n\n' + this.settings.persona
-
-    if (payload.prompt.startsWith('[语音指令]')) {
-      systemPrompt += '\n\n## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
-    }
+    // 系统提示按三层组装（见 system-prompt.ts）：
+    //   Soul（手写内核）→ Persona（记忆层演化）→ 记忆上下文（场景导航/工具说明）
+    let memoryContext = ''
+    let recalledPersona = ''
 
     // Memory recall via TencentDB (3s timeout to allow sqlite-vec init + FTS5 + file I/O)
     if (this.memoryCore) {
@@ -435,7 +433,7 @@ export class AgentCore {
         const start = Date.now()
         const recall = await Promise.race([
           this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
-          new Promise<{ prependContext?: string; appendSystemContext?: string }>((r) => {
+          new Promise<{ prependContext?: string; appendSystemContext?: string; recalledL3Persona?: string | null }>((r) => {
             recallTimer = setTimeout(() => {
               console.warn(`[Nerve] memory recall timed out after 3000ms — no memories injected this turn`)
               r({})
@@ -444,13 +442,26 @@ export class AgentCore {
         ])
         const elapsed = Date.now() - start
         if (elapsed > 1000) console.log(`[Nerve] memory recall took ${elapsed}ms`)
-        if (recall.appendSystemContext) systemPrompt += '\n\n' + recall.appendSystemContext
+        if (recall.appendSystemContext) memoryContext = recall.appendSystemContext
+        if (recall.recalledL3Persona) recalledPersona = recall.recalledL3Persona
         if (recall.prependContext) messages.push({ role: 'user', content: recall.prependContext })
       } catch (err) {
         console.warn('[Nerve] memory recall failed:', err)
       } finally {
         if (recallTimer) clearTimeout(recallTimer)
       }
+    }
+
+    let systemPrompt = composeSystemPrompt({
+      soul: this.settings.soul,
+      persona: recalledPersona,
+      memoryContext,
+    })
+
+    // 语音指令是当前轮的临时指令，接在三层之后
+    if (payload.prompt.startsWith('[语音指令]')) {
+      const voiceNote = '## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${voiceNote}` : voiceNote
     }
 
     // 构建用户消息

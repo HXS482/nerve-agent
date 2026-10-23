@@ -845,12 +845,74 @@ function SoulTab() {
   )
 }
 
+// Persona 不是手写层：TDAI 记忆层会从场景块定期演化出画像（persona.md），
+// 每轮 recall 自动注入 system prompt。这里只读展示，避免面板和记忆层两份人设打架。
 function PersonaTab() {
+  const [content, setContent] = useState('')
+  const [updated, setUpdated] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await (window as any).claude.brainScan()
+      setContent(data?.L3?.content || '')
+      setUpdated(data?.L3?.updated || '')
+    } catch (e: any) {
+      setError(e?.message || '读取失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
   return (
-    <PromptEditorTab
-      field="persona"
-      description="Agent 的人设与说话风格（system prompt 第二层，跟在 Soul 后面）。保存后立即生效。"
-    />
+    <div>
+      <Section
+        title="Persona"
+        hint="由记忆层（TDAI L3）从场景块定期演化生成，只读。记忆累积到阈值后自动重写，下一轮自动注入 system prompt。"
+      >
+        <div className="settings-card-pad" style={{ minHeight: 320 }}>
+          {loading ? (
+            <span style={{ fontSize: 12, color: 'var(--text-on-surface-variant)' }}>加载中…</span>
+          ) : error ? (
+            <span style={{ fontSize: 12, color: 'var(--text-danger)' }}>{error}</span>
+          ) : content ? (
+            <pre
+              style={{
+                margin: 0,
+                width: '100%',
+                maxHeight: 480,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                color: 'var(--text-on-surface)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                lineHeight: 1.6,
+              }}
+            >
+              {content}
+            </pre>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--text-on-surface-variant)' }}>
+              还没有生成画像 —— 记忆提取积累到触发阈值后会自动生成。
+            </span>
+          )}
+        </div>
+        <div className="settings-card-pad flex items-center justify-end" style={{ gap: 10 }}>
+          {updated && (
+            <span style={{ fontSize: 12, color: 'var(--text-on-surface-variant)' }}>
+              更新于 {new Date(updated).toLocaleString()}
+            </span>
+          )}
+          <PrimaryButton onClick={load}>刷新</PrimaryButton>
+        </div>
+      </Section>
+    </div>
   )
 }
 

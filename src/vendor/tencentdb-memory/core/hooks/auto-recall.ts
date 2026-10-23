@@ -187,17 +187,17 @@ async function performAutoRecallInner(params: {
   // Split recall context into stable and dynamic parts to optimize prompt caching.
   //
   // appendSystemContext (system prompt end — stable, cacheable):
-  //   persona, scene navigation, memory tools guide
+  //   scene navigation, memory tools guide
   //   These change infrequently; when content is identical across turns,
   //   providers with prompt caching (Anthropic/OpenAI) can cache this region.
+  //
+  // Persona 不在这里拼：它在 host 侧作为系统提示的独立第二层（Soul 之后）组装，
+  // 只通过 recalledL3Persona 返回，避免和场景导航/工具说明混成同一段上下文。
   //
   // prependContext (user prompt prefix — dynamic, per-turn):
   //   L1 relevant memories — different every turn, moved out of system prompt
   //   so it doesn't bust the system prompt cache.
   const stableParts: string[] = [];
-  if (personaContent) {
-    stableParts.push(`<user-persona>\n${personaContent}\n</user-persona>`);
-  }
   if (sceneNavigation) {
     stableParts.push(`<scene-navigation>\n${sceneNavigation}\n</scene-navigation>`);
   }
