@@ -2,7 +2,7 @@
  * Local BM25 Sparse Vector Encoder.
  *
  * Pure TypeScript replacement for the Python sidecar BM25 client.
- * Uses @tencentdb-agent-memory/tcvdb-text package for tokenization (jieba-wasm) and BM25 encoding.
+ * Uses @tencentdb-agent-memory/tcvdb-text package for tokenization (jieba) and BM25 encoding.
  * Falls back gracefully if the package is not installed.
  *
  * Two operations (same contract as the old BM25Client):
@@ -10,15 +10,18 @@
  * - `encodeQueries(texts)` — encode queries for search (IDF-based)
  */
 
-export interface SparseVector {
-  indices: number[];
-  values: number[];
-}
+/** Sparse vector: array of [token_hash, weight] pairs. */
+export type SparseVector = Array<[number, number]>;
 
-function loadBM25EncoderClass(): any {
+/**
+ * The package is ESM-only (`"type": "module"`, no `require` export condition),
+ * so it must be loaded with a dynamic `import()` — `require()` fails with
+ * ERR_PACKAGE_PATH_NOT_EXPORTED from the CJS main bundle.
+ */
+async function loadBM25EncoderClass(): Promise<any> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("@tencentdb-agent-memory/tcvdb-text").BM25Encoder;
+    const mod = await import("@tencentdb-agent-memory/tcvdb-text");
+    return mod.BM25Encoder ?? null;
   } catch {
     return null;
   }
@@ -48,14 +51,20 @@ export class BM25LocalEncoder {
   private readonly encoder: any;
   private readonly logger?: Logger;
 
-  constructor(language: "zh" | "en" = "zh", logger?: Logger) {
+  private constructor(encoder: any, logger?: Logger) {
+    this.encoder = encoder;
     this.logger = logger;
-    const EncoderClass = loadBM25EncoderClass();
+  }
+
+  /** Load the ESM package and construct an encoder for the given language. */
+  static async create(language: "zh" | "en" = "zh", logger?: Logger): Promise<BM25LocalEncoder> {
+    const EncoderClass = await loadBM25EncoderClass();
     if (!EncoderClass) {
       throw new Error(`${TAG} @tencentdb-agent-memory/tcvdb-text not installed — run: npm install @tencentdb-agent-memory/tcvdb-text`);
     }
-    this.encoder = EncoderClass.default(language);
+    const encoder = EncoderClass.default(language);
     logger?.debug?.(`${TAG} Initialized BM25 local encoder (language=${language})`);
+    return new BM25LocalEncoder(encoder, logger);
   }
 
   /**
@@ -99,16 +108,16 @@ export class BM25LocalEncoder {
  * Create a BM25LocalEncoder if BM25 is enabled in config.
  * Returns undefined if disabled — callers should check before using.
  */
-export function createBM25Encoder(
+export async function createBM25Encoder(
   config: BM25LocalConfig,
   logger?: Logger,
-): BM25LocalEncoder | undefined {
+): Promise<BM25LocalEncoder | undefined> {
   if (!config.enabled) {
     logger?.debug?.(`${TAG} BM25 sparse encoding disabled`);
     return undefined;
   }
   try {
-    return new BM25LocalEncoder(config.language ?? "zh", logger);
+    return await BM25LocalEncoder.create(config.language ?? "zh", logger);
   } catch (err) {
     logger?.warn(`${TAG} BM25 unavailable, falling back to keyword-only: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;

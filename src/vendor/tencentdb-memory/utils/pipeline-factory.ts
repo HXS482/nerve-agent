@@ -182,7 +182,7 @@ async function _doInitStores(
   let reindexReason: string | undefined;
 
   try {
-    const bundle = createStoreBundle(cfg, {
+    const bundle = await createStoreBundle(cfg, {
       dataDir: pluginDataDir,
       logger,
     });

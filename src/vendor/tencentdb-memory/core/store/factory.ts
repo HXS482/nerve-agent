@@ -37,14 +37,14 @@ export interface StoreBundle {
  * @param options.dataDir    Plugin data directory.
  * @param options.logger     Logger instance.
  */
-export function createStoreBundle(
+export async function createStoreBundle(
   config: MemoryTdaiConfig,
   options: { dataDir: string; logger?: StoreLogger },
-): StoreBundle {
+): Promise<StoreBundle> {
   const { logger } = options;
 
   // ── BM25 local encoder ──
-  const bm25Encoder = createBM25Encoder(config.bm25, logger);
+  const bm25Encoder = await createBM25Encoder(config.bm25, logger);
 
   switch (config.storeBackend) {
     case "tcvdb": {
