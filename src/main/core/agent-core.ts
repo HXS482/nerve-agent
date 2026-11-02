@@ -1031,10 +1031,19 @@ export class AgentCore {
     ctx.config = { ...ctx.config, ...patch }
   }
 
+  /**
+   * 切换项目目录。
+   *
+   * 只换「跑在哪」——`this.config.cwd`（工具 cwd）、`this.projectDir`（插件看到的项目）
+   * 和 settings 里的当前项目/最近项目。
+   *
+   * **不碰 `this.sessionStore`**：会话存储根目录固定为 `sourceDir/.nerve/sessions`，
+   * 由 `ensureSessionStore()` 惰性创建一次。原先这里 reassign 成 `<cwd>/.nerve/sessions`，
+   * 导致切到项目 B 后项目 A 的会话全部从列表里消失（文件还在，只是 store 指错了目录）。
+   */
   async setCwd(cwd: string) {
     this.config.cwd = cwd
     this.projectDir = cwd
-    this.sessionStore = await FileSessionStore.create(join(cwd, '.nerve', 'sessions'))
     const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
     try {
       const existing = existsSync(nerveSettingsPath) ? JSON.parse(readFileSync(nerveSettingsPath, 'utf-8')) : {}
