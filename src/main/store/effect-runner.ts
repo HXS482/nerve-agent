@@ -29,6 +29,8 @@ const MAX_BACKOFF_MS = 60_000
  * - `deleteEffect` 返回 `false` 表示这份 payload 已被新的一次 enqueue 覆盖（generation 变了）：
  *   此时**不是**错误、也**不是**已消费，runner 什么都不做，把行留给下一轮 dispatch 重新 claim。
  * - 失败只走 `bumpAttempt`（`min(2^attempts * 1000, 60s)` 后退避），不删除。
+ *   同样要带 `generation`：payload 在执行期间被覆盖时 `bumpAttempt` 返回 `false`，
+ *   这时什么都不做——退避额度属于新活，不能替旧活的失败买单。
  */
 export class EffectRunner {
   private readonly pollMs: number
@@ -147,7 +149,17 @@ export class EffectRunner {
       await handler(claim.payload, claim.key)
     } catch (err) {
       const backoff = Math.min(2 ** claim.attempts * 1000, MAX_BACKOFF_MS)
-      this.store.bumpAttempt(claim.seq, Date.now() + backoff)
+      // 带 generation：跑的过程中行可能已被新 payload 合并（generation + 1）。
+      // 那样这次失败是旧活的失败，不该给新活涨 attempts、也不该把新活的 due 推后。
+      const bumped = this.store.bumpAttempt(claim.seq, claim.generation, Date.now() + backoff)
+      if (!bumped) {
+        console.warn(
+          `[effect-runner] ${kind}/${claim.key} failed (attempt ${claim.attempts + 1}) but its payload was ` +
+          `replaced while running; not bumping the new payload:`,
+          err,
+        )
+        return
+      }
       console.warn(
         `[effect-runner] ${kind}/${claim.key} failed (attempt ${claim.attempts + 1}, retry in ${backoff}ms):`,
         err,

@@ -34,11 +34,19 @@ type MessageFile = {
   isImage: boolean
 }
 
-/** 落盘进 effect.payload 的内容。OutputChannel 不可序列化，所以不在其中。 */
+/**
+ * 落盘进 effect.payload 的内容。OutputChannel 不可序列化，所以不在其中。
+ *
+ * `cwd` 必须一起落盘：队列里的消息可能在崩溃后由另一次进程启动恢复执行，
+ * 那时候调用方的上下文早没了。payload 里不带 cwd，恢复出来的消息就只能跑在全局目录里
+ * ——发起它的那个会话当时在哪已经无从得知。`undefined` 表示「确实没有会话级目录」，
+ * 由 `AgentCore.sendMessage` 经 `resolveCwd` 回落到项目目录（这是正确的默认）。
+ */
 interface MessagePayload {
   sessionId: string
   message: string
   files?: MessageFile[]
+  cwd?: string
 }
 
 export class SessionRouter {
@@ -135,11 +143,14 @@ export class SessionRouter {
     message: string,
     channel: OutputChannel,
     files?: MessageFile[],
+    cwd?: string,
   ): Promise<void> {
     // 通道先记住：handler 从内存 Map 取它，SQLite 装不下。
     this.channels.set(sessionId, channel)
 
-    const payload: MessagePayload = { sessionId, message, files }
+    // cwd 一起落盘：崩溃恢复时这是唯一还记得「这条消息该跑在哪」的地方。
+    // 调用方确实没有会话级目录时传 undefined，交给 resolveCwd 回落项目目录。
+    const payload: MessagePayload = { sessionId, message, files, cwd }
     this.store.enqueueEffect(MESSAGE_KIND, sessionId, payload)
   }
 
@@ -251,8 +262,10 @@ export class SessionRouter {
 
     this.inFlightSessions.add(sessionId)
     try {
+      // cwd 原样交回去：submit 时落盘的那份，恢复执行时照样有效。
+      // 缺省/空串由 AgentCore 内部的 resolveCwd 回落项目目录。
       await this.agentCore.sendMessage(
-        { prompt: data.message, sessionId, files: data.files },
+        { prompt: data.message, sessionId, files: data.files, cwd: data.cwd },
         channel,
         ctx,
       )

@@ -382,7 +382,8 @@ export class NerveGateway extends EventEmitter {
       }
     }
 
-    this.requireRouter().submit(sessionId, msg.content, channel, files).catch((err) => {
+    // IM 适配器没有会话级目录的概念：显式传 undefined，由 resolveCwd 回落项目目录。
+    this.requireRouter().submit(sessionId, msg.content, channel, files, undefined).catch((err) => {
       const errorMsg = err instanceof Error ? err.message : String(err)
       this.log('error', `Adapter message error: ${errorMsg}`)
       adapter.send(msg.chatId, `❌ Error: ${errorMsg}`)
@@ -542,9 +543,30 @@ export class NerveGateway extends EventEmitter {
     }
     this.channels.get(client.id)!.set(sessionId, channel)
 
-    // 发送接受响应
     const runId = randomUUID()
     channel.setRunId(runId)
+
+    // **先落盘，再回 accepted。** 顺序反过来的话，在这两步之间被 kill -9 掉，
+    // 客户端已经被告知"消息受理了"，库里却没有这条消息 —— 消息就这么没了，
+    // 而这正是整个持久化队列要解决的问题。enqueueEffect 是同步 SQLite 写，
+    // 抛错则说明没写进去：这时必须回错误，绝不能回 accepted。
+    try {
+      // cwd 传 undefined：WS 协议（AgentRequestSchema.params）目前不携带会话级目录，
+      // 这里确实没有。undefined 由 AgentCore 的 resolveCwd 回落到项目目录——正确默认。
+      // （给协议加上 cwd 让它能真正带过来，是记录在案的后续项。）
+      await router.submit(sessionId, params.message, channel, params.files, undefined)
+    } catch (err) {
+      // 没落盘就绝不能回 accepted。这里只撤掉本会话刚登记的通道引用，
+      // 然后原样抛出：handleMessage 的 catch 会用同一个请求 id 回一条 ok:false 的响应。
+      const forClient = this.channels.get(client.id)
+      if (forClient) {
+        forClient.delete(sessionId)
+        if (forClient.size === 0) this.channels.delete(client.id)
+      }
+      throw err
+    }
+
+    // 已持久化，才可以回接受响应
     this.server.sendResponse(id, createResponse(id, true, {
       runId,
       sessionId,
@@ -555,13 +577,6 @@ export class NerveGateway extends EventEmitter {
     this.server.sendEvent(client.id, createEvent('lifecycle', sessionId, {
       state: 'started',
     }))
-
-    // 提交到会话队列（串行处理）
-    router.submit(sessionId, params.message, channel, params.files).catch((err) => {
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      this.log('error', `Agent error: ${errorMsg}`)
-      channel.sendError(errorMsg)
-    })
   }
 
   private async handleSessionList(client: WSClient, requestId: string) {

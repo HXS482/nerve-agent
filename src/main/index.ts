@@ -20,6 +20,7 @@ import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
 import { NerveGateway } from './gateway'
+import { createQuitDrain } from './quit-drain'
 import OpenAI from 'openai'
 
 // Suppress noisy AI SDK warnings (MiMo reasoning metadata not recognized by Anthropic SDK)
@@ -33,6 +34,11 @@ process.on('uncaughtException', (err) => {
 
 // Window control IPC — registered once, reference updated per window
 let currentMainWindow: BrowserWindow | null = null
+
+// 退出排空闸门；在 whenReady 里、依赖都建好之后赋值。before-quit 早于它就绪时
+// 这里还是 null —— 那种情况下没有队列可排，直接放行退出。
+let quitDrain: ReturnType<typeof createQuitDrain> | null = null
+
 const MAIN_WINDOW_RADIUS = 19
 const MAIN_WINDOW_SHAPE_GUARD_RADIUS = 19
 
@@ -518,6 +524,21 @@ app.whenReady().then(async () => {
       }
     }
   })
+
+  // 退出收尾：**先**排空 gateway 队列，再拆别的。
+  //
+  // gateway.stop() 做的正是有序排空（runner 先停、等 in-flight 跑完，再拆传输层）；
+  // 不调它的话，mid-turn 退出会把整个 turn 留成未消费的行，下次启动原样重放一遍。
+  // 一定要在 mcpBridge / claude 关掉**之前**：正在跑的那条消息还要用它们。
+  quitDrain = createQuitDrain({
+    quit: () => app.quit(),
+    teardown: async () => {
+      await gateway.stop().catch((err) => { console.warn('[Nerve] gateway stop failed:', err) })
+      await mcpBridge.stop().catch(() => {})
+      await memoryCore.destroy().catch(() => {})
+      await claude.close().catch(() => {})
+    },
+  })
 })
 
 app.on('window-all-closed', () => {
@@ -525,11 +546,14 @@ app.on('window-all-closed', () => {
   // 记忆引擎和 Claude 服务保持运行
   // 用户可以通过托盘图标重新打开窗口
   // 真正退出通过托盘右键菜单的"退出 Nerve"
-
-  // 应用退出前清理
-  app.on('before-quit', async () => {
-    await mcpBridge.stop().catch(() => {})
-    await memoryCore.destroy().catch(() => {})
-    await claude.close()
-  })
 })
+
+// 退出前排空持久化队列。
+//
+// 这一条从 window-all-closed 里提到顶层：托盘常驻模式下那个回调是靠不住的注册点
+// （窗口全关就退出时根本走不到），而 before-quit 迟早会来。
+//
+// 必须 preventDefault() + 自己 quit()：`before-quit` 的异步监听器**拦不住** Electron，
+// 事件回来进程就走，那些 await 等于没执行 —— 结果就是 mid-turn 退出时整个 turn
+// 在下次启动被重放一遍。收尾只跑一次、有超时、抛错也照样放行，见 quit-drain.ts。
+app.on('before-quit', (event) => { quitDrain?.handler(event) })

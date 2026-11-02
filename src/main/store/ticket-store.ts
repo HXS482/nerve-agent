@@ -24,8 +24,12 @@ export class TicketStore {
 
   /**
    * 入队一个待执行项。同 (kind, key) 视为同一待执行项：新 payload 覆盖旧 payload，
-   * 保留原 seq（队列位置）与 due，generation + 1。
+   * 保留原 seq（队列位置），generation + 1，due 收紧为 `min(旧 due, 新 due)`。
    * `ordered` 由 EffectRunner 按 kind 注册时决定，队列本身不持久化该标记。
+   *
+   * due 为什么取 min 而不是保留旧的：合并进来的是一份**新活**，旧行的 due 可能已经被
+   * 上一次失败的退避推到 60s 之后。原样保留会让这份从没跑过的新 payload 平白等一段
+   * 属于别人的退避时间。取 min 既不会把已到期的新活往后推，也不会提前别人的退避。
    *
    * 注意：合并是**无条件**的，包括合并进一行已被 claimDueEffects 取走、正在执行中的行。
    * 这是有意的——它保住队列位置（新消息不排到队尾）。但这种合并改变的是 payload，
@@ -46,9 +50,12 @@ export class TicketStore {
         .prepare('SELECT seq FROM effect WHERE kind = ? AND key = ? ORDER BY seq LIMIT 1')
         .get(kind, key) as { seq: number } | undefined
       if (existing) {
+        // MIN(旧, 新)：新 payload 不该继承旧行（可能正在退避）的更晚 due。
         this.db
-          .prepare('UPDATE effect SET payload = ?, generation = generation + 1 WHERE seq = ?')
-          .run(json, existing.seq)
+          .prepare(
+            `UPDATE effect SET payload = ?, generation = generation + 1, due = MIN(due, ?) WHERE seq = ?`,
+          )
+          .run(json, dueAt, existing.seq)
       } else {
         this.db
           .prepare('INSERT INTO effect (kind, key, payload, due) VALUES (?, ?, ?, ?)')
@@ -97,7 +104,8 @@ export class TicketStore {
         payload = JSON.parse(r.payload)
       } catch {
         // 隔离坏行：推到 24 小时后，让后面的行先跑，坏行留给人工/日志排查。
-        this.bumpAttempt(r.seq, Date.now() + 24 * 60 * 60 * 1000)
+        // 带 generation：读出来到写回去之间若被合并过，那是新 payload，不该替这条坏行挨罚。
+        this.bumpAttempt(r.seq, r.generation, Date.now() + 24 * 60 * 60 * 1000)
         console.warn(
           `[ticket-store] quarantined effect with unparseable payload (seq=${r.seq}, kind=${r.kind})`,
         )
@@ -128,11 +136,20 @@ export class TicketStore {
     return info.changes > 0
   }
 
-  /** 重排一次尝试（execute 失败时调用），等 nextDue 之后再取。 */
-  bumpAttempt(seq: number, nextDue: number): void {
-    this.db
-      .prepare('UPDATE effect SET attempts = attempts + 1, due = ? WHERE seq = ?')
-      .run(nextDue, seq)
+  /**
+   * 重排一次尝试（execute 失败时调用），等 nextDue 之后再取。
+   *
+   * 必须带上 claim 时拿到的 `generation`：`seq` 会被 coalesce 复用，只按 seq 更新的话，
+   * 一旦 payload 在执行期间被新的一次 enqueue 覆盖，失败的是**旧**活、涨 attempts 和
+   * 后退避的却是**新**活（新活根本没跑过，却要替别人的失败等最多 60s）。
+   *
+   * 返回 `false` 表示这一行已经不属于本次执行了（generation 变了），调用方什么都不该做。
+   */
+  bumpAttempt(seq: number, generation: number, nextDue: number): boolean {
+    const info = this.db
+      .prepare('UPDATE effect SET attempts = attempts + 1, due = ? WHERE seq = ? AND generation = ?')
+      .run(nextDue, seq, generation)
+    return info.changes > 0
   }
 
   rawQuery(sql: string, ...params: unknown[]): unknown[] {

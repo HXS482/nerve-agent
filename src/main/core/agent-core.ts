@@ -908,8 +908,13 @@ export class AgentCore {
 
     const pricing = COST_PER_TOKEN[this.resolveModel(cfg.model)] || { input: 0.003, output: 0.015 }
     const cost = ((usage.inputTokens) * pricing.input + (usage.outputTokens) * pricing.output) / 1000
-    // 上下文窗口按本轮**实际用的** model/provider 算（会话覆盖了 model 时不能用全局值）
-    const maxContextTokens = this.resolveContextWindow(this.resolveModel(cfg.model), cfg.provider)
+    // 上下文窗口按本轮**实际用的** model/provider 算（会话覆盖了 model 时不能用全局值）。
+    // provider 必须和 getSessionUsage 走同一条解析：cfg.provider 为空（按 model 前缀推断，
+    // 比如 gpt-* → openai）时，直接用原始 cfg.provider 会跳过
+    // providers[真实 provider].modelContextWindows，于是 WS 客户端的窗口被永久低估，
+    // 而同一会话的 getSessionUsage 报的是另一个数。
+    const providerId = this.resolveProvider(cfg)
+    const maxContextTokens = this.resolveContextWindow(this.resolveModel(cfg.model, providerId), providerId)
 
     // 循环在步边界被 break（用户取消）也会走到这里：别报成 complete
     const cancelled = ctx.abort.signal.aborted

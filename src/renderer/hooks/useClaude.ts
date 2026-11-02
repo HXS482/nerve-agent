@@ -796,7 +796,10 @@ export function useClaude() {
     setConfig(partial)
   }, [setConfig])
 
-  // 切换项目：主进程 setCwd 会换掉会话存储目录，所以要跟着重列会话
+  // 切换项目：只换「跑在哪」（工具 cwd / 项目目录）。主进程的会话存储根目录是固定的
+  // （sourceDir/.nerve/sessions），`setCwd` **不会**再换掉它 —— 换掉正是本项目修掉的
+  // bug（切到项目 B 后项目 A 的会话整批从列表里消失，文件还在、只是 store 指错了目录）。
+  // 这里重列一次只是刷新列表（会话列表不分项目）；cwd 由 syncSessions 从渲染层带回来。
   const selectProject = useCallback(async (cwd: string) => {
     await updateConfig({ cwd })
     await syncSessions()
