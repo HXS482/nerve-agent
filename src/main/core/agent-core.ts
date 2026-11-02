@@ -26,6 +26,7 @@ import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
+import { mergeConfig } from './session-config'
 import { composeSystemPrompt } from './system-prompt'
 import { COST_PER_TOKEN, FALLBACK_CONTEXT_WINDOW, lookupContextWindow } from './model-constants'
 
@@ -312,9 +313,12 @@ export class AgentCore {
       this.pluginBus.promotePending()
 
       // 解析 provider 和 model
-      const providerId = this.resolveProvider()
-      const modelId = this.resolveModel(this.config.model, providerId)
-      console.log('[AgentCore] send model:', this.config.model, '→', modelId, 'provider:', providerId)
+      // 本轮有效配置 = 全局配置 + 会话级覆盖（ctx.config）。整轮只算一次，
+      // 后面的 model / provider / effort 都读它，避免半截会话配置。
+      const cfg = mergeConfig(this.config, ctx)
+      const providerId = this.resolveProvider(cfg)
+      const modelId = this.resolveModel(cfg.model, providerId)
+      console.log('[AgentCore] send model:', cfg.model, '→', modelId, 'provider:', providerId)
 
       // 获取 client
       const { client, modelId: resolvedModelId, providerType } = await this.registry.getClientAndModel(providerId, modelId)
@@ -324,7 +328,8 @@ export class AgentCore {
       const { allToolDefs, allToolExecutors, orchestratorTools, pluginSnapshot } = await this.buildTools(
         client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls,
         (toolName, content) => { routeImagesRef.fn?.(toolName, content) },
-        sessionId
+        sessionId,
+        cfg
       )
 
       // 图片工具结果路由
@@ -364,11 +369,11 @@ export class AgentCore {
         // 运行 Agent 循环
         const result = await this.runAgentLoop(
           client, resolvedModelId, providerType, messages, systemPrompt,
-          allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals, routeImages
+          allToolDefs, allToolExecutors, ctx, channel, pendingToolCalls, pendingApprovals, routeImages, cfg
         )
 
         // 处理结果
-        await this.handleResult(result, sessionId, payload, channel, ctx, sentImages)
+        await this.handleResult(result, sessionId, payload, channel, ctx, sentImages, cfg)
       } finally {
         if (heartbeat) clearInterval(heartbeat)
         pluginSnapshot.unref()
@@ -541,8 +546,8 @@ export class AgentCore {
    * 于是 getClientAndModel 找不到就兜底到 anthropic —— 拿 Anthropic SDK 去打一个
    * OpenAI 兼容端点。现在改成按 type 从已注册的 provider 里挑。
    */
-  private resolveProvider(): string {
-    if (this.config.provider) return this.config.provider
+  private resolveProvider(cfg: ClaudeConfig = this.config): string {
+    if (cfg.provider) return cfg.provider
 
     const providers = this.registry.listProviders()
     const preferred = this.settings.defaultProvider
@@ -551,8 +556,8 @@ export class AgentCore {
 
     // model 名前缀 → provider type 推断
     const guessedType: 'openai' | 'google' | undefined =
-      /^(gpt|o[134])/.test(this.config.model) ? 'openai'
-        : this.config.model.startsWith('gemini') ? 'google'
+      /^(gpt|o[134])/.test(cfg.model) ? 'openai'
+        : cfg.model.startsWith('gemini') ? 'google'
           : undefined
 
     if (guessedType) {
@@ -576,7 +581,8 @@ export class AgentCore {
     channel: OutputChannel,
     pendingToolCalls: Map<string, { name: string; input: any }>,
     routeImages?: (toolName: string | undefined, resultContent: string) => void,
-    sessionId?: string
+    sessionId?: string,
+    cfg: ClaudeConfig = this.config
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
@@ -628,9 +634,9 @@ export class AgentCore {
       providerType,
       projectDir: this.projectDir,
       mcpTools: mcpToolsRecord,
-      effort: this.config.effort,
+      effort: cfg.effort,
       createClient: async () => {
-        const fresh = this.registry.createFreshClient(this.resolveProvider())
+        const fresh = this.registry.createFreshClient(this.resolveProvider(cfg))
         return { client: fresh.client }
       },
       onToolCall: (id, name, input) => {
@@ -719,7 +725,8 @@ export class AgentCore {
     channel: OutputChannel,
     pendingToolCalls: Map<string, { name: string; input: any }>,
     pendingApprovals: Map<string, { resolve: (approved: boolean) => void }>,
-    routeImages: (toolName: string | undefined, resultContent: string) => void
+    routeImages: (toolName: string | undefined, resultContent: string) => void,
+    cfg: ClaudeConfig = this.config
   ) {
     const textDeltas: string[] = []
     const fullThinkingParts: string[] = []
@@ -735,7 +742,7 @@ export class AgentCore {
       tools: allToolDefs,
       toolExecutors: allToolExecutors,
       maxSteps: 50,
-      effort: this.config.effort,
+      effort: cfg.effort,
       abortSignal: ctx.abort.signal,
       onTextDelta: (text) => {
         textDeltas.push(text)
@@ -752,10 +759,10 @@ export class AgentCore {
         channel.sendToolCall(id, name, input)
         if (isElectronChannel(channel)) channel.sendPetState('running-left')
       },
-      onToolApproval: this.config.permissionMode === 'bypassPermissions'
+      onToolApproval: cfg.permissionMode === 'bypassPermissions'
         ? undefined
         : async (id, name, input) => {
-            if (!this.needsApproval(name)) return true
+            if (!this.needsApproval(name, cfg.permissionMode)) return true
             const approvalId = `approve-${id}`
             if (isElectronChannel(channel)) {
               channel.sendToolApprovalRequest(approvalId, name, input, id)
@@ -814,7 +821,8 @@ export class AgentCore {
     payload: SendMessagePayload,
     channel: OutputChannel,
     ctx: SessionContext,
-    sentImages?: Set<string>
+    sentImages?: Set<string>,
+    cfg: ClaudeConfig = this.config
   ) {
     const store = await this.ensureSessionStore()
     const { usage, stopReason, textDeltas, fullThinkingParts, allToolCalls, allToolResults } = result
@@ -887,9 +895,10 @@ export class AgentCore {
       }).catch((err) => console.error('[TDAI] capture failed:', err))
     }
 
-    const pricing = COST_PER_TOKEN[this.resolveModel(this.config.model)] || { input: 0.003, output: 0.015 }
+    const pricing = COST_PER_TOKEN[this.resolveModel(cfg.model)] || { input: 0.003, output: 0.015 }
     const cost = ((usage.inputTokens) * pricing.input + (usage.outputTokens) * pricing.output) / 1000
-    const maxContextTokens = this.resolveContextWindow(this.resolveModel(this.config.model), this.config.provider)
+    // 上下文窗口按本轮**实际用的** model/provider 算（会话覆盖了 model 时不能用全局值）
+    const maxContextTokens = this.resolveContextWindow(this.resolveModel(cfg.model), cfg.provider)
 
     // 循环在步边界被 break（用户取消）也会走到这里：别报成 complete
     const cancelled = ctx.abort.signal.aborted
@@ -926,8 +935,7 @@ export class AgentCore {
   private static READ_ONLY_TOOLS = new Set(['Read', 'Glob', 'Grep'])
   private static WRITE_TOOLS = new Set(['Write', 'Edit', 'GitStageAll', 'GitCommit', 'GitPull', 'GitInit'])
 
-  private needsApproval(toolName: string): boolean {
-    const mode = this.config.permissionMode
+  private needsApproval(toolName: string, mode: ClaudeConfig['permissionMode'] = this.config.permissionMode): boolean {
     if (mode === 'bypassPermissions') return false
     if (AgentCore.READ_ONLY_TOOLS.has(toolName)) return false
     if (mode === 'auto') return false
