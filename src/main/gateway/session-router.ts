@@ -3,15 +3,19 @@
  *
  * 职责：
  * - 平台用户ID → Nerve 会话ID 映射
- * - per-session 串行队列（防止并发写入）
+ * - session 消息投递（队列落盘，由 EffectRunner 执行，保持串行语义）
  * - 会话状态管理
  */
 
 import { randomUUID } from 'crypto'
 import { join } from 'path'
+import { NullOutputChannel, type OutputChannel } from '../core/output-channel'
 import type { AgentCore } from '../core/agent-core'
-import type { OutputChannel } from '../core/output-channel'
-import type { SessionContext } from '../core/session-context'
+import type { TicketStore } from '../store/ticket-store'
+import type { EffectRunner } from '../store/effect-runner'
+
+/** effect 表里会话消息的 kind。改动它等于丢掉重启前的未执行消息。 */
+const MESSAGE_KIND = 'gateway.message'
 
 interface SessionMapping {
   sessionId: string
@@ -22,31 +26,33 @@ interface SessionMapping {
   lastActive: number
 }
 
-interface QueuedTask {
-  id: string
+type MessageFile = {
+  name: string
+  mimeType: string
+  data: string
+  size: number
+  isImage: boolean
+}
+
+/** 落盘进 effect.payload 的内容。OutputChannel 不可序列化，所以不在其中。 */
+interface MessagePayload {
   sessionId: string
   message: string
-  files?: Array<{
-    name: string
-    mimeType: string
-    data: string
-    size: number
-    isImage: boolean
-  }>
-  channel: OutputChannel
-  resolve: () => void
-  reject: (err: Error) => void
+  files?: MessageFile[]
 }
 
 export class SessionRouter {
   // 平台用户ID → 会话映射
   private mappings = new Map<string, SessionMapping>()
 
-  // sessionId → 任务队列
-  private queues = new Map<string, QueuedTask[]>()
+  // sessionId → 输出通道。只能放在内存里：通道随进程生灭，重启后旧通道已失效。
+  private channels = new Map<string, OutputChannel>()
 
-  // sessionId → 是否正在处理
-  private processing = new Set<string>()
+  // 通道缺失时（重启后恢复队列里的消息）的兜底输出口，只为了让消息能跑完不丢。
+  private readonly fallbackChannel = new NullOutputChannel()
+
+  // sessionId → 该会话是否正有一条消息在跑（activeSessionCount 用）
+  private readonly inFlightSessions = new Set<string>()
 
   // 持久化文件路径
   private mappingsPath: string
@@ -54,9 +60,37 @@ export class SessionRouter {
   // debounce 定时器
   private saveTimer: NodeJS.Timeout | null = null
 
-  constructor(private agentCore: AgentCore, dataDir: string) {
+  // start() 只做一次事
+  private started = false
+
+  constructor(
+    private agentCore: AgentCore,
+    dataDir: string,
+    private store: TicketStore,
+    private runner: EffectRunner,
+  ) {
     this.mappingsPath = join(dataDir, 'gateway-sessions.json')
     this.loadMappings()
+  }
+
+  /**
+   * 注册 queue handler 并启动 runner。
+   *
+   * 本阶段**保持串行语义**：`ordered: true` + `concurrency: 1`，同一 session 一次只跑一条，
+   * 全局也只有一条在跑。并发执行留给后续阶段。
+   */
+  start(): void {
+    // register 只做一次；runner.start() 幂等，但在 stop() 之后需要重新拉起来，
+    // 所以不能跟着 started 一起短路（Gateway 允许 stop 后再 start）。
+    if (!this.started) {
+      this.started = true
+      this.runner.register(
+        MESSAGE_KIND,
+        (payload, key) => this.handleMessage(payload, key),
+        { ordered: true, concurrency: 1 },
+      )
+    }
+    this.runner.start()
   }
 
   /**
@@ -91,61 +125,50 @@ export class SessionRouter {
   }
 
   /**
-   * 提交任务到会话队列
+   * 提交消息到会话队列
+   *
+   * 先落盘（`enqueueEffect`）再返回，由 runner 异步执行，所以这里**必须**保持 `Promise<void>`
+   * —— 调用方（gateway）在返回值上挂了 `.catch(...)`。
    */
   async submit(
     sessionId: string,
     message: string,
     channel: OutputChannel,
-    files?: Array<{ name: string; mimeType: string; data: string; size: number; isImage: boolean }>,
+    files?: MessageFile[],
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const task: QueuedTask = {
-        id: randomUUID(),
-        sessionId,
-        message,
-        files,
-        channel,
-        resolve,
-        reject,
-      }
+    // 通道先记住：handler 从内存 Map 取它，SQLite 装不下。
+    this.channels.set(sessionId, channel)
 
-      if (!this.queues.has(sessionId)) {
-        this.queues.set(sessionId, [])
-      }
-
-      this.queues.get(sessionId)!.push(task)
-
-      // 尝试处理队列
-      this.processQueue(sessionId)
-    })
+    const payload: MessagePayload = { sessionId, message, files }
+    this.store.enqueueEffect(MESSAGE_KIND, sessionId, payload)
   }
 
   /**
-   * 取消指定 session 的当前任务
+   * 取消指定 session 的排队任务与正在跑的任务
    */
   cancel(sessionId: string) {
-    // 清空该 session 的队列
-    const queue = this.queues.get(sessionId)
-    if (queue) {
-      // 拒绝所有排队的任务
-      for (const task of queue) {
-        task.reject(new Error('Cancelled'))
-      }
-      queue.length = 0
-    }
+    // 排队中的直接删掉，runner 之后 claim 不到它
+    this.store.rawExec(
+      `DELETE FROM effect WHERE kind = ? AND key = ?`,
+      MESSAGE_KIND,
+      sessionId,
+    )
 
-    // 如果该 session 正在处理，取消该 session 的 AgentCore 任务
-    if (this.processing.has(sessionId)) {
-      this.agentCore.cancelSession(sessionId)
-    }
+    // 正在跑的那次也停掉（abort 该 session 的 ctx）
+    this.agentCore.cancelSession(sessionId)
   }
 
   /**
-   * 获取活跃会话数
+   * 获取活跃会话数：还有活没干完（排队中或正在跑）的会话数
    */
   get activeSessionCount(): number {
-    return this.processing.size
+    const sessions = new Set<string>(this.inFlightSessions)
+    const rows = this.store.rawQuery(
+      `SELECT DISTINCT key FROM effect WHERE kind = ?`,
+      MESSAGE_KIND,
+    ) as Array<{ key: string }>
+    for (const row of rows) sessions.add(row.key)
+    return sessions.size
   }
 
   /**
@@ -160,7 +183,9 @@ export class SessionRouter {
    */
   deleteMapping(platform: string, userId: string) {
     const key = `${platform}:${userId}`
+    const mapping = this.mappings.get(key)
     this.mappings.delete(key)
+    if (mapping) this.channels.delete(mapping.sessionId)
     this.saveMappings()
   }
 
@@ -172,46 +197,66 @@ export class SessionRouter {
     for (const [key, mapping] of this.mappings.entries()) {
       if (now - mapping.lastActive > maxAgeMs) {
         this.mappings.delete(key)
+        // 只丢掉「没有待办」的会话通道：还有消息排在队里的会话，通道得留着才能把回复送出去。
+        if (!this.hasPendingMessages(mapping.sessionId)) {
+          this.channels.delete(mapping.sessionId)
+        }
       }
     }
     this.saveMappings()
   }
 
-  private async processQueue(sessionId: string) {
-    // 如果正在处理，跳过
-    if (this.processing.has(sessionId)) return
+  /**
+   * effect handler：真正把一条消息交给 AgentCore 跑。
+   *
+   * 成功后由 EffectRunner 调 `deleteEffect` 删行；抛错则走 `bumpAttempt` 退避重试。
+   */
+  private async handleMessage(payload: unknown, key: string): Promise<void> {
+    const data = payload as Partial<MessagePayload> | null
+    if (!data || typeof data.sessionId !== 'string' || typeof data.message !== 'string') {
+      // 认不出来的 payload 直接放过（不抛错 = 这一行会被删掉），否则它会一直堵在队头。
+      console.warn(`[SessionRouter] dropping malformed ${MESSAGE_KIND} effect (key=${key})`)
+      return
+    }
 
-    const queue = this.queues.get(sessionId)
-    if (!queue || queue.length === 0) return
+    const sessionId = data.sessionId
+    let channel = this.channels.get(sessionId)
+    if (!channel) {
+      // 预期行为：进程重启后，上一条消息的通道随旧进程一起死了，内存 Map 是空的。
+      // 消息本身在库里，不能就这么扔掉（崩溃恢复靠它），所以用兜底通道跑完，
+      // 只是这一轮的输出无处可送。用户需要的话得重发一次。
+      console.warn(
+        `[SessionRouter] no live output channel for session ${sessionId} (likely restored after a restart); ` +
+        `running the message with a null channel so it is not lost — its output cannot be delivered, ` +
+        `ask the user to resend if they need to see the reply`,
+      )
+      channel = this.fallbackChannel
+    }
 
-    // 标记为正在处理
-    this.processing.add(sessionId)
-
-    // 获取或创建会话上下文（用于多 session 并发隔离）
+    // 会话上下文用于多 session 隔离
     const sessionContextManager = this.agentCore.getSessionContextManager()
     const ctx = sessionContextManager.getOrCreate(sessionId)
 
-    while (queue.length > 0) {
-      const task = queue.shift()!
-
-      try {
-        await this.agentCore.sendMessage(
-          {
-            prompt: task.message,
-            sessionId: task.sessionId,
-            files: task.files,
-          },
-          task.channel,
-          ctx,  // 传递会话上下文
-        )
-        task.resolve()
-      } catch (err) {
-        task.reject(err instanceof Error ? err : new Error(String(err)))
-      }
+    this.inFlightSessions.add(sessionId)
+    try {
+      await this.agentCore.sendMessage(
+        { prompt: data.message, sessionId, files: data.files },
+        channel,
+        ctx,
+      )
+    } finally {
+      this.inFlightSessions.delete(sessionId)
     }
+  }
 
-    // 标记为处理完成
-    this.processing.delete(sessionId)
+  /** 该会话是否还有排队中（未执行）的消息 */
+  private hasPendingMessages(sessionId: string): boolean {
+    const rows = this.store.rawQuery(
+      `SELECT 1 AS hit FROM effect WHERE kind = ? AND key = ? LIMIT 1`,
+      MESSAGE_KIND,
+      sessionId,
+    )
+    return rows.length > 0
   }
 
   private loadMappings() {

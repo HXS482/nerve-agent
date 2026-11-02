@@ -11,11 +11,14 @@
 
 import { randomUUID } from 'crypto'
 import { EventEmitter } from 'events'
+import { join } from 'path'
 import { GatewayWSServer } from './ws-server'
 import { SessionRouter } from './session-router'
 import { WebSocketChannel } from './ws-channel'
 import { AdapterChannel } from './adapter-channel'
 import { AgentCore } from '../core/agent-core'
+import { TicketStore } from '../store/ticket-store'
+import { EffectRunner } from '../store/effect-runner'
 import { BaseAdapter } from './adapters/base-adapter'
 import { TelegramAdapter } from './adapters/telegram'
 import { DiscordAdapter } from './adapters/discord'
@@ -49,6 +52,10 @@ export class NerveGateway extends EventEmitter {
   // clientId → sessionId → WebSocketChannel
   private channels = new Map<string, Map<string, WebSocketChannel>>()
 
+  // 持久化队列：消息先落 effect 表，再由 EffectRunner 执行
+  private ticketStore: TicketStore
+  private effectRunner: EffectRunner
+
   constructor(private config: GatewayConfig) {
     super()
     // 创建 AgentCore
@@ -57,8 +64,12 @@ export class NerveGateway extends EventEmitter {
       sourceDir: config.sourceDir,
     })
 
+    // 创建持久化队列（与 SessionRouter 共用 config.dataDir）
+    this.ticketStore = TicketStore.open(join(config.dataDir, 'tickets.db'))
+    this.effectRunner = new EffectRunner(this.ticketStore)
+
     // 创建会话路由器
-    this.sessionRouter = new SessionRouter(this.agentCore, config.dataDir)
+    this.sessionRouter = new SessionRouter(this.agentCore, config.dataDir, this.ticketStore, this.effectRunner)
 
     // 创建 WebSocket 服务
     this.server = new GatewayWSServer({
@@ -191,6 +202,9 @@ export class NerveGateway extends EventEmitter {
     this.log('info', 'Starting...')
     this.startTime = Date.now()
 
+    // 启动会话队列（会先恢复重启前没跑完的消息）
+    this.sessionRouter.start()
+
     // 启动 WebSocket 服务
     await this.server.start()
 
@@ -231,6 +245,10 @@ export class NerveGateway extends EventEmitter {
     }
 
     await this.server.stop()
+
+    // 停队列：等在跑的消息收尾。库不关，Gateway 允许 stop 后再 start。
+    await this.effectRunner.stop()
+
     this.channels.clear()
     this.running = false
 
