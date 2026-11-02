@@ -15,7 +15,7 @@ const STALL_MS = 60000
 declare global {
   interface Window {
     claude: {
-      sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[], runId?: string) => Promise<void>
+      sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[], runId?: string, cwd?: string) => Promise<void>
       cancel: (sessionId?: string) => Promise<void>
       getConfig: () => Promise<ClaudeConfig>
       setModel: (model: string) => Promise<void>
@@ -195,7 +195,12 @@ export function useClaude() {
       // sessionModes 是权威源（独立持久化），sessions 列表上的 mode 只是镜像
       const sessionModes = useChatStore.getState().sessionModes
       const modeMap: Record<string, 'chat' | 'stage'> = {}
+      // 后端 listSessions 不认识 cwd（会话元数据里没有这个字段），cwd 只活在渲染层；
+      // 这里重建 Session[] 时若不带过来，同步一次就把每个会话的 cwd 抹成 undefined，
+      // 之后发消息只能回落全局目录 —— 多会话各在各的项目目录就失效了。
+      const cwdMap: Record<string, string> = {}
       for (const s of currentSessions) {
+        if (s.cwd) cwdMap[s.id] = s.cwd
         if (s.mode) modeMap[s.id] = s.mode
       }
 
@@ -207,6 +212,8 @@ export function useClaude() {
         updatedAt: rs.lastModified,
         platform: platformMap[rs.sessionId],
         mode: sessionModes[rs.sessionId] ?? modeMap[rs.sessionId],
+        // 保留渲染层已有的 cwd；旧会话/首次见到没有 → undefined，发送时回落全局
+        cwd: cwdMap[rs.sessionId],
       }))
 
       const remoteIds = new Set(remoteMapped.map((s) => s.id))
@@ -505,6 +512,8 @@ export function useClaude() {
           createdAt: Date.now(),
           updatedAt: Date.now(),
           mode: tempSession?.mode,
+          // 临时 id 摘牌换后端 id：cwd 跟着搬过去，否则新建会话第二轮起就丢了项目目录
+          cwd: tempSession?.cwd,
         })
 
         // 权威 mode 映射随 id 一起迁移
@@ -741,9 +750,16 @@ export function useClaude() {
         demoteInProgressTodos(pendingWorkspace.current)
         setLoading(false)
       }, HEARTBEAT_CHECK_MS)
+      // 会话级工作目录：拿 sid 去 sessions 里找它建会话时记下的 cwd。
+      // 两种情况查不到 → 回落全局 config.cwd（和本轮改动之前的全局行为一致）：
+      //   1. 首轮新建的临时会话：store 是 send 开头取的快照，早于上面的 addSession，
+      //      但 addSession 写的就是这个 config.cwd，结果一样；
+      //   2. 旧会话没有 cwd 字段。
+      const sessionCwd = store.sessions.find((s) => s.id === sid)?.cwd || store.config.cwd
+
       try {
         // Only pass sessionId to backend if it's a real (persisted) session
-        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files, runId)
+        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files, runId, sessionCwd)
         clearWatchdog()
       } catch (err: unknown) {
         clearWatchdog()

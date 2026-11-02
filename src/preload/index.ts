@@ -9,8 +9,14 @@ export interface SaveNerveSettingsResult {
 }
 
 const api = {
-  sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[], runId?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files, runId }),
+  /** cwd：会话级的项目目录；缺省/空串时主进程回落全局 projectDir（老会话兼容） */
+  sendMessage: (
+    prompt: string,
+    sessionId?: string,
+    files?: FileAttachment[],
+    runId?: string,
+    cwd?: string
+  ) => ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files, runId, cwd }),
   cancel: (sessionId?: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL, sessionId),
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_MODEL, model),
   setEffort: (effort: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_EFFORT, effort),

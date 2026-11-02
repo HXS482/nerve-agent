@@ -21,7 +21,15 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   gateway?.on('log', forwardLog)
   mcpBridge?.on('log', forwardLog)
   ipcMain.handle(IPC_CHANNELS.SEND_MESSAGE, async (_event, payload: SendMessagePayload) => {
-    await claude.sendMessage(payload)
+    // cwd 可能是 undefined / 空串（老会话或渲染层没取到）：原样交给 agent-core，
+    // 由 resolveCwd 统一回落全局 projectDir，这里不做路径补全
+    await claude.sendMessage({
+      prompt: payload.prompt,
+      sessionId: payload.sessionId,
+      files: payload.files,
+      runId: payload.runId,
+      cwd: payload.cwd,
+    })
   })
 
   ipcMain.handle(IPC_CHANNELS.CANCEL, (_event, sessionId?: string) => {
