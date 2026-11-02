@@ -159,6 +159,18 @@ export class SessionRouter {
   }
 
   /**
+   * 丢掉所有内存里的通道，一条不留。
+   *
+   * 由 `NerveGateway.stop()` 在排空队列**之后**调用：那次 stop 之后通道全部随连接一起死了，
+   * 留着它们只会让 stop→start 之后恢复出来的消息拿着一条死通道走"看起来正常"的路径——
+   * 输出静默丢掉、还带着过期的 runId，比走下面 `handleMessage` 里会告警的兜底路径更糟。
+   * 清空后恢复的消息会如期命中 `fallbackChannel` 并记录 warn。
+   */
+  resetChannels(): void {
+    this.channels.clear()
+  }
+
+  /**
    * 获取活跃会话数：还有活没干完（排队中或正在跑）的会话数
    */
   get activeSessionCount(): number {
@@ -246,7 +258,30 @@ export class SessionRouter {
       )
     } finally {
       this.inFlightSessions.delete(sessionId)
+      // 这条消息一旦被消费掉，该会话的通道就没用了：留着它就是一份永远不释放的引用。
+      this.evictChannelWhenConsumed(sessionId)
     }
+  }
+
+  /**
+   * 本次执行彻底收尾后，若该会话在 effect 表里已经没有排队/在跑的消息，就丢掉它的通道。
+   *
+   * 时机：`EffectRunner.execute` 是在 handler **返回之后**才调 `deleteEffect` 的，所以在 handler
+   * 里同步查库一定还能看到自己那一行，永远回收不掉。这里用两级 microtask 把检查排到
+   * 「handler resolve → execute 的续体执行 deleteEffect」之后再跑。
+   *
+   * 退化行为是安全的：万一将来 runner 在 handler 与 deleteEffect 之间又 `await` 了别的东西，
+   * 本回调就会早于删除执行——那时库里还有行，`hasPendingMessages` 为真，于是**不回收**，
+   * 只是漏收一个通道，绝不会误删还有活要干的会话通道。
+   */
+  private evictChannelWhenConsumed(sessionId: string): void {
+    queueMicrotask(() => {
+      queueMicrotask(() => {
+        // 期间又来了新消息（submit 会重新登记通道）就别动它。
+        if (this.hasPendingMessages(sessionId)) return
+        this.channels.delete(sessionId)
+      })
+    })
   }
 
   /** 该会话是否还有排队中（未执行）的消息 */

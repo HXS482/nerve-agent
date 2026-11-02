@@ -42,7 +42,8 @@ export interface GatewayConfig {
 
 export class NerveGateway extends EventEmitter {
   private server: GatewayWSServer
-  private sessionRouter: SessionRouter
+  /** 由 `ensureQueue()` 在 `start()` 里赋值；Gateway 未启动时为 null。 */
+  private sessionRouter: SessionRouter | null = null
   private agentCore: AgentCore
   private adapters = new Map<string, BaseAdapter>()
   private startTime: number = 0
@@ -52,9 +53,15 @@ export class NerveGateway extends EventEmitter {
   // clientId → sessionId → WebSocketChannel
   private channels = new Map<string, Map<string, WebSocketChannel>>()
 
-  // 持久化队列：消息先落 effect 表，再由 EffectRunner 执行
-  private ticketStore: TicketStore
-  private effectRunner: EffectRunner
+  // 持久化队列：消息先落 effect 表，再由 EffectRunner 执行。
+  //
+  // 刻意**不**在构造函数里打开：`TicketStore.open` 会 `require('better-sqlite3')`（原生模块），
+  // 绑定坏掉/架构不匹配时会在模块初始化阶段就抛错，而 `new NerveGateway(...)`
+  // （index.ts 里的构造点）外面没有任何 try/catch——那会把整个 app 启动一起带下去。
+  // 改成 `start()` 里惰性打开：坏掉的绑定只会让 Gateway 这一路功能降级（IPC 把错误回给 UI），
+  // 应用本身照常起来。三者要么一起存在、要么一起为 null。
+  private ticketStore: TicketStore | null = null
+  private effectRunner: EffectRunner | null = null
 
   constructor(private config: GatewayConfig) {
     super()
@@ -63,13 +70,6 @@ export class NerveGateway extends EventEmitter {
       projectDir: config.projectDir,
       sourceDir: config.sourceDir,
     })
-
-    // 创建持久化队列（与 SessionRouter 共用 config.dataDir）
-    this.ticketStore = TicketStore.open(join(config.dataDir, 'tickets.db'))
-    this.effectRunner = new EffectRunner(this.ticketStore)
-
-    // 创建会话路由器
-    this.sessionRouter = new SessionRouter(this.agentCore, config.dataDir, this.ticketStore, this.effectRunner)
 
     // 创建 WebSocket 服务
     this.server = new GatewayWSServer({
@@ -83,6 +83,49 @@ export class NerveGateway extends EventEmitter {
 
     // 设置断开连接处理器（清理 channels Map）
     this.server.onDisconnect(this.handleDisconnect.bind(this))
+  }
+
+  /**
+   * 惰性打开持久化队列（store + runner + router）。
+   *
+   * 幂等：已经开过就直接返回，这样 `stop()` → `start()` 不会重复打开同一个 SQLite 文件
+   * （也保证内存里的 session 映射/channel 语义不会被第二轮重新加载覆盖）。
+   *
+   * 打开失败则 log + 抛错，由调用方（IPC / worker）决定怎么报给用户——Gateway 不进入 running。
+   */
+  private ensureQueue(): void {
+    if (this.ticketStore && this.effectRunner && this.sessionRouter) return
+
+    // 先全部构造成功再赋值，避免留下"store 有、runner 没有"的半截状态。
+    let store: TicketStore
+    let runner: EffectRunner
+    let router: SessionRouter
+    try {
+      store = TicketStore.open(join(this.config.dataDir, 'tickets.db'))
+      runner = new EffectRunner(store)
+      router = new SessionRouter(this.agentCore, this.config.dataDir, store, runner)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.log('error', `Failed to open persistent queue at ${this.config.dataDir}: ${message}`)
+      throw new Error(`Failed to open persistent queue: ${message}`)
+    }
+
+    this.ticketStore = store
+    this.effectRunner = runner
+    this.sessionRouter = router
+  }
+
+  /**
+   * 取已打开的 SessionRouter。
+   *
+   * 队列只在 `start()` 里惰性打开，所以 Gateway 未启动时它是 null；调用点本来也都只在
+   * 有流量时才走到（都是 `running === true` 之后），这里显式抛错而不是静默丢弃消息。
+   */
+  private requireRouter(): SessionRouter {
+    if (!this.sessionRouter) {
+      throw new Error('Gateway is not started: persistent queue is not open')
+    }
+    return this.sessionRouter
   }
 
   private log(level: 'info' | 'warn' | 'error', message: string) {
@@ -200,10 +243,15 @@ export class NerveGateway extends EventEmitter {
     }
 
     this.log('info', 'Starting...')
+
+    // 先开队列：惰性打开 SQLite（见 ensureQueue 里为什么不在构造函数里开）。
+    // 失败会抛到这里，Gateway 不进入 running，调用方把错误报给 UI。
+    this.ensureQueue()
+
     this.startTime = Date.now()
 
     // 启动会话队列（会先恢复重启前没跑完的消息）
-    this.sessionRouter.start()
+    this.requireRouter().start()
 
     // 启动 WebSocket 服务
     await this.server.start()
@@ -234,6 +282,19 @@ export class NerveGateway extends EventEmitter {
 
     this.log('info', 'Stopping...')
 
+    // 顺序很重要：先把队列排空，**再**拆传输层。
+    // 反过来的话，正在跑的那条消息会在 server.stop()（关掉所有 WS 客户端）
+    // 和 adapter.disconnect() 之后才继续执行——它写出去的 sendEvent/sendText
+    // 全是静默空操作，handler 正常返回，runner 接着 deleteEffect 把这一行消费掉，
+    // 于是这次停止就永久丢掉了消息的尾巴（既没送到、也不会重试）。
+    // effectRunner.stop() 只等"已经发起的那一次执行"结束，不会长出新活。
+    if (this.effectRunner) await this.effectRunner.stop()
+
+    // 排空之后再丢通道：通道随着这次 stop 一起死了，留着它们只会让
+    // stop→start 之后恢复出来的消息拿一条死通道走"看起来正常"的路径（输出静默丢弃、
+    // runId 还是过期的），比走会话里会告警的 NullOutputChannel 兜底更糟。
+    this.sessionRouter?.resetChannels()
+
     // 停止所有适配器
     for (const [name, adapter] of this.adapters.entries()) {
       try {
@@ -246,8 +307,8 @@ export class NerveGateway extends EventEmitter {
 
     await this.server.stop()
 
-    // 停队列：等在跑的消息收尾。库不关，Gateway 允许 stop 后再 start。
-    await this.effectRunner.stop()
+    // 库（ticketStore）不关：stop → start 是支持的，关掉之后下一次 open 要重来一遍，
+    // 而且已关闭的 better-sqlite3 句柄再用就抛错。进程级退出直接随进程释放。
 
     this.channels.clear()
     this.running = false
@@ -274,7 +335,7 @@ export class NerveGateway extends EventEmitter {
     return {
       status: this.running ? 'healthy' as const : 'unhealthy' as const,
       uptime: this.running ? Date.now() - this.startTime : 0,
-      activeSessions: this.sessionRouter.activeSessionCount,
+      activeSessions: this.sessionRouter?.activeSessionCount ?? 0,
       memoryUsage: process.memoryUsage(),
       clientCount: this.server.clientCount,
       adapters: adapterStatus,
@@ -289,13 +350,13 @@ export class NerveGateway extends EventEmitter {
   }
 
   getSessionMappings() {
-    return this.sessionRouter.getAllMappings()
+    return this.sessionRouter?.getAllMappings() ?? []
   }
 
   private async handleAdapterMessage(adapter: BaseAdapter, msg: IncomingMessage) {
     this.log('info', `Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)
 
-    const sessionId = this.sessionRouter.resolve(adapter.platform, msg.userId, msg.chatId)
+    const sessionId = this.requireRouter().resolve(adapter.platform, msg.userId, msg.chatId)
     const channel = new AdapterChannel(adapter, msg.chatId, msg.messageId)
 
     // 处理附件：下载图片并转为 FileAttachment[]
@@ -321,7 +382,7 @@ export class NerveGateway extends EventEmitter {
       }
     }
 
-    this.sessionRouter.submit(sessionId, msg.content, channel, files).catch((err) => {
+    this.requireRouter().submit(sessionId, msg.content, channel, files).catch((err) => {
       const errorMsg = err instanceof Error ? err.message : String(err)
       this.log('error', `Adapter message error: ${errorMsg}`)
       adapter.send(msg.chatId, `❌ Error: ${errorMsg}`)
@@ -469,7 +530,8 @@ export class NerveGateway extends EventEmitter {
     // Gateway 模式下，使用 client.deviceId 或 client.id 作为用户标识
     const userId = client.deviceId || client.id
     const chatId = `gateway:${client.id}`
-    const sessionId = params.sessionId || this.sessionRouter.resolve('gateway', userId, chatId)
+    const router = this.requireRouter()
+    const sessionId = params.sessionId || router.resolve('gateway', userId, chatId)
 
     // 创建 WebSocketChannel
     const channel = new WebSocketChannel(this.server, client.id, sessionId)
@@ -495,7 +557,7 @@ export class NerveGateway extends EventEmitter {
     }))
 
     // 提交到会话队列（串行处理）
-    this.sessionRouter.submit(sessionId, params.message, channel, params.files).catch((err) => {
+    router.submit(sessionId, params.message, channel, params.files).catch((err) => {
       const errorMsg = err instanceof Error ? err.message : String(err)
       this.log('error', `Agent error: ${errorMsg}`)
       channel.sendError(errorMsg)
@@ -507,7 +569,7 @@ export class NerveGateway extends EventEmitter {
     const allSessions = await this.agentCore.listSessions()
     const clientSessions = allSessions.filter(session => {
       // 检查该会话是否与当前客户端关联
-      const mappings = this.sessionRouter.getAllMappings()
+      const mappings = this.getSessionMappings()
       return mappings.some(m => m.sessionId === session.sessionId && m.platform === 'gateway' && m.userId === (client.deviceId || client.id))
     })
     this.server.sendResponse(client.id, createResponse(requestId, true, clientSessions))
@@ -515,7 +577,7 @@ export class NerveGateway extends EventEmitter {
 
   private async handleSessionDelete(client: WSClient, request: { params: { sessionId: string } }, requestId: string) {
     // 检查该会话是否属于当前客户端
-    const mappings = this.sessionRouter.getAllMappings()
+    const mappings = this.getSessionMappings()
     const sessionMapping = mappings.find(m => m.sessionId === request.params.sessionId)
 
     if (!sessionMapping || sessionMapping.userId !== (client.deviceId || client.id)) {
@@ -574,7 +636,7 @@ export class NerveGateway extends EventEmitter {
   private async handleCancel(client: WSClient, request: { params?: { sessionId?: string } }, requestId: string) {
     const sessionId = request.params?.sessionId
     if (sessionId) {
-      this.sessionRouter.cancel(sessionId)
+      this.requireRouter().cancel(sessionId)
     } else {
       // 无 sessionId 时取消所有会话（向后兼容）
       this.agentCore.cancel()
