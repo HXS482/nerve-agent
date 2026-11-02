@@ -7,5 +7,8 @@
  * 否则（老会话没有该字段 / 传了空串）回落到全局目录，保持兼容。
  */
 export function resolveCwd(fallback: string, payloadCwd?: string): string {
-  return typeof payloadCwd === 'string' && payloadCwd.length > 0 ? payloadCwd : fallback
+  // 判空用 trim：纯空白（' '）既不是有意义的目录，也不是老会话的 undefined。
+  // 放它过去会让工具在一个不存在的路径上跑（getBuiltinTools 里 existsSync 失败
+  // 会静默退回 $HOME）。返回的仍是原值，路径中间的空格/中文不动。
+  return typeof payloadCwd === 'string' && payloadCwd.trim().length > 0 ? payloadCwd : fallback
 }

@@ -24,10 +24,13 @@ describe('buildTools — 传给子代理的 MCP 工具条目', () => {
       getDetailedExecutors: () => [{ serverName: 'huggingface', toolName: 'hf_fs', execute: callTool }],
     }
 
+    // buildTools 的 cwd 现在是必填参数（漏传就是本任务要防的 bug）。这条用例与 cwd
+    // 无关，传 core 的全局目录（这里是 tmp）即可 —— 与它内部 getBuiltinTools 保持一致。
     const { allToolExecutors, orchestratorTools } = await (core as any).buildTools(
       {}, 'test-model', 'anthropic',
       [{ serverName: 'huggingface', toolName: 'hf_fs', tool: { description: 'd', parameters: { type: 'object' } } }],
       {}, new Map(),
+      undefined, undefined, undefined, tmp,
     )
 
     // 主循环侧行为不变

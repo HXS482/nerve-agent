@@ -585,10 +585,15 @@ export class AgentCore {
     mcpTools: McpToolEntry[],
     channel: OutputChannel,
     pendingToolCalls: Map<string, { name: string; input: any }>,
-    routeImages?: (toolName: string | undefined, resultContent: string) => void,
-    sessionId?: string,
+    // 这两个原本是 `?` 可选参数。改成显式 `| undefined` 是为了让末尾的 `cwd` 能是必填 ——
+    // TS 不允许必填参数跟在 `?` 可选参数后面（TS1016）。语义没变：调用方照样传 undefined。
+    routeImages: ((toolName: string | undefined, resultContent: string) => void) | undefined,
+    sessionId: string | undefined,
+    // cfg 的默认值保留（TS 允许必填参数跟在带默认值的参数后面），只有 cwd 必须去掉默认
     cfg: ClaudeConfig = this.config,
-    cwd: string = this.projectDir
+    // 必填，不给默认值：这个参数就是本任务的修复本体。原先默认成 this.projectDir，
+    // 于是调用点漏传也照样编译、照样全绿，工具却悄悄退回全局目录 —— 正是要根除的 bug。
+    cwd: string
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
