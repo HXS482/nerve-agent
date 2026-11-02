@@ -17,3 +17,16 @@ import type { SessionContext } from './session-context'
 export function mergeConfig(base: ClaudeConfig, ctx: SessionContext): ClaudeConfig {
   return { ...base, ...ctx.config }
 }
+
+/**
+ * 按 sessionId 查上下文并合并 —— 会话不存在（没有覆盖）时就是全局配置的副本。
+ *
+ * 抽成纯函数是为了能被单测直接钉住：`getSessionUsage` 之类的读取路径必须走它，
+ * 否则会话覆盖了 model 的会话会按全局 model 的 context window 报给用量环。
+ */
+export function mergeConfigForSession(
+  base: ClaudeConfig,
+  ctx?: SessionContext | null,
+): ClaudeConfig {
+  return ctx ? mergeConfig(base, ctx) : { ...base }
+}

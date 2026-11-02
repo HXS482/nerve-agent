@@ -26,7 +26,7 @@ import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
-import { mergeConfig } from './session-config'
+import { mergeConfig, mergeConfigForSession } from './session-config'
 import { composeSystemPrompt } from './system-prompt'
 import { COST_PER_TOKEN, FALLBACK_CONTEXT_WINDOW, lookupContextWindow } from './model-constants'
 
@@ -973,21 +973,51 @@ export class AgentCore {
     }
   }
 
-  async setModel(model: string) {
+  /**
+   * 四个 setter 都支持可选的 `sessionId`：
+   *   传了 → 只写该会话的 `ctx.config`（不碰全局、不落盘）
+   *   没传 → 写全局 `this.config` 并落盘（历史行为，渲染层全局设置走这条）
+   *
+   * 会话级写入用 getOrCreate：会话可能还没跑过第一轮消息（用户先在侧栏把模型改好
+   * 再发第一条），若是纯查找就会把这次选择静默丢掉。
+   */
+  async setModel(model: string, sessionId?: string) {
+    if (sessionId) {
+      this.writeSessionConfig(sessionId, { model })
+      return
+    }
     this.config.model = model
     await saveRuntimeConfig({ model })
   }
-  async setProvider(providerId: string) {
+  async setProvider(providerId: string, sessionId?: string) {
+    if (sessionId) {
+      this.writeSessionConfig(sessionId, { provider: providerId })
+      return
+    }
     this.config.provider = providerId
     await saveRuntimeConfig({ provider: providerId })
   }
-  async setEffort(effort: ClaudeConfig['effort']) {
+  async setEffort(effort: ClaudeConfig['effort'], sessionId?: string) {
+    if (sessionId) {
+      this.writeSessionConfig(sessionId, { effort })
+      return
+    }
     this.config.effort = effort
     await saveRuntimeConfig({ effort })
   }
-  async setPermissionMode(mode: ClaudeConfig['permissionMode']) {
+  async setPermissionMode(mode: ClaudeConfig['permissionMode'], sessionId?: string) {
+    if (sessionId) {
+      this.writeSessionConfig(sessionId, { permissionMode: mode })
+      return
+    }
     this.config.permissionMode = mode
     await saveRuntimeConfig({ permissionMode: mode })
+  }
+
+  /** 会话级配置写入：替换对象而不是就地改，避免跑着的一轮拿到半截配置。 */
+  private writeSessionConfig(sessionId: string, patch: Partial<ClaudeConfig>): void {
+    const ctx = this.sessionContextManager.getOrCreate(sessionId)
+    ctx.config = { ...ctx.config, ...patch }
   }
 
   async setCwd(cwd: string) {
@@ -1092,6 +1122,10 @@ export class AgentCore {
    *
    * 跳过零值条目：被用户取消 / 调用超时的轮次会落一条 usage 全 0 的空回复，
    * 它没有消耗任何上下文，若恰好是最后一条会误报成 0%。
+   *
+   * 上下文窗口必须按**该会话实际用的** model/provider 解析（`this.config` + 会话覆盖），
+   * 否则会话把模型切成 gpt-4o（128k）时，用量环仍按全局 sonnet（200k）算分母，
+   * 占用比例被永久低估。
    */
   async getSessionUsage(sessionId: string) {
     const store = await this.ensureSessionStore()
@@ -1107,23 +1141,33 @@ export class AgentCore {
         if (e.type !== 'assistant' || !e.usage) continue
         const inp = e.usage.inputTokens || 0
         const out = e.usage.outputTokens || 0
-        const ctx = e.usage.contextTokens ?? (inp + out)
-        if (ctx <= 0) continue // 空回复（取消/超时），无实际占用
+        const ctxTokens = e.usage.contextTokens ?? (inp + out)
+        if (ctxTokens <= 0) continue // 空回复（取消/超时），无实际占用
         inputTokens = inp
         outputTokens = out
-        contextTokens = ctx
+        contextTokens = ctxTokens
         break
       }
     }
 
-    const modelId = this.resolveModel(this.config.model)
+    // 全局配置 + 该会话的覆盖 —— 与会话不存在时等价于全局配置。
+    // provider 走和 sendMessage 同一个解析（cfg.provider 为空时按 model 前缀推断），
+    // 否则 provider 级 modelContextWindows 会在会话没显式指定 provider 时被跳过。
+    const cfg = this.resolveSessionConfig(sessionId)
+    const providerId = this.resolveProvider(cfg)
+    const modelId = this.resolveModel(cfg.model, providerId)
 
     return {
       inputTokens,
       outputTokens,
       totalTokens: contextTokens,
-      maxContextTokens: this.resolveContextWindow(modelId, this.config.provider),
+      maxContextTokens: this.resolveContextWindow(modelId, providerId),
     }
+  }
+
+  /** 该会话本轮的有效配置 = 全局 config + `ctx.config` 覆盖（非创建式查找）。 */
+  private resolveSessionConfig(sessionId: string): ClaudeConfig {
+    return mergeConfigForSession(this.config, this.sessionContextManager.get(sessionId))
   }
 
   getProviders() {

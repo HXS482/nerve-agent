@@ -589,13 +589,16 @@ export class NerveGateway extends EventEmitter {
     this.server.sendResponse(client.id, createResponse(requestId, true))
   }
 
-  private async handleConfigSet(client: WSClient, request: { params: { model?: string; provider?: string; effort?: string; permissionMode?: string } }, requestId: string) {
+  private async handleConfigSet(client: WSClient, request: { params: { model?: string; provider?: string; effort?: string; permissionMode?: string; sessionId?: string } }, requestId: string) {
     const { params } = request
 
-    // 只允许修改安全的配置项
-    if (params.model) this.agentCore.setModel(params.model)
-    if (params.provider) this.agentCore.setProvider(params.provider)
-    if (params.effort) this.agentCore.setEffort(params.effort as any)
+    // 带了 sessionId 就只改该会话（不污染其他客户端共用的全局配置）；
+    // 没带则保持旧行为改全局。注意 ConfigSetRequestSchema 目前没有 sessionId 字段
+    // （zod 会把它剥掉），所以这里实际拿到的始终是 undefined —— 要么后续给协议加上
+    // 这个字段，要么从 router 的会话映射里取；在那之前行为与今天一致。
+    if (params.model) this.agentCore.setModel(params.model, params.sessionId)
+    if (params.provider) this.agentCore.setProvider(params.provider, params.sessionId)
+    if (params.effort) this.agentCore.setEffort(params.effort as any, params.sessionId)
 
     // 禁止通过 Gateway 修改 permissionMode（防止提权）
     // permissionMode 只能通过 Electron UI 或配置文件修改

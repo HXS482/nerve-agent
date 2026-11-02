@@ -97,16 +97,17 @@ export class ClaudeService {
     this.core.handleToolApprovalResponse(response.approvalId, response.approved)
   }
 
-  async setModel(model: string) {
-    await this.core.setModel(model)
+  // 透传可选的 sessionId：给了只改该会话的配置，不给改全局（历史行为）
+  async setModel(model: string, sessionId?: string) {
+    await this.core.setModel(model, sessionId)
   }
 
-  async setProvider(providerId: string) {
-    await this.core.setProvider(providerId)
+  async setProvider(providerId: string, sessionId?: string) {
+    await this.core.setProvider(providerId, sessionId)
   }
 
-  async setEffort(effort: ClaudeConfig['effort']) {
-    await this.core.setEffort(effort)
+  async setEffort(effort: ClaudeConfig['effort'], sessionId?: string) {
+    await this.core.setEffort(effort, sessionId)
   }
 
   async setCwd(cwd: string) {
@@ -114,8 +115,8 @@ export class ClaudeService {
     this.projectDir = cwd
   }
 
-  async setPermissionMode(mode: ClaudeConfig['permissionMode']) {
-    await this.core.setPermissionMode(mode)
+  async setPermissionMode(mode: ClaudeConfig['permissionMode'], sessionId?: string) {
+    await this.core.setPermissionMode(mode, sessionId)
   }
 
   setWindow(window: BrowserWindow) {
