@@ -27,6 +27,7 @@ import { isElectronChannel } from './output-channel'
 import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
 import { mergeConfig, mergeConfigForSession } from './session-config'
+import { resolveCwd } from './session-cwd'
 import { composeSystemPrompt } from './system-prompt'
 import { COST_PER_TOKEN, FALLBACK_CONTEXT_WINDOW, lookupContextWindow } from './model-constants'
 
@@ -294,6 +295,9 @@ export class AgentCore {
     const sessionId = payload.sessionId || randomUUID()
     const ctx = sessionContext || this.sessionContextManager.getOrCreate(sessionId)
 
+    // 本轮的工具工作目录：会话自带的目录优先，老会话（无 cwd / 空串）回落到全局
+    const cwd = resolveCwd(this.projectDir, payload.cwd)
+
     // 取消该会话的前一个请求（不影响其他会话）
     this.cancelSession(ctx.sessionId)
     ctx.abort = new AbortController()
@@ -329,7 +333,8 @@ export class AgentCore {
         client, resolvedModelId, providerType, mcpTools, channel, pendingToolCalls,
         (toolName, content) => { routeImagesRef.fn?.(toolName, content) },
         sessionId,
-        cfg
+        cfg,
+        cwd
       )
 
       // 图片工具结果路由
@@ -582,7 +587,8 @@ export class AgentCore {
     pendingToolCalls: Map<string, { name: string; input: any }>,
     routeImages?: (toolName: string | undefined, resultContent: string) => void,
     sessionId?: string,
-    cfg: ClaudeConfig = this.config
+    cfg: ClaudeConfig = this.config,
+    cwd: string = this.projectDir
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
@@ -591,7 +597,7 @@ export class AgentCore {
     // AskUser 卡片只有 Electron 渲染端能展示回应，其他通道（gateway/IM）不注册该工具，
     // 否则工具 promise 永远等不到回答
     const askChannel = isElectronChannel(channel) ? channel : undefined
-    const builtinTools = getBuiltinTools(this.projectDir, {
+    const builtinTools = getBuiltinTools(cwd, {
       refresh: () => {
         if (isElectronChannel(channel)) channel.sendGitRefresh()
       },
@@ -632,7 +638,7 @@ export class AgentCore {
       client,
       modelId,
       providerType,
-      projectDir: this.projectDir,
+      projectDir: cwd,
       mcpTools: mcpToolsRecord,
       effort: cfg.effort,
       createClient: async () => {

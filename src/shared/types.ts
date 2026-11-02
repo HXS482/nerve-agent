@@ -216,6 +216,8 @@ export interface SendMessagePayload {
   files?: FileAttachment[]
   /** 渲染层为本次 run 生成的关联 id，主进程在 DONE/ERROR 里原样带回 */
   runId?: string
+  /** 会话级工作目录；缺省或空串表示沿用全局 cwd（老会话兼容） */
+  cwd?: string
 }
 
 /** 一轮 run 的结束原因：abort 收尾不能报成 complete，否则中断和跑完在 UI 上同形 */
