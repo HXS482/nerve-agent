@@ -124,6 +124,66 @@ describe('SessionRouter durable queue', () => {
     expect(core.sendMessage.mock.calls[2][1]).toBe(channel2)
   })
 
+  // 队列是唯一还记得「这条消息该跑在哪」的地方：崩溃恢复时 payload 里没有 cwd，
+  // 消息就会静默跑在全局目录里。
+  describe('cwd 随队列一起落盘', () => {
+    it('把 cwd 写进 effect.payload 并在执行时交回 sendMessage', async () => {
+      const router = new SessionRouter(core, dir, store, runner)
+
+      await router.submit('s1', 'in project', channel, undefined, 'G:\\work\\proj-b')
+
+      // 落盘那一刻就必须带着（不是在内存里等着）
+      const rows = store.rawQuery(`SELECT payload FROM effect WHERE kind = ?`, 'gateway.message') as Array<{ payload: string }>
+      expect(rows).toHaveLength(1)
+      expect(JSON.parse(rows[0].payload)).toMatchObject({
+        sessionId: 's1',
+        message: 'in project',
+        cwd: 'G:\\work\\proj-b',
+      })
+
+      router.start()
+      await runner.idle('gateway.message')
+
+      expect(core.sendMessage).toHaveBeenCalledTimes(1)
+      expect(core.sendMessage.mock.calls[0][0]).toMatchObject({
+        prompt: 'in project',
+        sessionId: 's1',
+        cwd: 'G:\\work\\proj-b',
+      })
+    })
+
+    it('cwd 穿过整库 round-trip（关库重开 = 崩溃恢复）后仍然有效', async () => {
+      const first = new SessionRouter(core, dir, store, runner)
+      await first.submit('s2', 'survives a restart', channel, undefined, 'G:\\work\\proj-c')
+      first.resetChannels() // 进程没了：通道全丢
+
+      store.close()
+      store = TicketStore.open(join(dir, 't.db')) // 下次启动重新打开同一个库
+      const runner2 = new EffectRunner(store, { pollMs: 5 })
+      const second = new SessionRouter(core, dir, store, runner2)
+      second.start()
+      await runner2.idle('gateway.message')
+      await runner2.stop()
+
+      const call = core.sendMessage.mock.calls.at(-1)
+      expect(call[0]).toMatchObject({
+        prompt: 'survives a restart',
+        sessionId: 's2',
+        cwd: 'G:\\work\\proj-c',
+      })
+    })
+
+    it('没有会话级目录时 cwd 为 undefined，由 resolveCwd 回落项目目录', async () => {
+      const router = new SessionRouter(core, dir, store, runner)
+      await router.submit('s3', 'no cwd', channel)
+      router.start()
+      await runner.idle('gateway.message')
+
+      expect(core.sendMessage).toHaveBeenCalledTimes(1)
+      expect(core.sendMessage.mock.calls[0][0].cwd).toBeUndefined()
+    })
+  })
+
   it('cancel removes only that session queued rows and aborts the session', async () => {
     // 排队中的两条：s1 要被取消，s2 必须毫发无损。
     store.enqueueEffect('gateway.message', 's1', { sessionId: 's1', message: 'drop-me' })

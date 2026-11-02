@@ -71,6 +71,49 @@ describe('EffectRunner', () => {
     expect(live).toBe(0)
   })
 
+  // 失败路径也有 generation 语义：旧活跑挂了，不能给顶替它的新 payload 涨 attempts / 推后 due。
+  it('does not bump the new payload when the superseded one fails', async () => {
+    let releaseFirst!: () => void
+    const gate = new Promise<void>(resolve => { releaseFirst = resolve })
+    let calls = 0
+    runner.register('send', async () => {
+      calls++
+      if (calls === 1) {
+        await gate
+        throw new Error('old payload blew up')
+      }
+    })
+
+    const bumpSpy = vi.spyOn(store, 'bumpAttempt')
+
+    store.enqueueEffect('send', 'a', { n: 1 })
+    runner.start()
+    expect(calls).toBe(1) // 第一条已 claim，卡在 gate 上
+
+    // 跑的过程中来了新 payload：generation 0 → 1，行现在装的是新活
+    store.enqueueEffect('send', 'a', { n: 2 })
+
+    releaseFirst()
+    await runner.stop() // 等旧活（失败）跑完；active 已 false，不会有新 dispatch
+
+    // 带了 generation：更新命中 0 行，返回 false
+    expect(bumpSpy).toHaveBeenCalledTimes(1)
+    expect(bumpSpy.mock.calls[0]).toEqual([1, 0, expect.any(Number)])
+    expect(bumpSpy.mock.results[0].value).toBe(false)
+
+    const rows = store.rawQuery('SELECT attempts, due, payload, generation FROM effect') as Array<{
+      attempts: number
+      due: number
+      payload: string
+      generation: number
+    }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0].generation).toBe(1)
+    expect(JSON.parse(rows[0].payload)).toEqual({ n: 2 })
+    expect(rows[0].attempts).toBe(0) // 新活没跑过，attempts 不该被旧活的失败推高
+    expect(rows[0].due).toBeLessThanOrEqual(Date.now()) // 也没被推后 1 秒
+  })
+
   it('leaves a superseded row for the next dispatch instead of consuming it', async () => {
     let releaseFirst!: () => void
     const gate = new Promise<void>(resolve => { releaseFirst = resolve })

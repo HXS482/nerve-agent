@@ -38,7 +38,7 @@
 **Interfaces:**
 - Consumes: 无
 - Produces:
-  - `class TicketStore`，构造 `constructor(dbPath: string)`
+  - `class TicketStore`，构造 **private** `constructor(db: Database)`（只能通过 `open()` 创建；`dbPath` 在 `open` 上）
   - `static open(dbPath: string): TicketStore`
   - `close(): void`
   - `db` 只读暴露给同模块内方法（`private readonly db: Database`）
