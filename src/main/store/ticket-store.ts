@@ -1,6 +1,14 @@
 import { mkdirSync } from 'fs'
 import { dirname } from 'path'
 
+import type {
+  AssignmentRow,
+  AssignmentStatus,
+  InputRow,
+  TicketRow,
+  TicketStage,
+} from './ticket-types'
+
 type Database = any // better-sqlite3 类型，惰性 require
 
 export class TicketStore {
@@ -11,6 +19,7 @@ export class TicketStore {
     const Database = require('better-sqlite3')
     const db = new Database(dbPath)
     db.pragma('journal_mode = WAL')
+    // 全部 IF NOT EXISTS：已有用户库里只有 effect 表，升级时补建其余表，不能假设是空库。
     db.exec(`
       CREATE TABLE IF NOT EXISTS effect (
         kind TEXT NOT NULL, key TEXT NOT NULL, payload TEXT NOT NULL,
@@ -18,6 +27,25 @@ export class TicketStore {
         due INTEGER NOT NULL, generation INTEGER DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_effect_due ON effect(kind, due, seq);
+
+      CREATE TABLE IF NOT EXISTS ticket (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, cwd TEXT NOT NULL,
+        session_id TEXT NOT NULL, platform TEXT, user_id TEXT, chat_id TEXT,
+        thread_key TEXT NOT NULL, stage TEXT NOT NULL, mandate TEXT,
+        created_at INTEGER NOT NULL, last_active_at INTEGER NOT NULL,
+        ended_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS assignment (
+        id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL, status TEXT NOT NULL,
+        error TEXT, created_at INTEGER NOT NULL, ended_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS input (
+        id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL, kind TEXT NOT NULL,
+        body TEXT NOT NULL, seq INTEGER NOT NULL, delivered_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_ticket_thread ON ticket(thread_key, ended_at);
+      CREATE INDEX IF NOT EXISTS idx_assignment_ticket ON assignment(ticket_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_input_ticket ON input(ticket_id, seq);
     `)
     return new TicketStore(db)
   }
@@ -152,6 +180,127 @@ export class TicketStore {
     return info.changes > 0
   }
 
+
+  // ── Ticket ────────────────────────────────────────────────
+
+  insertTicket(t: TicketRow): void {
+    this.db
+      .prepare(
+        `INSERT INTO ticket (id, title, cwd, session_id, platform, user_id, chat_id,
+           thread_key, stage, mandate, created_at, last_active_at, ended_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        t.id, t.title, t.cwd, t.sessionId, t.platform ?? null, t.userId ?? null,
+        t.chatId ?? null, t.threadKey, t.stage, t.mandate ?? null,
+        t.createdAt, t.lastActiveAt, t.endedAt ?? null,
+      )
+  }
+
+  /** 按 threadKey 找**未结束**的 Ticket。已结束的不返回——同一条线索再来消息应开新 Ticket。 */
+  findTicketByThread(threadKey: string): TicketRow | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM ticket WHERE thread_key = ? AND ended_at IS NULL ORDER BY created_at DESC LIMIT 1')
+      .get(threadKey)
+    return row ? mapTicket(row) : undefined
+  }
+
+  getTicket(id: string): TicketRow | undefined {
+    const row = this.db.prepare('SELECT * FROM ticket WHERE id = ?').get(id)
+    return row ? mapTicket(row) : undefined
+  }
+
+  listTickets(opts: { includeEnded?: boolean; limit?: number } = {}): TicketRow[] {
+    const where = opts.includeEnded ? '' : 'WHERE ended_at IS NULL'
+    const limit = opts.limit && opts.limit > 0 ? `LIMIT ${opts.limit}` : ''
+    return (this.db
+      .prepare(`SELECT * FROM ticket ${where} ORDER BY last_active_at DESC ${limit}`)
+      .all() as any[]).map(mapTicket)
+  }
+
+  updateTicketStage(id: string, stage: TicketStage, lastActiveAt: number): void {
+    this.db
+      .prepare('UPDATE ticket SET stage = ?, last_active_at = ? WHERE id = ?')
+      .run(stage, lastActiveAt, id)
+  }
+
+  endTicket(id: string, at: number, outcome?: string): void {
+    this.db
+      .prepare('UPDATE ticket SET ended_at = ?, stage = ? , mandate = COALESCE(?, mandate) WHERE id = ?')
+      .run(at, 'idle', outcome ?? null, id)
+  }
+
+  // ── Assignment ────────────────────────────────────────────
+
+  insertAssignment(a: AssignmentRow): void {
+    this.db
+      .prepare('INSERT INTO assignment (id, ticket_id, status, error, created_at, ended_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(a.id, a.ticketId, a.status, a.error ?? null, a.createdAt, a.endedAt ?? null)
+  }
+
+  latestAssignment(ticketId: string): AssignmentRow | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM assignment WHERE ticket_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
+      .get(ticketId)
+    return row ? mapAssignment(row) : undefined
+  }
+
+  updateAssignmentStatus(id: string, status: AssignmentStatus, error?: string): void {
+    const endedAt = status === 'ended' ? Date.now() : null
+    this.db
+      .prepare('UPDATE assignment SET status = ?, error = COALESCE(?, error), ended_at = COALESCE(?, ended_at) WHERE id = ?')
+      .run(status, error ?? null, endedAt, id)
+  }
+
+  /**
+   * 进程重启后把「跑到一半」的 Assignment 退回 pending，并把 Ticket 阶段拉回 queued。
+   *
+   * 不做这一步的话，重启前 running 的 Assignment 会永远停在 running，
+   * Ticket 看上去在跑、实际没人管——阶段判定里 working 会一直命中。
+   */
+  recoverRunningAssignments(now: number): number {
+    return this.db.transaction(() => {
+      const rows = this.db
+        .prepare("SELECT id, ticket_id FROM assignment WHERE status = 'running'")
+        .all() as Array<{ id: string; ticket_id: string }>
+      for (const r of rows) {
+        this.db.prepare("UPDATE assignment SET status = 'pending' WHERE id = ?").run(r.id)
+        this.db
+          .prepare('UPDATE ticket SET stage = ?, last_active_at = ? WHERE id = ? AND ended_at IS NULL')
+          .run('queued', now, r.ticket_id)
+      }
+      return rows.length
+    })()
+  }
+
+  // ── Input ─────────────────────────────────────────────────
+
+  insertInput(i: InputRow): void {
+    this.db
+      .prepare('INSERT INTO input (id, ticket_id, kind, body, seq, delivered_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(i.id, i.ticketId, i.kind, i.body, i.seq, i.deliveredAt ?? null)
+  }
+
+  /** 下一个 Input 序号（per ticket 单调递增）。 */
+  nextInputSeq(ticketId: string): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM input WHERE ticket_id = ?')
+      .get(ticketId) as { next: number }
+    return row.next
+  }
+
+  markInputDelivered(id: string, at: number): void {
+    this.db.prepare('UPDATE input SET delivered_at = ? WHERE id = ?').run(at, id)
+  }
+
+  /** 该 Ticket 还有多少条 Input 未投递。用于判断通道是否可以淘汰。 */
+  pendingInputCount(ticketId: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM input WHERE ticket_id = ? AND delivered_at IS NULL')
+      .get(ticketId) as { n: number }
+    return row.n
+  }
+
   rawQuery(sql: string, ...params: unknown[]): unknown[] {
     return this.db.prepare(sql).all(...params)
   }
@@ -163,5 +312,38 @@ export class TicketStore {
 
   close(): void {
     this.db.close()
+  }
+}
+
+// ── 行映射：SQLite 用 snake_case，领域模型用 camelCase ──────────
+
+interface RawTicket {
+  id: string; title: string; cwd: string; session_id: string
+  platform: string | null; user_id: string | null; chat_id: string | null
+  thread_key: string; stage: string; mandate: string | null
+  created_at: number; last_active_at: number; ended_at: number | null
+}
+
+function mapTicket(r: RawTicket): TicketRow {
+  return {
+    id: r.id, title: r.title, cwd: r.cwd, sessionId: r.session_id,
+    platform: r.platform ?? undefined, userId: r.user_id ?? undefined,
+    chatId: r.chat_id ?? undefined, threadKey: r.thread_key,
+    stage: r.stage as TicketStage, mandate: r.mandate ?? undefined,
+    createdAt: r.created_at, lastActiveAt: r.last_active_at,
+    endedAt: r.ended_at ?? undefined,
+  }
+}
+
+interface RawAssignment {
+  id: string; ticket_id: string; status: string
+  error: string | null; created_at: number; ended_at: number | null
+}
+
+function mapAssignment(r: RawAssignment): AssignmentRow {
+  return {
+    id: r.id, ticketId: r.ticket_id, status: r.status as AssignmentStatus,
+    error: r.error ?? undefined, createdAt: r.created_at,
+    endedAt: r.ended_at ?? undefined,
   }
 }

@@ -14,6 +14,9 @@ import { EventEmitter } from 'events'
 import { join } from 'path'
 import { GatewayWSServer } from './ws-server'
 import { SessionRouter } from './session-router'
+import { TicketRouter } from './ticket-router'
+import { SlotScheduler } from './slot-scheduler'
+import { deriveThreadKey } from './thread-key'
 import { WebSocketChannel } from './ws-channel'
 import { AdapterChannel } from './adapter-channel'
 import { AgentCore } from '../core/agent-core'
@@ -62,6 +65,8 @@ export class NerveGateway extends EventEmitter {
   // 应用本身照常起来。三者要么一起存在、要么一起为 null。
   private ticketStore: TicketStore | null = null
   private effectRunner: EffectRunner | null = null
+  /** threadKey → Ticket 的调度层。与 sessionRouter 并存：一个管"谁在说话"，一个管"在做什么活"。 */
+  private ticketRouter: TicketRouter | null = null
 
   constructor(private config: GatewayConfig) {
     super()
@@ -94,16 +99,22 @@ export class NerveGateway extends EventEmitter {
    * 打开失败则 log + 抛错，由调用方（IPC / worker）决定怎么报给用户——Gateway 不进入 running。
    */
   private ensureQueue(): void {
-    if (this.ticketStore && this.effectRunner && this.sessionRouter) return
+    if (this.ticketStore && this.effectRunner && this.sessionRouter && this.ticketRouter) return
 
     // 先全部构造成功再赋值，避免留下"store 有、runner 没有"的半截状态。
     let store: TicketStore
     let runner: EffectRunner
     let router: SessionRouter
+    let tickets: TicketRouter
     try {
       store = TicketStore.open(join(this.config.dataDir, 'tickets.db'))
       runner = new EffectRunner(store)
       router = new SessionRouter(this.agentCore, this.config.dataDir, store, runner)
+      tickets = new TicketRouter({
+        store,
+        scheduler: new SlotScheduler({ concurrency: 3 }),
+        agentCore: this.agentCore,
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.log('error', `Failed to open persistent queue at ${this.config.dataDir}: ${message}`)
@@ -113,6 +124,7 @@ export class NerveGateway extends EventEmitter {
     this.ticketStore = store
     this.effectRunner = runner
     this.sessionRouter = router
+    this.ticketRouter = tickets
   }
 
   /**
@@ -121,6 +133,11 @@ export class NerveGateway extends EventEmitter {
    * 队列只在 `start()` 里惰性打开，所以 Gateway 未启动时它是 null；调用点本来也都只在
    * 有流量时才走到（都是 `running === true` 之后），这里显式抛错而不是静默丢弃消息。
    */
+  private requireTicketRouter(): TicketRouter {
+    if (!this.ticketRouter) throw new Error('Gateway queue is not started')
+    return this.ticketRouter
+  }
+
   private requireRouter(): SessionRouter {
     if (!this.sessionRouter) {
       throw new Error('Gateway is not started: persistent queue is not open')
@@ -382,12 +399,32 @@ export class NerveGateway extends EventEmitter {
       }
     }
 
-    // IM 适配器没有会话级目录的概念：显式传 undefined，由 resolveCwd 回落项目目录。
-    this.requireRouter().submit(sessionId, msg.content, channel, files, undefined).catch((err) => {
+    // 走 TicketRouter：一条消息 = 一件活。
+    //
+    // 不再走 sessionRouter.submit —— 那条路是"每个用户一条串行队列"，
+    // 同一个人办两件事时第二件必须等第一件跑完，正是这次要改掉的。
+    // sessionId 仍然由 sessionRouter 分配（Ticket 用它当上下文 key）。
+    const tickets = this.requireTicketRouter()
+    try {
+      tickets.dispatch(
+        {
+          platform: adapter.platform,
+          userId: msg.userId,
+          chatId: msg.chatId,
+          threadKey: deriveThreadKey({ platform: adapter.platform, chatId: msg.chatId }),
+          text: msg.content,
+          // IM 适配器没有会话级目录：显式给项目目录，避免落进 process.cwd()
+          cwd: this.config.projectDir,
+          files,
+          kind: 'human',
+        },
+        channel,
+      )
+    } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)
       this.log('error', `Adapter message error: ${errorMsg}`)
       adapter.send(msg.chatId, `❌ Error: ${errorMsg}`)
-    })
+    }
   }
 
   private async downloadAttachment(
