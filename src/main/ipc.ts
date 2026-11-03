@@ -36,24 +36,25 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     claude.cancel(sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_MODEL, async (_event, model: string) => {
-    await claude.setModel(model)
+  // sessionId 可选：带了只改该会话，缺省写全局（历史行为）
+  ipcMain.handle(IPC_CHANNELS.SET_MODEL, async (_event, model: string, sessionId?: string) => {
+    await claude.setModel(model, sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_PROVIDER, async (_event, providerId: string) => {
-    await claude.setProvider(providerId)
+  ipcMain.handle(IPC_CHANNELS.SET_PROVIDER, async (_event, providerId: string, sessionId?: string) => {
+    await claude.setProvider(providerId, sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_EFFORT, async (_event, effort: string) => {
-    await claude.setEffort(effort as ClaudeConfig['effort'])
+  ipcMain.handle(IPC_CHANNELS.SET_EFFORT, async (_event, effort: string, sessionId?: string) => {
+    await claude.setEffort(effort as ClaudeConfig['effort'], sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SET_CWD, async (_event, cwd: string) => {
     await claude.setCwd(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SET_PERMISSION_MODE, async (_event, mode: string) => {
-    await claude.setPermissionMode(mode as ClaudeConfig['permissionMode'])
+  ipcMain.handle(IPC_CHANNELS.SET_PERMISSION_MODE, async (_event, mode: string, sessionId?: string) => {
+    await claude.setPermissionMode(mode as ClaudeConfig['permissionMode'], sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.TOOL_APPROVAL_RESPONSE, (_event, response: ToolApprovalResponse) => {

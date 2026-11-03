@@ -112,6 +112,8 @@ export const ConfigSetRequestSchema = z.object({
   id: z.string(),
   method: z.literal('config.set'),
   params: z.object({
+    /** 带了就只改该会话（不污染其他客户端共用的全局配置）；缺省写全局 */
+    sessionId: z.string().optional(),
     model: z.string().optional(),
     provider: z.string().optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),

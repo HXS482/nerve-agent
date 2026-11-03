@@ -607,10 +607,9 @@ export class NerveGateway extends EventEmitter {
   private async handleConfigSet(client: WSClient, request: { params: { model?: string; provider?: string; effort?: string; permissionMode?: string; sessionId?: string } }, requestId: string) {
     const { params } = request
 
-    // 带了 sessionId 就只改该会话（不污染其他客户端共用的全局配置）；
-    // 没带则保持旧行为改全局。注意 ConfigSetRequestSchema 目前没有 sessionId 字段
-    // （zod 会把它剥掉），所以这里实际拿到的始终是 undefined —— 要么后续给协议加上
-    // 这个字段，要么从 router 的会话映射里取；在那之前行为与今天一致。
+    // 带了 sessionId 就只改该会话（不污染其他客户端共用的全局配置）；没带则保持旧行为
+    // 改全局。sessionId 由 ConfigSetRequestSchema 透传（早期协议里没有这个字段，zod 会
+    // 静默剥掉，导致这里永远拿到 undefined、外部 agent 一律改到全局 —— 已修）。
     if (params.model) this.agentCore.setModel(params.model, params.sessionId)
     if (params.provider) this.agentCore.setProvider(params.provider, params.sessionId)
     if (params.effort) this.agentCore.setEffort(params.effort as any, params.sessionId)

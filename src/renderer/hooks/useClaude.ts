@@ -3,6 +3,7 @@ import { useChatStore, Session } from '../stores/chatStore'
 import { useStageStore } from '../stores/stageStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
 import { useTodoStore } from '../stores/todoStore'
+import { resolveConfigSessionId } from '../utils/sessionConfigId'
 import { ContentBlock, ClaudeConfig, ChatMessage, FileAttachment, ToolApprovalRequest, ToolApprovalResponse, TodoItem } from '../../shared/types'
 
 const SUBAGENT_TOOLS = new Set(['spawn_subagent', 'parallel_subagents', 'chain_subagents'])
@@ -18,11 +19,11 @@ declare global {
       sendMessage: (prompt: string, sessionId?: string, files?: FileAttachment[], runId?: string, cwd?: string) => Promise<void>
       cancel: (sessionId?: string) => Promise<void>
       getConfig: () => Promise<ClaudeConfig>
-      setModel: (model: string) => Promise<void>
-      setEffort: (effort: string) => Promise<void>
-      setProvider: (providerId: string) => Promise<void>
+      setModel: (model: string, sessionId?: string) => Promise<void>
+      setEffort: (effort: string, sessionId?: string) => Promise<void>
+      setProvider: (providerId: string, sessionId?: string) => Promise<void>
       setCwd: (cwd: string) => Promise<void>
-      setPermissionMode: (mode: string) => Promise<void>
+      setPermissionMode: (mode: string, sessionId?: string) => Promise<void>
       respondToolApproval: (response: ToolApprovalResponse) => Promise<void>
       onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => () => void
       respondAskUser: (response: import('../../shared/types').AskUserResponse) => Promise<void>
@@ -787,14 +788,32 @@ export function useClaude() {
     demoteInProgressTodos(pendingWorkspace.current)
   }, [setLoading, demoteInProgressTodos, clearWatchdog, getWorkspaceSessionId])
 
+  /**
+   * 会话级配置写入用的 id：把当前工作区的会话 id 解析成主进程认识的**后端** id。
+   *
+   * 临时 id（`session-<ts>`）只活在渲染层：拿它写会话配置会写进一个没有 run 会读的
+   * 上下文 —— 选择器上显示新模型、实际跑的仍是旧模型。所以：
+   *   临时 id + 有别名 → 后端 id；临时 id + 无别名（首轮还没回来）→ undefined（写全局，
+   *   新会话随后从全局默认继承）；真实 id → 原样。
+   * 规则本体在 utils/sessionConfigId.ts（纯函数，单测钉住）。
+   */
+  const resolveConfigSessionIdForActiveWorkspace = useCallback(() => (
+    resolveConfigSessionId(
+      getWorkspaceSessionId(useStageStore.getState().viewMode),
+      useTodoStore.getState().aliases,
+    )
+  ), [getWorkspaceSessionId])
+
   const updateConfig = useCallback(async (partial: Partial<ClaudeConfig>) => {
-    if (partial.model) await window.claude.setModel(partial.model)
-    if (partial.provider) await window.claude.setProvider(partial.provider)
-    if (partial.effort) await window.claude.setEffort(partial.effort)
+    // cwd 是"跑在哪"，全局；其余四项可以按会话写
+    const sid = resolveConfigSessionIdForActiveWorkspace()
+    if (partial.model) await window.claude.setModel(partial.model, sid)
+    if (partial.provider) await window.claude.setProvider(partial.provider, sid)
+    if (partial.effort) await window.claude.setEffort(partial.effort, sid)
     if (partial.cwd) await window.claude.setCwd(partial.cwd)
-    if (partial.permissionMode) await window.claude.setPermissionMode(partial.permissionMode)
+    if (partial.permissionMode) await window.claude.setPermissionMode(partial.permissionMode, sid)
     setConfig(partial)
-  }, [setConfig])
+  }, [setConfig, resolveConfigSessionIdForActiveWorkspace])
 
   // 切换项目：只换「跑在哪」（工具 cwd / 项目目录）。主进程的会话存储根目录是固定的
   // （sourceDir/.nerve/sessions），`setCwd` **不会**再换掉它 —— 换掉正是本项目修掉的

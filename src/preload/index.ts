@@ -18,12 +18,16 @@ const api = {
     cwd?: string
   ) => ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files, runId, cwd }),
   cancel: (sessionId?: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL, sessionId),
-  setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_MODEL, model),
-  setEffort: (effort: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_EFFORT, effort),
-  setProvider: (providerId: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_PROVIDER, providerId),
+  // sessionId 可选：带了只改该会话（主进程写 ctx.config），缺省保持旧的全局写入
+  setModel: (model: string, sessionId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_MODEL, model, sessionId),
+  setEffort: (effort: string, sessionId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_EFFORT, effort, sessionId),
+  setProvider: (providerId: string, sessionId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_PROVIDER, providerId, sessionId),
   setCwd: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_CWD, cwd),
-  setPermissionMode: (mode: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_PERMISSION_MODE, mode),
+  setPermissionMode: (mode: string, sessionId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_PERMISSION_MODE, mode, sessionId),
   respondToolApproval: (response: ToolApprovalResponse) =>
     ipcRenderer.invoke(IPC_CHANNELS.TOOL_APPROVAL_RESPONSE, response),
   onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => {
