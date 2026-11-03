@@ -311,3 +311,42 @@ submit(message)
 ### 12.5 阶段 3 建议先做的一件事
 
 `TicketStore` 加三张表时，**先看 `docs/superpowers/plans/2026-11-02-ticket-model-and-tasks-view.md` 的 Task 1**，它已经写好了建表 SQL 和 11 个方法签名。那份计划是基于阶段 0-2 之前的代码写的，**行号需要重新核对**，但接口设计仍然适用。
+
+### 12.6 Task 0 已完成（2026-11-03）：UI 会话级配置接线
+
+已合并，commit `c775233`（+ `0fb915c` 报告）。**写入路径**现在是会话级的：
+
+| 环节 | 文件:行 | 改了什么 |
+|---|---|---|
+| 协议 | `src/main/gateway/protocol.ts:116` | `ConfigSetRequestSchema.params.sessionId: z.string().optional()` |
+| 预加载 | `src/preload/index.ts:21-30` | 四个 setter 桥都加了 `sessionId?` 并透传 |
+| 主进程 IPC | `src/main/ipc.ts:40,44,48,56` | 四个 handler 接收并转给 `claude.*` |
+| 渲染层 | `src/renderer/hooks/useClaude.ts:807-816` | `updateConfig` 解析出真实会话 id 后传给全部四个 setter |
+| 纯函数 | `src/renderer/utils/sessionConfigId.ts:19-44` | `resolveConfigSessionId(sid, aliases)` |
+
+**id 解析规则（有测试，四个分支全覆盖）：**
+1. 无会话 → `undefined`（写全局）
+2. 临时 id 且有别名 → 返回别名（真实后端 id）
+3. 临时 id 且无别名 → `undefined`（首轮还没拿到后端 id）
+4. 真实 id → 原样返回
+
+临时 id 前缀 `'session-'`，生成点 `useClaude.ts:676`。**把临时 id 当 sessionId 传给主进程是静默失败**：`setModel` 会 `getOrCreate` 一个没有任何 run 会读的上下文。
+
+**测试基线已更新：42 files / 321 tests。** typecheck 基线不变（node 46 / web 39）。
+
+### 12.7 ⚠️ Task 0 遗留：显示侧仍然是全局的（**同一类缺陷，方向相反**）
+
+写入已按会话隔离，但 `useClaude.ts:815` 仍然 `setConfig(partial)` 写**全局**渲染层对象。后果比"暂时不一致"严重 —— 是**永久不一致**：
+
+- 主进程的全局配置**不再被写**，所以 `chatStore.config.model` 这个值在主进程里不存在
+- `getConfig` 只在挂载时拉一次（`useClaude.ts:288`），且 `ipc.ts:129-131` 不带 sessionId，重新拉也修不好
+- 因此在会话 A 选了 opus 之后：新建的会话实际继承全局 sonnet，但选择器显示 opus
+- `SettingsPanel.tsx:574,592,601` 和 `InputBar.tsx:74` 会显示错误的 model / effort / permissionMode
+
+**要真正修好，需要一个按会话读取的配置 API**（`GET_CONFIG` 支持 sessionId + `AgentCore` 暴露会话级只读访问器 + 渲染层按会话存配置快照）。这是阶段 3 的新任务，不是 Task 0 的范围。
+
+另外，**新会话的首轮仍然是全局写入**（规则 3），所以"在新聊天里选模型"依然影响所有会话 —— 这是有意为之的折中，但用户体感上和原 bug 同形。
+
+### 12.8 Task 0 遗留：无渲染层→预加载的测试覆盖
+
+`updateConfig` 是否正确传了 sid 给四个 setter、preload 的参数顺序是否对得上，目前**只靠人工核对**。漏传一个 `setPermissionMode` 不会有任何测试失败。补法是 `vi.spyOn(window.claude, 'setModel')` 这类渲染层测试。
