@@ -332,7 +332,11 @@ export class NerveGateway extends EventEmitter {
     // 排空之后再丢通道：通道随着这次 stop 一起死了，留着它们只会让
     // stop→start 之后恢复出来的消息拿一条死通道走"看起来正常"的路径（输出静默丢弃、
     // runId 还是过期的），比走会话里会告警的 NullOutputChannel 兜底更糟。
+    //
+    // TicketRouter 持有自己的一份通道表，同样必须清：不清的话，停止 Gateway 之后
+    // 已死适配器还被活着引用，而且下次 IM 消息会命中一条指向旧连接的通道。
     this.sessionRouter?.resetChannels()
+    this.ticketRouter?.resetChannels()
 
     // 停止所有适配器
     for (const [name, adapter] of this.adapters.entries()) {
@@ -395,7 +399,9 @@ export class NerveGateway extends EventEmitter {
   private async handleAdapterMessage(adapter: BaseAdapter, msg: IncomingMessage) {
     this.log('info', `Message from ${adapter.name} (user: ${msg.userId}, length: ${msg.content.length})`)
 
-    const sessionId = this.requireRouter().resolve(adapter.platform, msg.userId, msg.chatId)
+    // sessionId 现在由 Ticket 自己分配（Ticket 才是并发的单位），这里不再调
+    // sessionRouter.resolve —— 那会登记一条永远不会有 Ticket 用它的映射，
+    // 而渲染层靠 GATEWAY_SESSIONS 拿 platform 标注会话，指向错 id 等于标注丢失。
     const channel = new AdapterChannel(adapter, msg.chatId, msg.messageId)
 
     // 处理附件：下载图片并转为 FileAttachment[]
@@ -425,15 +431,20 @@ export class NerveGateway extends EventEmitter {
     //
     // 不再走 sessionRouter.submit —— 那条路是"每个用户一条串行队列"，
     // 同一个人办两件事时第二件必须等第一件跑完，正是这次要改掉的。
-    // sessionId 仍然由 sessionRouter 分配（Ticket 用它当上下文 key）。
+    // sessionId 由 Ticket 分配，建好后回填到 sessionRouter 的映射，供渲染层标注来源平台。
     const tickets = this.requireTicketRouter()
     try {
-      tickets.dispatch(
+      const ticket = tickets.dispatch(
         {
           platform: adapter.platform,
           userId: msg.userId,
           chatId: msg.chatId,
-          threadKey: deriveThreadKey({ platform: adapter.platform, chatId: msg.chatId }),
+          threadKey: deriveThreadKey({
+            platform: adapter.platform,
+            chatId: msg.chatId,
+            topicId: msg.topicId,
+            guildId: msg.guildId,
+          }),
           text: msg.content,
           // IM 适配器没有会话级目录：显式给项目目录，避免落进 process.cwd()
           cwd: this.config.projectDir,
@@ -442,6 +453,8 @@ export class NerveGateway extends EventEmitter {
         },
         channel,
       )
+      // 登记 platform 映射：渲染层靠它把会话标成哪个平台来的。
+      this.sessionRouter?.bind(ticket.sessionId, adapter.platform, msg.userId, msg.chatId)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)
       this.log('error', `Adapter message error: ${errorMsg}`)

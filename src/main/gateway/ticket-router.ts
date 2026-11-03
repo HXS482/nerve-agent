@@ -55,6 +55,15 @@ export class TicketRouter {
   /** ticketId → 正在跑的 Assignment id，用于 stop() 精确取消 */
   private readonly running = new Map<string, string>()
 
+  /**
+   * 已被 stop() 结束的 Ticket。
+   *
+   * 链路是内存里的 promise 链，`endTicket` 只改库、拦不住已经排在上面的 run：
+   * 不记住这个标记，停止后排在后面的消息照样会执行、把 Ticket 重新写成 working。
+   * 只记「链上还有活没排空」的那些（见 `enqueueRun`），排空即删，不会无限增长。
+   */
+  private readonly ended = new Set<string>()
+
   /** sessionId → 是否有活正在跑（给 activeSessionCount 用） */
   private readonly inFlight = new Set<string>()
 
@@ -94,12 +103,13 @@ export class TicketRouter {
   }
 
   /**
-   * 投递一条消息。同步返回：真正的执行在后台跑，调用方不等待。
+   * 投递一条消息。执行在后台跑，调用方不等待执行结果，但会拿到 Ticket 本身
+   * （`sessionId` 就在这里，UI 打开会话要用它）。
    *
-   * 为什么不能 await：这条链路上有个长任务时，调用方（IM adapter / WS）会被
-   * 卡在同一轮里，后续消息进不来 —— 那就退化成改造前的样子了。
+   * 为什么不能返回 Promise 让调用方 await：这条链路上有个长任务时，调用方
+   * （IM adapter / WS）会被卡在同一轮里，后续消息进不来 —— 那就退化成改造前的样子了。
    */
-  dispatch(msg: DispatchMessage, channel: OutputChannel): void {
+  dispatch(msg: DispatchMessage, channel: OutputChannel): TicketRow {
     const ticket = this.resolveTicket(msg)
     this.channels.set(ticket.sessionId, channel)
 
@@ -113,11 +123,16 @@ export class TicketRouter {
       seq,
     })
 
-    const updated = { ...ticket, stage: 'queued' as const, lastActiveAt: Date.now() }
-    this.store.updateTicketStage(ticket.id, 'queued', updated.lastActiveAt)
+    // 只有这个 Ticket 当前没在跑时才降到 queued。
+    // 正在跑的时候来新消息，活还是那一条在跑，写 queued 会让 UI 闪一下「排队中」，
+    // 库里的阶段也短暂变成错的（下一个 run 结束后才修回来）。
+    const stage: TicketRow['stage'] = this.running.has(ticket.id) ? 'working' : 'queued'
+    const updated: TicketRow = { ...ticket, stage, lastActiveAt: Date.now() }
+    this.store.updateTicketStage(ticket.id, stage, updated.lastActiveAt)
     this.emit(updated)
 
     this.enqueueRun(updated, msg, channel, kind)
+    return updated
   }
 
   /** 找到该 threadKey 上未结束的 Ticket，没有就开一个。 */
@@ -172,7 +187,11 @@ export class TicketRouter {
     this.chains.set(ticket.id, next)
     // 链跑完就清掉，避免 map 无限增长
     void next.finally(() => {
-      if (this.chains.get(ticket.id) === next) this.chains.delete(ticket.id)
+      if (this.chains.get(ticket.id) === next) {
+        this.chains.delete(ticket.id)
+        // 链排空了，停止标记已经不会再被任何 run 读到，顺手清掉。
+        this.ended.delete(ticket.id)
+      }
     })
   }
 
@@ -182,6 +201,10 @@ export class TicketRouter {
     channel: OutputChannel,
     kind: 'human' | 'system',
   ): Promise<void> {
+    // 这条消息进链之后、轮到它之前，Ticket 可能已经被 stop() 停掉了。
+    // 此时既不能执行（人明确说了停），也不能占槽位、不能改库里的阶段。
+    if (this.ended.has(ticket.id)) return
+
     // 槽位是「占用哪档容量」，kind 是「这条消息谁发的」——两者语义不同。
     //
     // ⚠️ 人发的消息**不**一律走 human 槽位。human 槽位只有 1 个，如果所有人类
@@ -189,6 +212,12 @@ export class TicketRouter {
     // human 槽位的真实用途是：normal 被后台活占满时，人还能插一句话进来。
     // 所以规则是「normal 有空就走 normal，没空才抢 human」。
     const release = await this.acquireSlot(kind)
+
+    // 等槽位期间也可能被 stop()：同上，直接放掉槽位走人，不要建 Assignment。
+    if (this.ended.has(ticket.id)) {
+      release()
+      return
+    }
 
     const assignmentId = randomUUID()
     this.store.insertAssignment({ id: assignmentId, ticketId: ticket.id, status: 'running', createdAt: Date.now() })
@@ -251,14 +280,21 @@ export class TicketRouter {
   }
 
   /**
-   * 停掉一个 Ticket：取消它的 run，清掉它的排队消息。
+   * 停掉一个 Ticket：取消它的 run，清掉它排队中的消息。
    *
    * 只动这一个 —— 其他 Ticket 和其他 session 完全不受影响，
    * 这是「停止」按钮能安全存在的前提。
+   *
+   * 排队中的消息有可能已经在内存链上（`dispatch` 同步挂链），单删 effect 行拦不住它们，
+   * 所以先打 `ended` 标记，链上的 run 到检查点会自己退出。
    */
   stop(ticketId: string): void {
     const ticket = this.store.getTicket(ticketId)
     if (!ticket) return
+
+    // 先打标记再动别的：链上还在排队的 run 会在自己的检查点看到它并退出。
+    // 只在链还有活时打标记：空链的清理由链结束时统一处理，空链上加标记会永久残留。
+    if (this.chains.has(ticketId)) this.ended.add(ticketId)
 
     this.store.rawExec(
       `DELETE FROM effect WHERE kind = 'gateway.message' AND key = ?`,

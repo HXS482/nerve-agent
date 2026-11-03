@@ -226,6 +226,7 @@ export class DiscordAdapter extends BaseAdapter {
       username: msg.author.username,
       content: msg.content,
       messageId: msg.id,
+      guildId: msg.guildId ?? undefined,
       timestamp: msg.createdTimestamp,
       attachments: attachments.length > 0 ? attachments : undefined,
     })

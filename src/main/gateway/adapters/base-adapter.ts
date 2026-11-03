@@ -22,6 +22,10 @@ export interface IncomingMessage {
   content: string
   /** 消息ID（用于编辑/删除） */
   messageId?: string
+  /** Telegram 话题 id（forum topic）。同群不同话题是不同的活。 */
+  topicId?: string
+  /** Discord 服务器 id：区分不同服务器里的同名频道。 */
+  guildId?: string
   /** 时间戳 */
   timestamp: number
   /** 附件 */
@@ -177,6 +181,8 @@ export abstract class BaseAdapter extends EventEmitter {
       username: raw.username,
       content: raw.content,
       messageId: raw.messageId,
+      topicId: raw.topicId,
+      guildId: raw.guildId,
       timestamp: raw.timestamp || Date.now(),
       attachments: raw.attachments,
       raw,

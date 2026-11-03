@@ -126,6 +126,25 @@ export class SessionRouter {
   }
 
   /**
+   * 登记一条已知 sessionId 的映射。
+   *
+   * Ticket 化之后 sessionId 由 Ticket 分配，不再经过 `resolve` 现造，但渲染层仍然靠
+   * `getAllMappings` 拿 platform 标注会话（`useClaude.ts` 的 platformMap），
+   * WS 的 `sessions.list` 也按它做归属过滤。所以 Ticket 建好后要回来登记一次。
+   */
+  bind(sessionId: string, platform: string, userId: string, chatId: string): void {
+    this.mappings.set(`${platform}:${userId}`, {
+      sessionId,
+      platform,
+      userId,
+      chatId,
+      createdAt: Date.now(),
+      lastActive: Date.now(),
+    })
+    this.saveMappings()
+  }
+
+  /**
    * 获取会话映射
    */
   getMapping(platform: string, userId: string): SessionMapping | undefined {

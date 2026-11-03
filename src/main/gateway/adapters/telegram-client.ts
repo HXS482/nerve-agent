@@ -502,6 +502,8 @@ export interface TelegramMessage {
   from: { id: number; username?: string; first_name?: string }
   chat: { id: number; type: string }
   date: number
+  /** 论坛话题（forum topic）id：同一群里不同话题要分开算 */
+  message_thread_id?: number
   text?: string
   caption?: string
   photo?: Array<{ file_id: string; file_unique_id: string; file_size: number; width: number; height: number }>

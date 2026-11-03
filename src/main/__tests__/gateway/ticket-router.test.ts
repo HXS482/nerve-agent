@@ -211,6 +211,60 @@ describe('TicketRouter', () => {
     expect(await store.listTickets({ includeEnded: true })).toBeDefined()
   })
 
+  it('stop() 之后，同一 Ticket 已排在链上的消息不再执行', async () => {
+    // 这条链是内存里的，删 effect 行删不掉已经挂上去的 run。
+    // 不修的话：停掉之后第二条照样跑、并把 Ticket 重新写成 working，停止形同虚设。
+    let releaseFirst!: () => void
+    core.sendMessage.mockImplementationOnce(
+      () => new Promise<void>((r) => { releaseFirst = r }),
+    )
+
+    router.dispatch(msg('tg:chat:42', 'first'), channel)
+    await until(() => core.sendMessage.mock.calls.length >= 1)
+
+    // 第一条还在跑时排进第二条，然后停掉整个 Ticket
+    router.dispatch(msg('tg:chat:42', 'second'), channel)
+    const target = store.listTickets().find((t) => t.threadKey === 'tg:chat:42')!
+    router.stop(target.id)
+
+    releaseFirst()
+    await new Promise((r) => setTimeout(r, 50))
+
+    // 只跑了第一条；第二条被拦下
+    expect(core.sendMessage).toHaveBeenCalledTimes(1)
+    expect(store.getTicket(target.id)!.endedAt).toBeDefined()
+  })
+
+  it('stop() 时还等着槽位的消息不会再跑，槽位也不会泄漏', async () => {
+    // 等槽位是 runOnce 里唯一的 await 点：这里被停掉的 run 必须自己 release。
+    let releaseFirst!: () => void
+    core.sendMessage.mockImplementationOnce(
+      () => new Promise<void>((r) => { releaseFirst = r }),
+    )
+    core.sendMessage.mockImplementation(() => new Promise<void>(() => {}))
+
+    const scheduler = new SlotScheduler({ concurrency: 1 })
+    const tight = new TicketRouter({ store, scheduler, agentCore: core })
+
+    tight.dispatch(msg('tg:chat:42', 'first'), channel)
+    await until(() => core.sendMessage.mock.calls.length >= 1)
+
+    // 第二条是 system：只能排 normal，而 normal 已被第一条占满 → 卡在 acquireSlot
+    tight.dispatch(msg('tg:chat:42', 'second', 'system'), channel)
+
+    const target = store.listTickets().find((t) => t.threadKey === 'tg:chat:42')!
+    tight.stop(target.id)
+
+    releaseFirst()
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(core.sendMessage).toHaveBeenCalledTimes(1)
+    // 槽位没泄漏：还能立刻拿到那个唯一的 normal
+    const release = scheduler.tryAcquire('normal')
+    expect(release).not.toBeNull()
+    release?.()
+  })
+
   it('start() 恢复中断的 Assignment', () => {
     store.insertTicket({
       id: 't1', title: 'x', cwd: '/p', sessionId: 's1', threadKey: 'k',

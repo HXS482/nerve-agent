@@ -227,6 +227,7 @@ export class TelegramAdapter extends BaseAdapter {
       username: msg.from.username,
       content: msg.text!,
       messageId: msg.message_id.toString(),
+      topicId: msg.message_thread_id?.toString(),
       timestamp: msg.date * 1000,
     })
 
@@ -248,6 +249,7 @@ export class TelegramAdapter extends BaseAdapter {
       username: msg.from.username,
       content: msg.caption || '[图片]',
       messageId: msg.message_id.toString(),
+      topicId: msg.message_thread_id?.toString(),
       timestamp: msg.date * 1000,
       attachments: [{
         type: 'image',
@@ -276,6 +278,7 @@ export class TelegramAdapter extends BaseAdapter {
       username: msg.from.username,
       content: msg.caption || `[文件: ${doc.file_name}]`,
       messageId: msg.message_id.toString(),
+      topicId: msg.message_thread_id?.toString(),
       timestamp: msg.date * 1000,
       attachments: [{
         type: 'file',
@@ -304,6 +307,7 @@ export class TelegramAdapter extends BaseAdapter {
       username: msg.from.username,
       content: '[语音消息]',
       messageId: msg.message_id.toString(),
+      topicId: msg.message_thread_id?.toString(),
       timestamp: msg.date * 1000,
       attachments: [{
         type: 'voice',
