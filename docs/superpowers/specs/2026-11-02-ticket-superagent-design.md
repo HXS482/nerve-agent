@@ -258,3 +258,56 @@ submit(message)
 - **SQLite 与 Electron 打包**：`better-sqlite3` 已在 `allowScripts` 与 `electron-rebuild` 中，
   但仍需在打包产物上实测一次。
 - **`ctx.config` 合并读取可能与 `setEffort`/`setPermissionMode` 的现有调用点冲突**，需逐个核对调用方。
+
+---
+
+## 12. 执行锚点（2026-11-03 阶段 0-2 落地后实测）
+
+阶段 0-2 已合并进 master（15 commits，303 tests 全绿）。以下是**实测的**文件行数、接口与坑位，供阶段 3-4 直接引用，不必重新探索。
+
+### 12.1 可直接复用的既有实现
+
+| 文件 | 行数 | 已提供 |
+|---|---|---|
+| `src/main/store/ticket-store.ts` | 167 | `export class TicketStore`(:6)、`static open(dbPath)`、`rawQuery`、`rawExec`、`close`、`enqueueEffect`、`claimDueEffects`、`deleteEffect(seq, generation): boolean`、`bumpAttempt(seq, generation, nextDue): boolean`。**已有 effect 表**；ticket/assignment/input 三表尚未创建 |
+| `src/main/store/effect-runner.ts` | 179 | `export class EffectRunner`(:35)、`register(kind, handler, opts?)`(:47)、`start/stop/idle`。**handlers 收 `(payload, key)`** |
+| `src/main/gateway/session-router.ts` | 350 | `export class SessionRouter`(:52)、`constructor(agentCore, dataDir, store, runner)`(:74)、`async submit(...)`(:141，必须保持 `Promise<void>`)、`resetChannels()`。**队列已持久化，注册为 `{ordered:true, concurrency:1}`** |
+| `src/main/gateway/gateway.ts` | 669 | `ensureQueue()` 懒开 store/runner/router（不在构造函数）；`start()`/`stop()` 的排空顺序已按 runner→reset→adapters→server 修好 |
+
+### 12.2 阶段 3 的硬约束（从 0-2 的教训来）
+
+1. **不要动 `submit` 的返回类型** —— `gateway.ts` 的 WS 路径 `await` 它，IM 路径挂 `.catch()`。两者都要求 `Promise<void>`。
+2. **新表必须自己建** —— `TicketStore.open()` 目前只建 `effect` 表，且用 `IF NOT EXISTS`。加表要同时兼顾已有用户库（他们已有 `effect` 表，没有新表）。
+3. **任何 `delete*` 都要带 generation** —— 0-2 阶段最严重的 bug 是"in-flight 时合并导致丢消息"，修法是 `WHERE seq=? AND generation=?`。新增的 assignment/input 删除路径必须沿用这个模式，否则会重现同一类数据丢失。
+4. **测试命令必须用 Electron ABI**：
+   ```
+   ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron.exe node_modules/vitest/vitest.mjs run <path>
+   ```
+   原因：`better-sqlite3` 编译为 Electron ABI 139，本地 node 是 137。用 `npx vitest` 会在任何 SQLite 测试上崩。**不要重编译或替换 node_modules。**
+5. **`npm run build` 在这台机器上坏了**（Windows wrapper 调 `'"node"'`）。构建验证用 `./node_modules/.bin/electron-vite build`。
+6. **typecheck 基线不是 0**：`tsc -p tsconfig.node.json` 有约 46 条既有错误（vendor、`shadow`、隐式 any 等）。新增代码必须做到**零新增**，对比方式：
+   ```
+   ./node_modules/.bin/tsc --noEmit -p tsconfig.node.json 2>&1 | grep "error TS" | sed 's/([0-9]*,[0-9]*)//' | sort -u
+   ```
+   改动前后各存一份，`comm -13` 出差异。
+
+### 12.3 阶段 4 的 UI 挂点（实测行号）
+
+- `src/renderer/components/RightSidebar.tsx:40` — `type RightSidebarView = 'flow' | 'folder' | 'git' | 'gateway'`，加 `'tasks'`
+- 同文件 `:42` — `VIEWS` 数组，加一项（id/label/icon）
+- 同文件 `:470` — `VIEW_COMPONENTS` 映射，加 `tasks: TasksView`
+- 同文件 `:516` — `const ViewContent = VIEW_COMPONENTS[view] || VIEW_COMPONENTS.flow`，无需改
+- 模板参考 `src/renderer/components/GatewayView.tsx`（自包含，最多 4 个 view 的样板）
+- IPC 命名照 `src/shared/types.ts` 的 `IPC_CHANNELS`（`GATEWAY_*` 一组在 :119-132）
+
+### 12.4 阶段 3-4 必须继承的已知缺口（不要当成已解决）
+
+- **渲染层不传 sessionId**：`preload` 的 `setModel/setProvider/setEffort/setPermissionMode` 都不带 sessionId，`ConfigSetRequestSchema` 也没有该字段。**"每会话单独设模型"在后端成立、在 UI 上不可用。** 阶段 3 若要打通，需同时改 protocol + preload + useClaude，并注意渲染层的临时 id（`session-<ts>`）不是后端 id。
+- **插件工具不是会话隔离的**：`PluginBus` 在 `agent-core.ts:122` 用全局 `projectDir` 构造一次，无 setter，`loadPlugin` 传 `sessionId: ''`。插件读的 `ctx.projectDir`/`allowedRoots` 是启动时目录。修它需要 `plugin-bus.ts`/`plugin-context.ts` 重新设计。
+- **崩溃重放不幂等**：协议里有 `idempotencyKey`（`protocol.ts:56`）但 `gateway.ts` 解构时丢掉了。崩在 turn 中间会重放整个 turn（重复计费）。
+- **`Session.cwd` 是写一次**：只在建会话时写，切项目不更新。`StageSessions` 头部读的是全局 `config.cwd`，可能与会话实际运行目录不一致。
+- **队列的 `MessagePayload.cwd` 目前恒为 `undefined`**：两个调用方都显式传 `undefined`，因为 WS 协议还没有 cwd 字段。阶段 3 若让 UI 消息走队列，必须同时给协议加字段，否则又变回全局目录。
+
+### 12.5 阶段 3 建议先做的一件事
+
+`TicketStore` 加三张表时，**先看 `docs/superpowers/plans/2026-11-02-ticket-model-and-tasks-view.md` 的 Task 1**，它已经写好了建表 SQL 和 11 个方法签名。那份计划是基于阶段 0-2 之前的代码写的，**行号需要重新核对**，但接口设计仍然适用。

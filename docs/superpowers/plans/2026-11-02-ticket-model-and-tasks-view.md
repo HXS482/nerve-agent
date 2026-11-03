@@ -10,7 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-02-ticket-superagent-design.md`（§6、§7.2、§7.4、§8 阶段 3-4）
 
-**前置：** 必须先完成 `2026-11-02-persistent-queue-and-session-isolation.md`（`TicketStore.open`、`EffectRunner`、`resolveCwd`、`mergeConfig` 都必须已存在）。
+**前置：** `2026-11-02-persistent-queue-and-session-isolation.md` 已全部完成并合并进 master（15 commits，303 tests 绿）。以下接口已存在，可直接调用，不必重建：
+- `TicketStore`（`src/main/store/ticket-store.ts`，167 行）：`open / rawQuery / rawExec / close / enqueueEffect / claimDueEffects / deleteEffect(seq, generation): boolean / bumpAttempt(seq, generation, nextDue): boolean`
+- `EffectRunner`（`src/main/store/effect-runner.ts`，179 行）：`register(kind, handler, opts?) / start / stop / idle`，handlers 收 `(payload, key)`
+- `SessionRouter`（`src/main/gateway/session-router.ts`，350 行）：`constructor(agentCore, dataDir, store, runner)`、`async submit(...)`、`resetChannels()`
+- `resolveCwd`（`src/main/core/session-cwd.ts`）、`mergeConfig`（`src/main/core/session-config.ts`）
+
+**必读：** 设计文档 §12「执行锚点」——里面是阶段 0-2 落地后**实测**的文件行数、接口、6 条硬约束（含测试命令、typecheck 基线、`submit` 返回类型）、以及 5 个必须继承的已知缺口。不要重新探索，也不要违反 §12.2 的约束。
+
+⚠️ **本计划以下所有行号均为阶段 0-2 之前所写，已过时。** 动手前用 `grep -n` 重新定位，不要照抄行号。
 
 ## Global Constraints
 
