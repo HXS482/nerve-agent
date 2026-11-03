@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto'
 import { FileSessionStore } from '../session-store'
 import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins, saveRuntimeConfig } from '../settings'
 import { getBuiltinTools } from '../tools'
+import { JobRegistry } from './job-registry'
 import { SkillRegistry } from '../skill-registry'
 import { PluginBus } from '../plugin-bus'
 import { ProviderRegistry } from '../provider-registry'
@@ -80,6 +81,12 @@ export class AgentCore {
   }
 
   private sessionStore: FileSessionStore | null = null
+
+  /**
+   * 后台作业注册表。刻意是**进程级**的，不是会话级 ——
+   * 一条 npm install 跑在哪个会话里不重要，重要的是进程退出时能把它们全杀掉。
+   */
+  private jobs = new JobRegistry()
   private projectDir: string
   private sourceDir: string
   private settings: ClaudeSettings
@@ -616,7 +623,7 @@ export class AgentCore {
       onTodos: (todos) => {
         askChannel.sendFlowItem('todo', JSON.stringify(todos), { sessionId })
       },
-    } : undefined)
+    } : undefined, this.jobs)
 
     // TDAI 记忆工具：auto-recall 早就把它们写进了系统提示词，却从未注册 ——
     // 模型被明确告知可以调，实际撞空。合并进 builtinTools 后，下面的
@@ -943,6 +950,11 @@ export class AgentCore {
   /**
    * 获取会话上下文管理器
    */
+  /** 进程退出时杀掉所有后台作业，避免留下孤儿进程。 */
+  killAllJobs(): void {
+    this.jobs.killAll()
+  }
+
   getSessionContextManager(): SessionContextManager {
     return this.sessionContextManager
   }

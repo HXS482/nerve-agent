@@ -175,7 +175,21 @@ export function computeLineDiff(before: string, after: string): { added: number;
   return { added, removed, patch: out.join('\n') }
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers>; onTodos?: (todos: TodoItem[]) => void }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+/** 把后台作业的结果排版成模型能直接读的文本。 */
+function formatJobResult(r: {
+  jobId: string; command: string; exitCode: number | null; signal: string | null
+  stdout: string; stderr: string; truncated: boolean; startedAt: number; endedAt: number
+}): string {
+  const dur = ((r.endedAt - r.startedAt) / 1000).toFixed(1)
+  const status = r.signal
+    ? `被信号 ${r.signal} 终止`
+    : `退出码 ${r.exitCode ?? '未知'}`
+  const body = (r.stdout + (r.stderr ? '\n' + r.stderr : '')).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const truncNote = r.truncated ? '\n[输出过长，中间部分已丢弃]' : ''
+  return `jobId: ${r.jobId}\n命令: ${r.command}\n${status} · 用时 ${dur}s\n\n${body.slice(0, 20000) || '(无输出)'}${truncNote}`
+}
+
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers>; onTodos?: (todos: TodoItem[]) => void }, jobs?: import('./core/job-registry').JobRegistry): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
@@ -189,6 +203,14 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
     command: z.string().describe(hasGitBash
       ? 'The bash command to execute (bash/sh syntax only, even though the OS is Windows)'
       : 'The PowerShell command to execute (PowerShell syntax, NOT bash)'),
+    /** 显式要求后台执行：立刻返回 jobId，不等命令结束 */
+    background: z.boolean().optional().describe(
+      'Run in the background and return immediately with a jobId. Use visit_jobs to read its output later.',
+    ),
+    /** 取走某个已完成后台作业的输出 */
+    visit_jobs: z.string().optional().describe(
+      'Pass a jobId (or "all") to read the output of finished background jobs instead of running a command.',
+    ),
   })
   const writeSchema = z.object({
     file_path: z.string().describe('Absolute path to the file'),
@@ -228,7 +250,44 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         ? 'Execute a bash command via Git Bash on Windows. ALWAYS use bash/sh syntax ($HOME, &&, ||, mkdir -p, /c/... or forward-slash paths) — never PowerShell or cmd syntax, even though the OS is Windows. Use this for running shell commands, creating directories, installing packages, etc. Image files (.png, .jpg, etc.) created in the working directory are automatically moved to the internal gallery.'
         : 'Execute a Windows PowerShell command and return its output. Use PowerShell syntax (NOT bash/cmd syntax — e.g. use New-Item instead of mkdir -p, $env:USERPROFILE instead of $HOME). Image files (.png, .jpg, etc.) created in the working directory are automatically moved to the internal gallery.',
       input_schema: zodToInputSchema(bashSchema),
-      execute: async ({ command }: { command: string }) => {
+      execute: async ({ command, background, visit_jobs }: { command?: string; background?: boolean; visit_jobs?: string }) => {
+        // ── 读取已完成的后台作业 ──────────────────────────
+        // 这是后台化的另一半：命令转后台之后，模型得能把结果捞回来。
+        if (visit_jobs && jobs) {
+          if (visit_jobs === 'all') {
+            const done = jobs.peekFinished()
+            if (done.length === 0) {
+              const running = jobs.runningIds()
+              return {
+                content: running.length
+                  ? `还没有作业完成。仍在运行：${running.join(', ')}`
+                  : '没有待读取的作业。',
+              }
+            }
+            const parts = done.map((j) => {
+              const r = jobs.takeFinished(j.jobId)
+              return r ? formatJobResult(r) : ''
+            })
+            return { content: parts.filter(Boolean).join('\n\n') }
+          }
+          const result = jobs.takeFinished(visit_jobs)
+          return result
+            ? { content: formatJobResult(result) }
+            : { error: `找不到作业 ${visit_jobs}（可能已完成并被读取过，或 id 有误）` }
+        }
+
+        if (!command) return { error: 'command is required' }
+
+        // ── 显式要求后台：立刻返回 ────────────────────────
+        if (background && jobs) {
+          const jobId = jobs.start(command, {
+            shell: hasGitBash ? GIT_BASH : PS_EXE,
+            args: hasGitBash ? ['-c', command] : ['-NoProfile', '-Command', command],
+            cwd: effectiveCwd,
+          })
+          return { content: `已在后台启动，jobId: ${jobId}\n用 Bash({ visit_jobs: "${jobId}" }) 读取结果。` }
+        }
+
         // Snapshot existing image/artifact files before execution
         const beforeImages = new Set<string>()
         const beforeArtifacts = new Set<string>()
@@ -245,18 +304,56 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
           const execArgs: [string, string[]] = hasGitBash
             ? [GIT_BASH, ['-c', command]]
             : [PS_EXE, ['-NoProfile', '-Command', `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}`]]
-          const { stdout, stderr } = await execFileAsync(execArgs[0], execArgs[1], {
-            cwd: effectiveCwd,
-            encoding: 'utf-8',
-            timeout: 120000,
-            maxBuffer: 1024 * 1024,
-            env: {
-              ...process.env,
-              SystemRoot: 'C:\\WINDOWS',
-              windir: 'C:\\WINDOWS',
-              PATH: `C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0;${process.env.PATH || ''}`,
-            },
-          })
+          // 5 秒规则：先同步等一小段。跑完 → 正常返回（用户看不出区别）；
+          // 没跑完 → 把**同一个进程**转成后台作业，立刻返回 jobId。
+          //
+          // 为什么不是"一律后台"：绝大多数命令是秒级的，一律后台会让模型每条 ls
+          // 都得多调一次 visit_jobs，反而更慢更啰嗦。
+          //
+          // ⚠️ 必须共用同一个进程：超时后重新起一条命令 = 命令执行两次，
+          // npm install / git push 这类有副作用的命令直接出事。jobs.waitOrAdopt 先 spawn
+          // 再 race，输了就把这只 child 直接登记成 job —— 输出从第一秒起就在收集。
+          const INLINE_WAIT_MS = 5000
+          const bashEnv = {
+            ...process.env,
+            SystemRoot: 'C:\\WINDOWS',
+            windir: 'C:\\WINDOWS',
+            PATH: `C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0;${process.env.PATH || ''}`,
+          }
+
+          let stdout: string
+          let stderr: string
+
+          if (jobs) {
+            const outcome = await jobs.waitOrAdopt(command, {
+              shell: execArgs[0],
+              args: execArgs[1],
+              cwd: effectiveCwd,
+              env: bashEnv,
+              inlineWaitMs: INLINE_WAIT_MS,
+            })
+
+            if (outcome.kind === 'background') {
+              return {
+                content: `命令超过 ${INLINE_WAIT_MS / 1000} 秒还在跑，已转入后台。\njobId: ${outcome.jobId}\n用 Bash({ visit_jobs: "${outcome.jobId}" }) 读取结果。\n（同一进程继续跑，输出从第一秒起都保留）`,
+              }
+            }
+
+            stdout = outcome.result.stdout
+            stderr = outcome.result.stderr
+          } else {
+            // 没有注册表时退回原来的同步路径（后端化未接线的场景）
+            const r = await execFileAsync(execArgs[0], execArgs[1], {
+              cwd: effectiveCwd,
+              encoding: 'utf-8',
+              timeout: 120000,
+              maxBuffer: 1024 * 1024,
+              env: bashEnv,
+            })
+            stdout = r.stdout
+            stderr = r.stderr
+          }
+
           const out = (stdout || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
           const err = (stderr || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
           const output = (out + (err ? '\n' + err : '')).slice(0, 10000) || '(no output)'

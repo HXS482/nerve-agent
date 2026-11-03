@@ -536,6 +536,8 @@ app.whenReady().then(async () => {
       await gateway.stop().catch((err) => { console.warn('[Nerve] gateway stop failed:', err) })
       await mcpBridge.stop().catch(() => {})
       await memoryCore.destroy().catch(() => {})
+      // 杀掉所有后台作业：一条 sleep 10 或 npm install 不该在 app 退出后继续占着
+      try { claude.killAllJobs?.() } catch { /* 尽力而为 */ }
       await claude.close().catch(() => {})
     },
   })

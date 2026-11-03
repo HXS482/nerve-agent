@@ -110,6 +110,11 @@ export class ClaudeService {
     await this.core.setEffort(effort, sessionId)
   }
 
+  /** 转发：进程退出时杀掉所有后台作业。 */
+  killAllJobs() {
+    this.core.killAllJobs()
+  }
+
   async setCwd(cwd: string) {
     await this.core.setCwd(cwd)
     this.projectDir = cwd
