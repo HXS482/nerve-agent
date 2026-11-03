@@ -20,6 +20,13 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   }
   gateway?.on('log', forwardLog)
   mcpBridge?.on('log', forwardLog)
+
+  // Ticket 阶段变化 → 推给渲染层，Tasks 视图靠它实时刷新（不轮询）
+  gateway?.on('ticket-changed', (ticket: unknown) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TICKET_CHANGED, ticket)
+    }
+  })
   ipcMain.handle(IPC_CHANNELS.SEND_MESSAGE, async (_event, payload: SendMessagePayload) => {
     // cwd 可能是 undefined / 空串（老会话或渲染层没取到）：原样交给 agent-core，
     // 由 resolveCwd 统一回落全局 projectDir，这里不做路径补全
@@ -564,6 +571,31 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     ipcMain.handle(IPC_CHANNELS.GATEWAY_SESSION_DELETE, async (_event, sessionId: string) => {
       // TODO: 实现会话删除
       console.log(`[Gateway] Delete session: ${sessionId}`)
+    })
+
+    // ── Tickets（右侧栏 Tasks 视图）──────────────────────────
+    //
+    // Gateway 未启动时这几个都返回空/失败而不是抛错：
+    // 右侧栏在任何时候都可能被打开，UI 不该因为 gateway 没开就报错。
+    ipcMain.handle(IPC_CHANNELS.TICKET_LIST, async (_event, opts?: { includeEnded?: boolean }) => {
+      if (!gateway) return []
+      return gateway.listTickets(opts ?? {})
+    })
+
+    ipcMain.handle(IPC_CHANNELS.TICKET_GET, async (_event, id: string) => {
+      if (!gateway) return undefined
+      return gateway.getTicket(id)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.TICKET_STOP, async (_event, id: string) => {
+      const router = gateway?.getTicketRouter()
+      if (!router) return { success: false, error: 'Gateway not running' }
+      try {
+        router.stop(id)
+        return { success: true }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) }
+      }
     })
 
     ipcMain.handle(IPC_CHANNELS.GATEWAY_START, async () => {

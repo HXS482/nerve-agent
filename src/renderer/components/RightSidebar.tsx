@@ -4,6 +4,7 @@ import { useCallback, useRef, useEffect, useState } from 'react'
 import { useImageSrc } from '../hooks/useImageSrc'
 import { GitView } from './GitView'
 import { GatewayView } from './GatewayView'
+import { TasksView } from './TasksView'
 import type { DirEntry } from '../../shared/types'
 
 const VIEW_TRANSITION = {
@@ -37,7 +38,7 @@ declare global {
   }
 }
 
-type RightSidebarView = 'flow' | 'folder' | 'git' | 'gateway'
+type RightSidebarView = 'flow' | 'folder' | 'git' | 'gateway' | 'tasks'
 
 const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
   {
@@ -83,6 +84,20 @@ const VIEWS: { id: RightSidebarView; label: string; icon: JSX.Element }[] = [
         <path d="M15 10v4" />
         <path d="M17.84 7.17a4 4 0 0 0-5.66 0" />
         <path d="M20.66 4.34a8 8 0 0 0-11.31 0" />
+      </svg>
+    ),
+  },
+  {
+    id: 'tasks',
+    label: 'Tasks',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 6h13" />
+        <path d="M8 12h13" />
+        <path d="M8 18h13" />
+        <path d="M3 6h.01" />
+        <path d="M3 12h.01" />
+        <path d="M3 18h.01" />
       </svg>
     ),
   },
@@ -472,6 +487,7 @@ const VIEW_COMPONENTS: Record<RightSidebarView, React.FC> = {
   folder: FolderView,
   git: GitView,
   gateway: GatewayView,
+  tasks: TasksView,
 }
 
 export function RightSidebar() {
@@ -513,7 +529,8 @@ export function RightSidebar() {
     document.addEventListener('mouseup', onUp)
   }, [width, setWidth])
 
-  const ViewContent = VIEW_COMPONENTS[view] || VIEW_COMPONENTS.flow
+  // 'diff' 是持久化里可能残留的历史值，VIEW_COMPONENTS 里没有它 —— 走 fallback。
+  const ViewContent = (VIEW_COMPONENTS as Record<string, React.FC>)[view] || VIEW_COMPONENTS.flow
 
   return (
     <AnimatePresence>

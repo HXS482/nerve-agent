@@ -82,7 +82,8 @@ interface ChatState {
   // Right sidebar
   rightSidebarOpen: boolean
   rightSidebarWidth: number
-  rightSidebarView: 'flow' | 'folder' | 'git' | 'diff'
+  /** 与 RightSidebar 的 RightSidebarView 保持一致。'diff' 是历史遗留值，仍接受以免刷新时被清掉。 */
+  rightSidebarView: 'flow' | 'folder' | 'git' | 'gateway' | 'tasks' | 'diff'
 
   // Flow event stream
   flowItems: FlowItem[]
@@ -349,7 +350,7 @@ export const useChatStore = create<ChatState>()(
             document.documentElement.setAttribute('data-theme', t)
           }
           // Sanitize stale persisted view values
-          const validViews = ['flow', 'folder', 'git', 'diff']
+          const validViews = ['flow', 'folder', 'git', 'gateway', 'tasks', 'diff']
           if (state?.rightSidebarView && !validViews.includes(state.rightSidebarView)) {
             state.rightSidebarView = 'flow'
           }

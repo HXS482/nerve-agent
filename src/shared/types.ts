@@ -130,6 +130,13 @@ export const IPC_CHANNELS = {
   GATEWAY_PROXY_SAVE: 'gateway:proxy:save',
   GATEWAY_PUBLIC_ACCESS_GET: 'gateway:publicAccess:get',
   GATEWAY_PUBLIC_ACCESS_SAVE: 'gateway:publicAccess:save',
+
+  // Tickets（阶段 4：右侧栏 Tasks 视图）
+  TICKET_LIST: 'ticket:list',
+  TICKET_GET: 'ticket:get',
+  TICKET_STOP: 'ticket:stop',
+  /** 主进程 → 渲染层：某个 Ticket 状态变了 */
+  TICKET_CHANGED: 'ticket:changed',
   MCP_BRIDGE_STATUS: 'mcp-bridge:status',
   MCP_BRIDGE_TOGGLE: 'mcp-bridge:toggle',
 } as const

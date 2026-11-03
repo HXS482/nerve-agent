@@ -24,6 +24,11 @@ declare global {
       setProvider: (providerId: string, sessionId?: string) => Promise<void>
       setCwd: (cwd: string) => Promise<void>
       setPermissionMode: (mode: string, sessionId?: string) => Promise<void>
+      // Tickets（右侧栏 Tasks 视图）
+      listTickets: (opts?: { includeEnded?: boolean }) => Promise<unknown[]>
+      getTicket: (id: string) => Promise<unknown>
+      stopTicket: (id: string) => Promise<{ success: boolean; error?: string }>
+      onTicketChanged: (cb: (ticket: unknown) => void) => () => void
       respondToolApproval: (response: ToolApprovalResponse) => Promise<void>
       onToolApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => () => void
       respondAskUser: (response: import('../../shared/types').AskUserResponse) => Promise<void>

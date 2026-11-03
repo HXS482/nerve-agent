@@ -26,6 +26,17 @@ const api = {
   setProvider: (providerId: string, sessionId?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_PROVIDER, providerId, sessionId),
   setCwd: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_CWD, cwd),
+
+  // ── Tickets（右侧栏 Tasks 视图）──
+  listTickets: (opts?: { includeEnded?: boolean }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TICKET_LIST, opts),
+  getTicket: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.TICKET_GET, id),
+  stopTicket: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.TICKET_STOP, id),
+  onTicketChanged: (callback: (ticket: unknown) => void) => {
+    const handler = (_event: any, ticket: unknown) => callback(ticket)
+    ipcRenderer.on(IPC_CHANNELS.TICKET_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.TICKET_CHANGED, handler)
+  },
   setPermissionMode: (mode: string, sessionId?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_PERMISSION_MODE, mode, sessionId),
   respondToolApproval: (response: ToolApprovalResponse) =>

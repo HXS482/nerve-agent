@@ -138,6 +138,20 @@ export class NerveGateway extends EventEmitter {
     return this.ticketRouter
   }
 
+  /** 给 IPC 用：取 TicketRouter（未启动时返回 null，不抛错）。 */
+  getTicketRouter(): TicketRouter | null {
+    return this.ticketRouter
+  }
+
+  /** 给 IPC 用：直接读 ticket 表（未启动时返回空数组，UI 不会崩）。 */
+  listTickets(opts: { includeEnded?: boolean } = {}) {
+    return this.ticketStore ? this.ticketStore.listTickets(opts) : []
+  }
+
+  getTicket(id: string) {
+    return this.ticketStore ? this.ticketStore.getTicket(id) : undefined
+  }
+
   private requireRouter(): SessionRouter {
     if (!this.sessionRouter) {
       throw new Error('Gateway is not started: persistent queue is not open')
@@ -269,6 +283,14 @@ export class NerveGateway extends EventEmitter {
 
     // 启动会话队列（会先恢复重启前没跑完的消息）
     this.requireRouter().start()
+
+    // Ticket 状态变化 → 抛给上层（ipc 会转成 webContents.send 给渲染层）。
+    // 用事件而不是让 UI 轮询：任务阶段变化很频繁，轮询要么迟滞要么浪费。
+    const ticketRouter = this.requireTicketRouter()
+    ticketRouter.start()
+    ticketRouter.onChanged((ticket) => {
+      this.emit('ticket-changed', ticket)
+    })
 
     // 启动 WebSocket 服务
     await this.server.start()
