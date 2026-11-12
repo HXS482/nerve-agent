@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useChatStore } from '../stores/chatStore'
+import { useRoutineStore } from '../stores/routineStore'
 import { useStageStore } from '../stores/stageStore'
 import { useGitStore } from '../stores/gitStore'
 import { ModelIsland } from './ModelIsland'
@@ -70,6 +71,9 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
+  const setRightSidebarView = useChatStore((s) => s.setRightSidebarView)
+  const setRightSidebarOpen = useChatStore((s) => s.setRightSidebarOpen)
+  const loadBots = useRoutineStore((s) => s.loadBots)
   const conversationWidth = useChatStore((s) => s.conversationWidth)
   const effort = useChatStore((s) => s.config.effort)
   const setConfigEffort = useChatStore((s) => s.setConfig)
@@ -337,6 +341,22 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
             }}
           >
             {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar（弹条挂在根层级，见上） */}
+            {/* Routines 入口：打开右侧栏并切到 Routines 视图 */}
+            <button
+              className="stage-icon-btn"
+              title="定时任务"
+              style={{ borderRadius: 999, marginLeft: 4 }}
+              onClick={() => {
+                void loadBots()
+                setRightSidebarView('routines')
+                setRightSidebarOpen(true)
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </button>
             <div className="inputbar-plus-root" ref={plusRootRef} style={{ marginLeft: 4 }}>
               <button
                 className="stage-icon-btn"
