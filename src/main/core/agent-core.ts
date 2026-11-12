@@ -684,9 +684,14 @@ export class AgentCore {
    * 模型调 create_routine 时用它决定 botId 和默认投递会话。
    */
   private routineToolCtx(sessionId: string | undefined) {
+    // botId 必须在这里**立即**取值。currentBotId 是进程级的单个字段，routine 触发和
+    // 用户轮次共用同一个 AgentCore；若在 execute 时才读，另一轮已经把它改成了别的 Bot，
+    // 就会把 routine 记到错误的 Bot 名下（跨 Bot 串数据）。
+    const botId = this.currentBotId
+    const boundSessionId = sessionId ?? ''
     return {
       store: this.routineStoreForTools(),
-      getSession: () => ({ sessionId: sessionId ?? '', botId: this.currentBotId ?? '' }),
+      getSession: () => ({ sessionId: boundSessionId, botId }),
     }
   }
 
@@ -700,6 +705,14 @@ export class AgentCore {
       this.toolsRoutineStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
     }
     return this.toolsRoutineStore
+  }
+
+  /** 退出时关掉工具侧的 routine 连接（与 Scheduler 的是两个独立句柄）。 */
+  closeToolStores(): void {
+    if (this.toolsRoutineStore) {
+      try { this.toolsRoutineStore.close() } catch { /* 已关闭或不可用 */ }
+      this.toolsRoutineStore = null
+    }
   }
   /**
    * 构建工具定义和执行器

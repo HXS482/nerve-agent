@@ -558,6 +558,7 @@ app.whenReady().then(async () => {
     teardown: async () => {
       scheduler.stop()
       routineStore.close()
+      agentCore.closeToolStores()
       await gateway.stop().catch((err) => { console.warn('[Nerve] gateway stop failed:', err) })
       await mcpBridge.stop().catch(() => {})
       await memoryCore.destroy().catch(() => {})
