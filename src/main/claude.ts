@@ -151,6 +151,11 @@ export class ClaudeService {
     return this.core.getSourceDir()
   }
 
+  /** 供 index.ts 组装 Scheduler 用（core 是私有字段，只读暴露引用）。 */
+  getAgentCore() {
+    return this.core
+  }
+
   reloadProvider() {
     this.core.reloadProvider()
   }

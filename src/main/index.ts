@@ -15,7 +15,10 @@ import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
 import { initImagesDir } from './images'
 import { McpBridgeServer } from './mcp-bridge'
-import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess, getGatewayToken, loadMcpBridgeConfig } from './settings'
+import { RoutineStore } from './store/routine-store'
+import { BotRegistry } from './core/bot-registry'
+import { Scheduler } from './core/scheduler'
+import { injectSettingsEnv, getChannels, getProxy, getGatewayPublicAccess, getGatewayToken, loadMcpBridgeConfig, NERVE_DIR } from './settings'
 import { MemoryTdaiCore } from './memory-tdai'
 import { OffloadBridge } from './offload-bridge'
 import { createTray } from './tray'
@@ -441,6 +444,21 @@ app.whenReady().then(async () => {
     console.error('[Nerve] Failed to load gateway config:', err)
   })
 
+  // ── Routine Scheduler ──
+  // 桌面场景没有独立 worker：app 开着就跑，关了就停（已与用户确认）。
+  // dispatch 走 AgentCore：Gateway 已启动时进 Ticket 队列，否则直连 sendMessage，
+  // 所以 routine 触发不依赖 Gateway 是否启动。
+  const agentCore = claude.getAgentCore()
+  const routineStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
+  const schedulerBots = await BotRegistry.create(join(NERVE_DIR, 'bots'))
+  const scheduler = new Scheduler({
+    store: routineStore,
+    bots: schedulerBots,
+    dispatch: (d) => agentCore.dispatchRoutine(d),
+  })
+  agentCore.setGatewayProvider(() => (gateway.getTicketRouter() ? gateway : null))
+  scheduler.start()
+
   // MCP Bridge
   const mcpBridgeConfig = await loadMcpBridgeConfig()
   mcpBridgeConfig.cwd = app.getPath('home')
@@ -533,6 +551,8 @@ app.whenReady().then(async () => {
   quitDrain = createQuitDrain({
     quit: () => app.quit(),
     teardown: async () => {
+      scheduler.stop()
+      routineStore.close()
       await gateway.stop().catch((err) => { console.warn('[Nerve] gateway stop failed:', err) })
       await mcpBridge.stop().catch(() => {})
       await memoryCore.destroy().catch(() => {})

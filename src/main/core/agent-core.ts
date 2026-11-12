@@ -104,9 +104,63 @@ export class AgentCore {
     return reg.getDefault()
   }
 
-  /** Task 6 前的占位实现：读不到返回 null。 */
-  private async getSessionBotId(_sessionId: string): Promise<string | null> {
-    return null
+  /** 读 session 元数据里的 botId；没有就返回 null（由 resolveBot 回落默认 Bot）。 */
+  private async getSessionBotId(sessionId: string): Promise<string | null> {
+    if (!this.sessionStore || !sessionId) return null
+    const meta = await this.sessionStore.getMeta(sessionId) as { botId?: string }
+    return meta.botId ?? null
+  }
+
+  /** 会话绑定 Bot（IPC 层调用；默认 Bot 顺带补 homeSessionId）。 */
+  async setSessionBot(sessionId: string, botId: string): Promise<void> {
+    if (!this.sessionStore) throw new Error('session store 未初始化')
+    const reg = await this.getBotRegistry()
+    const bot = await reg.get(botId)
+    if (!bot) throw new Error(`Bot not found: ${botId}`)
+    await this.sessionStore.setMeta(sessionId, { botId })
+    if (bot.isDefault && !bot.homeSessionId) {
+      await reg.update(bot.id, { homeSessionId: sessionId })
+    }
+  }
+
+  /** index.ts 组装时注入，避免 core 反向依赖 gateway 模块。 */
+  setGatewayProvider(p: () => { getTicketRouter: () => unknown } | null): void {
+    this.gatewayProvider = p
+  }
+
+  private gatewayProvider: (() => { getTicketRouter: () => unknown } | null) | null = null
+
+  /**
+   * Scheduler 的投递通道（设计文档 §3 兜底）。
+   * TicketRouter 可用走队列（持久化/恢复/槽位全复用）；不可用直连
+   * sendMessage + NullOutputChannel（结果落 session transcript，不丢内容）。
+   * 这样 routine 触发不依赖 Gateway 是否启动。
+   */
+  async dispatchRoutine(d: { text: string; sessionId: string }): Promise<boolean> {
+    const { NullOutputChannel } = await import('./output-channel')
+    const router = this.gatewayProvider?.()?.getTicketRouter?.() as
+      | { dispatch: (msg: Record<string, unknown>, ch: unknown) => unknown }
+      | null
+      | undefined
+    if (router) {
+      router.dispatch(
+        {
+          platform: 'local', userId: 'scheduler', chatId: d.sessionId,
+          threadKey: `local:${d.sessionId}`,
+          text: d.text, cwd: this.config.cwd, kind: 'system' as const,
+        },
+        new NullOutputChannel(),
+      )
+      return true
+    }
+    try {
+      const ctx = this.getSessionContextManager().getOrCreate(d.sessionId)
+      await this.sendMessage({ prompt: d.text, sessionId: d.sessionId, cwd: this.config.cwd }, new NullOutputChannel(), ctx)
+      return true
+    } catch (err) {
+      console.error('[AgentCore] dispatchRoutine fallback failed:', err)
+      return false
+    }
   }
 
   /**
@@ -462,8 +516,8 @@ export class AgentCore {
 
     const messages = [...history]
 
-    // 系统提示按三层组装（见 system-prompt.ts）：
-    //   Soul（手写内核）→ Persona（记忆层演化）→ 记忆上下文（场景导航/工具说明）
+    // 系统提示按四层组装（见 system-prompt.ts）：
+    //   Soul（手写内核）→ Bot（当前 Bot 的角色指令）→ Persona（记忆层演化）→ 记忆上下文（场景导航/工具说明）
     let memoryContext = ''
     let recalledPersona = ''
 

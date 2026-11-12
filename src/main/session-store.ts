@@ -46,6 +46,24 @@ export class FileSessionStore {
     return join(this.baseDir, `${sessionId}.branches.json`)
   }
 
+  private metaPath(sessionId: string): string {
+    return join(this.baseDir, `${sessionId}.meta.json`)
+  }
+
+  /** 会话级元数据（botId 等）。独立文件，不碰消息 JSONL。 */
+  async getMeta(sessionId: string): Promise<Record<string, unknown>> {
+    try {
+      return JSON.parse(await readFile(this.metaPath(sessionId), 'utf-8'))
+    } catch {
+      return {}
+    }
+  }
+
+  async setMeta(sessionId: string, patch: Record<string, unknown>): Promise<void> {
+    const cur = await this.getMeta(sessionId)
+    await writeFile(this.metaPath(sessionId), JSON.stringify({ ...cur, ...patch }, null, 2), 'utf-8')
+  }
+
   private async loadBranches(sessionId: string): Promise<BranchesData> {
     const p = this.branchesPath(sessionId)
     try {

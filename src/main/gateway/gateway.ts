@@ -97,8 +97,10 @@ export class NerveGateway extends EventEmitter {
    * （也保证内存里的 session 映射/channel 语义不会被第二轮重新加载覆盖）。
    *
    * 打开失败则 log + 抛错，由调用方（IPC / worker）决定怎么报给用户——Gateway 不进入 running。
+   *
+   * 公开供 Scheduler 调用：Gateway 未启动时 routine 也要能投递，所以不能只靠 start() 打开队列。
    */
-  private ensureQueue(): void {
+  ensureQueue(): void {
     if (this.ticketStore && this.effectRunner && this.sessionRouter && this.ticketRouter) return
 
     // 先全部构造成功再赋值，避免留下"store 有、runner 没有"的半截状态。
