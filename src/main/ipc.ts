@@ -5,15 +5,13 @@ import { homedir, hostname } from 'os'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
 import { PetSkinManager } from './pet-skins'
-import { getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig, isRemoteMcpConfig, getRecentProjects, type McpServerConfig } from './settings'
+import { NERVE_DIR, getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig, isRemoteMcpConfig, getRecentProjects, type McpServerConfig } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath, getImagesDir } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
 import { NerveGateway } from './gateway'
 import { RoutineStore } from './store/routine-store'
 import { BotRegistry } from './core/bot-registry'
-import { NERVE_DIR } from './settings'
-import { join as joinPath } from 'path'
 
 export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway,
   mcpBridge?: import('./mcp-bridge').McpBridgeServer,
@@ -582,18 +580,31 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   
   // ── Routines / Bots（bot 驱动改造）────────────────────────
+  //
+  // setupIPC 会被调用两次（主窗口 + pet 窗口 / activate 重建），而 ipcMain.handle
+  // 对已注册的 channel 会抛 "Attempted to register a second handler"。
+  // 这几个 channel 的 handler 只依赖模块级的 stores 参数与 claude，与具体窗口无关，
+  // 所以第二次注册前先移除旧的即可（Electron 允许 removeHandler 后重新 handle）。
+  for (const ch of [
+    IPC_CHANNELS.ROUTINE_LIST, IPC_CHANNELS.ROUTINE_CREATE, IPC_CHANNELS.ROUTINE_UPDATE,
+    IPC_CHANNELS.ROUTINE_DELETE, IPC_CHANNELS.ROUTINE_SWEEP_STATUS,
+    IPC_CHANNELS.BOT_LIST, IPC_CHANNELS.BOT_UPDATE, IPC_CHANNELS.SESSION_BIND_BOT,
+  ]) {
+    ipcMain.removeHandler(ch)
+  }
+
   // stores 缺省时用一个惰性打开的 RoutineStore：老调用点（pet 窗口那条 setupIPC）不传，
   // 也不能让 UI 一打开就崩。
   let fallbackStore: RoutineStore | null = null
   const routineStore = () => {
     if (stores?.routineStore) return stores.routineStore
-    if (!fallbackStore) fallbackStore = RoutineStore.open(joinPath(NERVE_DIR, 'routines.db'))
+    if (!fallbackStore) fallbackStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
     return fallbackStore
   }
   let fallbackBots: BotRegistry | null = null
   const botRegistry = async () => {
     if (stores?.botRegistry) return stores.botRegistry
-    if (!fallbackBots) fallbackBots = await BotRegistry.create(joinPath(NERVE_DIR, 'bots'))
+    if (!fallbackBots) fallbackBots = await BotRegistry.create(join(NERVE_DIR, 'bots'))
     return fallbackBots
   }
 
