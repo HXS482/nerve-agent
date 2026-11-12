@@ -573,7 +573,7 @@ export class AgentCore {
       memoryContext,
     })
 
-    // 语音指令是当前轮的临时指令，接在三层之后
+    // 语音指令是当前轮的临时指令，接在四层之后
     if (payload.prompt.startsWith('[语音指令]')) {
       const voiceNote = '## Voice Command Mode\nThe user is speaking via voice input. The message is prefixed with [语音指令]. Treat this as a direct command to execute — do NOT explain what you would do. Just do it. If the request is clear, execute it immediately. If ambiguous, ask a brief clarifying question.'
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${voiceNote}` : voiceNote
