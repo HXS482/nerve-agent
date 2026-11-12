@@ -116,6 +116,9 @@ export class AgentCore {
   /** 会话绑定 Bot（IPC 层调用；默认 Bot 顺带补 homeSessionId）。 */
   async setSessionBot(sessionId: string, botId: string): Promise<void> {
     if (!this.sessionStore) throw new Error('session store 未初始化')
+    // 典型误用是传了拼错/尚未创建的会话 id：那会在磁盘上留一个孤立的 meta 文件，
+    // 而且界面上看不出来。宁可在这里明确拒绝。
+    if (!(await this.sessionStore.exists(sessionId))) throw new Error('会话不存在: ' + sessionId)
     const reg = await this.getBotRegistry()
     const bot = await reg.get(botId)
     if (!bot) throw new Error(`Bot not found: ${botId}`)

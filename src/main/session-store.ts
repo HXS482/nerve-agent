@@ -50,6 +50,16 @@ export class FileSessionStore {
     return join(this.baseDir, `${sessionId}.meta.json`)
   }
 
+  /** 会话是否存在（以消息 JSONL 为准）。 */
+  async exists(sessionId: string): Promise<boolean> {
+    try {
+      await access(this.entryPath(sessionId))
+      return true
+    } catch {
+      return false
+    }
+  }
+
   /** 会话级元数据（botId 等）。独立文件，不碰消息 JSONL。 */
   async getMeta(sessionId: string): Promise<Record<string, unknown>> {
     try {
