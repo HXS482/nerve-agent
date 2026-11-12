@@ -82,6 +82,33 @@ export class AgentCore {
 
   private sessionStore: FileSessionStore | null = null
 
+  private botRegistry: import('./bot-registry').BotRegistry | null = null
+
+  private async getBotRegistry() {
+    if (!this.botRegistry) {
+      const { BotRegistry } = await import('./bot-registry')
+      const { NERVE_DIR } = await import('../settings')
+      this.botRegistry = await BotRegistry.create(join(NERVE_DIR, 'bots'))
+    }
+    return this.botRegistry
+  }
+
+  /** 解析会话所属 Bot：session 元数据 botId 优先，失效回落默认 Bot（设计文档 §1）。 */
+  private async resolveBot(sessionId: string): Promise<import('./bot-registry').BotInfo> {
+    const reg = await this.getBotRegistry()
+    const botId = await this.getSessionBotId(sessionId)
+    if (botId) {
+      const bot = await reg.get(botId)
+      if (bot) return bot
+    }
+    return reg.getDefault()
+  }
+
+  /** Task 6 前的占位实现：读不到返回 null。 */
+  private async getSessionBotId(_sessionId: string): Promise<string | null> {
+    return null
+  }
+
   /**
    * 后台作业注册表。刻意是**进程级**的，不是会话级 ——
    * 一条 npm install 跑在哪个会话里不重要，重要的是进程退出时能把它们全杀掉。
@@ -469,8 +496,10 @@ export class AgentCore {
       }
     }
 
+    const bot = await this.resolveBot(payload.sessionId ?? '')
     let systemPrompt = composeSystemPrompt({
       soul: this.settings.soul,
+      bot: bot.instructions || undefined,
       persona: recalledPersona,
       memoryContext,
     })
