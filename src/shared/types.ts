@@ -137,6 +137,15 @@ export const IPC_CHANNELS = {
   TICKET_STOP: 'ticket:stop',
   /** 主进程 → 渲染层：某个 Ticket 状态变了 */
   TICKET_CHANGED: 'ticket:changed',
+  // Routines / Bots (bot 驱动改造)
+  ROUTINE_LIST: 'routine:list',
+  ROUTINE_CREATE: 'routine:create',
+  ROUTINE_UPDATE: 'routine:update',
+  ROUTINE_DELETE: 'routine:delete',
+  ROUTINE_SWEEP_STATUS: 'routine:sweepStatus',
+  BOT_LIST: 'bot:list',
+  BOT_UPDATE: 'bot:update',
+  SESSION_BIND_BOT: 'session:bindBot',
   MCP_BRIDGE_STATUS: 'mcp-bridge:status',
   MCP_BRIDGE_TOGGLE: 'mcp-bridge:toggle',
 } as const

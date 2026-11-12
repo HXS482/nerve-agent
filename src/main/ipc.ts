@@ -10,8 +10,15 @@ import { saveImage, listImages, deleteImage, getImagePath, getImagesDir } from '
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
 import { GitService } from './git'
 import { NerveGateway } from './gateway'
+import { RoutineStore } from './store/routine-store'
+import { BotRegistry } from './core/bot-registry'
+import { NERVE_DIR } from './settings'
+import { join as joinPath } from 'path'
 
-export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway, mcpBridge?: import('./mcp-bridge').McpBridgeServer) {
+export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway,
+  mcpBridge?: import('./mcp-bridge').McpBridgeServer,
+  stores?: { routineStore: RoutineStore; botRegistry: BotRegistry },
+) {
   // ── Forward gateway / mcp-bridge logs to renderer ──
   const forwardLog = (entry: { level: string; message: string; timestamp: number }) => {
     if (!window.isDestroyed()) {
@@ -573,7 +580,48 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       console.log(`[Gateway] Delete session: ${sessionId}`)
     })
 
-    // ── Tickets（右侧栏 Tasks 视图）──────────────────────────
+  
+  // ── Routines / Bots（bot 驱动改造）────────────────────────
+  // stores 缺省时用一个惰性打开的 RoutineStore：老调用点（pet 窗口那条 setupIPC）不传，
+  // 也不能让 UI 一打开就崩。
+  let fallbackStore: RoutineStore | null = null
+  const routineStore = () => {
+    if (stores?.routineStore) return stores.routineStore
+    if (!fallbackStore) fallbackStore = RoutineStore.open(joinPath(NERVE_DIR, 'routines.db'))
+    return fallbackStore
+  }
+  let fallbackBots: BotRegistry | null = null
+  const botRegistry = async () => {
+    if (stores?.botRegistry) return stores.botRegistry
+    if (!fallbackBots) fallbackBots = await BotRegistry.create(joinPath(NERVE_DIR, 'bots'))
+    return fallbackBots
+  }
+
+  ipcMain.handle(IPC_CHANNELS.ROUTINE_LIST, async (_event, botId: string) =>
+    routineStore().listByBot(botId, { includeDisabled: true }))
+
+  ipcMain.handle(IPC_CHANNELS.ROUTINE_CREATE, async (_event, input: { botId: string; sessionId: string; instruction: string; schedule: string }) =>
+    routineStore().create({ ...input, createdBy: 'user' }))
+
+  ipcMain.handle(IPC_CHANNELS.ROUTINE_UPDATE, async (_event, id: string, patch: { instruction?: string; schedule?: string; enabled?: boolean }) =>
+    routineStore().update(id, patch))
+
+  ipcMain.handle(IPC_CHANNELS.ROUTINE_DELETE, async (_event, id: string) =>
+    routineStore().remove(id))
+
+  ipcMain.handle(IPC_CHANNELS.ROUTINE_SWEEP_STATUS, async () => {
+    const lastSweep = routineStore().lastSweep()
+    return { lastSweep, healthy: lastSweep !== null && Date.now() - lastSweep < 15 * 60_000 }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BOT_LIST, async () => (await botRegistry()).list())
+
+  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; instructions?: string; homeSessionId?: string }) =>
+    (await botRegistry()).update(id, patch))
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_BIND_BOT, async (_event, sessionId: string, botId: string) =>
+    claude.getAgentCore().setSessionBot(sessionId, botId))
+  // ── Tickets（右侧栏 Tasks 视图）──────────────────────────
     //
     // Gateway 未启动时这几个都返回空/失败而不是抛错：
     // 右侧栏在任何时候都可能被打开，UI 不该因为 gateway 没开就报错。

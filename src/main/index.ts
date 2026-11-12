@@ -475,7 +475,7 @@ app.whenReady().then(async () => {
     mcpBridge.start().catch(err => console.error('[Nerve] MCP Bridge start failed:', err.message))
   }
 
-  setupIPC(mainWindow, claude, skinManager, gitService, gateway, mcpBridge)
+  setupIPC(mainWindow, claude, skinManager, gitService, gateway, mcpBridge, { routineStore, botRegistry: schedulerBots })
 
   // Handle pet-sprite:// protocol for serving local spritesheets
   const petsDir = join(homedir(), '.nerve', 'pets')

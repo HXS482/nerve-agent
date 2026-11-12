@@ -256,6 +256,19 @@ const api = {
   gatewayProxySave: (proxy: any) => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_PROXY_SAVE, proxy),
   gatewayPublicAccessGet: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_GET),
   gatewayPublicAccessSave: (config: any) => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_PUBLIC_ACCESS_SAVE, config),
+  // ── Routines / Bots（bot 驱动改造）──
+  routineList: (botId: string) => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_LIST, botId),
+  routineCreate: (input: { botId: string; sessionId: string; instruction: string; schedule: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_CREATE, input),
+  routineUpdate: (id: string, patch: { instruction?: string; schedule?: string; enabled?: boolean }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_UPDATE, id, patch),
+  routineDelete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_DELETE, id),
+  routineSweepStatus: () => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_SWEEP_STATUS),
+  botList: () => ipcRenderer.invoke(IPC_CHANNELS.BOT_LIST),
+  botUpdate: (id: string, patch: { name?: string; instructions?: string; homeSessionId?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.BOT_UPDATE, id, patch),
+  sessionBindBot: (sessionId: string, botId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_BIND_BOT, sessionId, botId),
   // MCP Bridge
   mcpBridgeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.MCP_BRIDGE_STATUS),
   mcpBridgeToggle: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.MCP_BRIDGE_TOGGLE, enabled),
