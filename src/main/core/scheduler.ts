@@ -78,10 +78,20 @@ export class Scheduler {
             source: `routine:${r.id}`,
             botId: r.botId,
           })
-          if (ok) this.deps.store.recordSuccess(r.id)
-          else this.deps.store.recordFailure(r.id)
+          // record* 自身如果抛错，不能让它冒泡打断整轮：后面的 routine 还要跑，
+          // 而且原始 dispatch 错误会被它盖住。状态记不上比整轮停摆可控。
+          try {
+            if (ok) this.deps.store.recordSuccess(r.id)
+            else this.deps.store.recordFailure(r.id)
+          } catch (err) {
+            console.error(`[Scheduler] 记录 routine ${r.id} 的执行结果失败:`, err)
+          }
         } catch {
-          this.deps.store.recordFailure(r.id)
+          try {
+            this.deps.store.recordFailure(r.id)
+          } catch (err) {
+            console.error(`[Scheduler] 记录 routine ${r.id} 的执行结果失败:`, err)
+          }
         }
         fired++
       }
