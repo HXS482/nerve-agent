@@ -167,7 +167,7 @@ export class RoutineStore {
     const first = !cur.failureNotified
     const disable = count >= FAILURE_LIMIT
     this.db.prepare('UPDATE routines SET consecutive_failures = ?, failure_notified = ?, enabled = ?, updated_at = ? WHERE id = ?')
-      .run(count, first || cur.failureNotified ? 1 : 0, disable ? 0 : 1, Date.now(), id)
+      .run(count, first || cur.failureNotified ? 1 : 0, cur.enabled && !disable ? 1 : 0, Date.now(), id)
     return { notified: first, disabled: disable }
   }
 

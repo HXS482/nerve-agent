@@ -46,7 +46,8 @@ describe('RoutineStore', () => {
 
   it('due 只返回 enabled 且到期的', () => {
     const a = mk()
-    mk({ schedule: 'daily:23:59' })
+    const later = new Date(Date.now() + 20 * 60_000)
+    mk({ schedule: `daily:${String(later.getHours()).padStart(2, '0')}:${String(later.getMinutes()).padStart(2, '0')}` })
     store.update(a.id, { enabled: false })
     expect(store.due(Date.now() + 16 * 60_000)).toHaveLength(0)
     const b = mk({ instruction: 'live' })
@@ -74,6 +75,13 @@ describe('RoutineStore', () => {
     const f10 = store.recordFailure(r.id)
     expect(f10.notified).toBe(false)
     expect(f10.disabled).toBe(true)
+    expect(store.get(r.id)!.enabled).toBe(false)
+  })
+
+  it('recordFailure 不会复活被手动停用的 routine', () => {
+    const r = mk()
+    store.update(r.id, { enabled: false })
+    store.recordFailure(r.id)
     expect(store.get(r.id)!.enabled).toBe(false)
   })
 
