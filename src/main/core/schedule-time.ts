@@ -72,10 +72,11 @@ export function nextRunAt(spec: ScheduleSpec, afterMs: number): number {
     return (Math.floor(afterMs / step) + 1) * step
   }
   const after = new Date(afterMs)
-  // 从 after 所在天的 00:00 起逐天找
-  const dayStart = new Date(after.getFullYear(), after.getMonth(), after.getDate()).getTime()
+  // 从 after 所在天起逐天找；8 次 = 完整一周 + 一天余量
   for (let i = 0; i < 8; i++) {
-    const day = new Date(dayStart + i * 86_400_000)
+    // 用日历构造而不是固定 86_400_000 毫秒：夏令时切换日一天不是 24 小时，
+    // 固定步进会跳过某个日历日，导致漏掉唯一匹配的星期几。
+    const day = new Date(after.getFullYear(), after.getMonth(), after.getDate() + i)
     if (spec.kind === 'weekly' && !spec.days.includes(day.getDay())) continue
     const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), spec.hour, spec.minute).getTime()
     if (at > afterMs) return at

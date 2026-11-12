@@ -39,6 +39,9 @@ describe('parseSchedule', () => {
     expect(parseSchedule('every other tuesday').ok).toBe(false)
     expect(parseSchedule('').ok).toBe(false)
   })
+  it('下限常量是 15', () => {
+    expect(MIN_INTERVAL_MINUTES).toBe(15)
+  })
 })
 
 describe('nextRunAt', () => {
@@ -65,7 +68,7 @@ describe('nextRunAt', () => {
     expect(nextRunAt(spec2, base)).toBe(new Date(2026, 10, 12, 10, 30).getTime())
   })
   it('weekly：跳到下一个命中的日子', () => {
-    // 2026-11-12 是周四(4)。weekly:1-5:11:00 → 今天周五还没到 11:00，用今天
+    // 2026-11-12 是周四(4)。weekly:1-5:11:00 → 今天周四还没到 11:00，用今天
     const spec = { kind: 'weekly', days: [1, 2, 3, 4, 5], hour: 11, minute: 0 }
     expect(nextRunAt(spec, base)).toBe(new Date(2026, 10, 12, 11, 0).getTime())
     // weekly:5-5:09:00（周五 9 点）→ 今天 10 点已过 9 点，明天周五 9 点
