@@ -151,12 +151,23 @@ export class AgentCore {
         },
         new NullOutputChannel(),
       )
+      // 队列语义是"已接收"：真正执行在后台串行链上，成败由 Ticket 阶段体现。
       return true
     }
+    // 兜底直连时能拿到本轮成败：sendMessage 内部把错误交给 channel 而不是抛出，
+    // 所以用一个会记下 sendError 的通道来判断，否则失败永远被记成成功、疲劳规则形同虚设。
+    class ErrorCapturingChannel extends NullOutputChannel {
+      errored = false
+      sendError(message: string): void {
+        this.errored = true
+        console.warn('[AgentCore] routine run reported error:', message)
+      }
+    }
+    const channel = new ErrorCapturingChannel()
     try {
       const ctx = this.getSessionContextManager().getOrCreate(d.sessionId)
-      await this.sendMessage({ prompt: d.text, sessionId: d.sessionId, cwd: this.config.cwd }, new NullOutputChannel(), ctx)
-      return true
+      await this.sendMessage({ prompt: d.text, sessionId: d.sessionId, cwd: this.config.cwd }, channel, ctx)
+      return !channel.errored
     } catch (err) {
       console.error('[AgentCore] dispatchRoutine fallback failed:', err)
       return false

@@ -23,6 +23,8 @@ const SWEEP_INTERVAL_MS = 30_000
 export class Scheduler {
   private timer: ReturnType<typeof setInterval> | null = null
   private sweeping = false
+  /** stop() 之后不再开新一轮，也不在轮内继续投递——退出时 routineStore 会先关，避免打到已关闭的连接。 */
+  private stopped = false
 
   constructor(
     private deps: {
@@ -40,6 +42,7 @@ export class Scheduler {
 
   start(): void {
     if (this.timer) return
+    this.stopped = false
     this.timer = setInterval(() => {
       void this.sweep().catch((err) => console.error('[Scheduler] sweep failed:', err))
     }, this.deps.intervalMs ?? SWEEP_INTERVAL_MS)
@@ -47,6 +50,7 @@ export class Scheduler {
   }
 
   stop(): void {
+    this.stopped = true
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
@@ -55,6 +59,7 @@ export class Scheduler {
 
   /** 一轮扫描。返回处理的到期 routine 数。 */
   async sweep(): Promise<number> {
+    if (this.stopped) return 0
     if (this.sweeping) return 0 // 防御重入
     this.sweeping = true
     try {
@@ -63,6 +68,8 @@ export class Scheduler {
       const due = this.deps.store.due(now)
       let fired = 0
       for (const r of due) {
+        // 退出时 routineStore 已关闭：不再投递，也不再写库
+        if (this.stopped) break
         // 先快进 stamp：执行慢/失败都不至于重复触发（错过窗口跳过不补）
         this.deps.store.advanceStamp(r.id, now)
         const bot = await this.deps.bots.get(r.botId)

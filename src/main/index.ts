@@ -456,7 +456,12 @@ app.whenReady().then(async () => {
     bots: schedulerBots,
     dispatch: (d) => agentCore.dispatchRoutine(d),
   })
-  agentCore.setGatewayProvider(() => (gateway.getTicketRouter() ? gateway : null))
+  agentCore.setGatewayProvider(() => {
+    // Gateway 没 start 时队列为 null：主动 ensureQueue 一次（只开 SQLite，不监听端口），
+    // 这样 routine 也能吃到队列的持久化/恢复/槽位语义；开不起来就退回直连通道。
+    try { gateway.ensureQueue() } catch { /* fall through to direct dispatch */ }
+    return gateway.getTicketRouter() ? gateway : null
+  })
   scheduler.start()
 
   // MCP Bridge
