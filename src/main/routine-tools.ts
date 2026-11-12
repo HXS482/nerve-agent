@@ -9,6 +9,8 @@ import type { RoutineStore } from './store/routine-store'
 export interface RoutineToolCtx {
   store: RoutineStore
   getSession: () => { sessionId: string; botId: string }
+  /** 解析投递会话：空串或已失效的 id → 该 Bot 的 home 会话；解析不出返回空串。 */
+  resolveSession: (requested: string) => Promise<string>
 }
 
 type ToolDef = {

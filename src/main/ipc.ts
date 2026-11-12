@@ -15,7 +15,7 @@ import { BotRegistry } from './core/bot-registry'
 
 export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway,
   mcpBridge?: import('./mcp-bridge').McpBridgeServer,
-  stores?: { routineStore: RoutineStore; botRegistry: BotRegistry },
+  stores?: { routineStore?: RoutineStore; botRegistry?: BotRegistry },
 ) {
   // ── Forward gateway / mcp-bridge logs to renderer ──
   const forwardLog = (entry: { level: string; message: string; timestamp: number }) => {
@@ -611,8 +611,16 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   ipcMain.handle(IPC_CHANNELS.ROUTINE_LIST, async (_event, botId: string) =>
     routineStore().listByBot(botId, { includeDisabled: true }))
 
-  ipcMain.handle(IPC_CHANNELS.ROUTINE_CREATE, async (_event, input: { botId: string; sessionId: string; instruction: string; schedule: string }) =>
-    routineStore().create({ ...input, createdBy: 'user' }))
+  ipcMain.handle(IPC_CHANNELS.ROUTINE_CREATE, async (_event, input: { botId: string; sessionId: string; instruction: string; schedule: string }) => {
+    // 空会话 → 该 Bot 的 home 会话；都没有就明确拒绝，不写一个投递不出去的 routine
+    let sessionId = input.sessionId
+    if (!sessionId) {
+      const bot = await (await botRegistry()).get(input.botId)
+      sessionId = bot?.homeSessionId ?? ''
+    }
+    if (!sessionId) throw new Error('请先在该 Bot 的某个会话里创建过任务（该会话会成为默认投递目标）')
+    return routineStore().create({ ...input, sessionId, createdBy: 'user' })
+  })
 
   ipcMain.handle(IPC_CHANNELS.ROUTINE_UPDATE, async (_event, id: string, patch: { instruction?: string; schedule?: string; enabled?: boolean }) =>
     routineStore().update(id, patch))

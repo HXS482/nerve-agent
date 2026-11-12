@@ -11,7 +11,12 @@ describe('routine tools', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'rttools-'))
     store = RoutineStore.open(join(dir, 'r.db'))
-    tools = buildRoutineTools({ store, getSession: () => ({ sessionId: 'sess-1', botId: 'bot_1' }) })
+    tools = buildRoutineTools({
+      store,
+      getSession: () => ({ sessionId: 'sess-1', botId: 'bot_1' }),
+      // 测试里不接真实会话存储：请求什么就返回什么（空串 → 空，触发"没有可投递会话"分支）
+      resolveSession: async (requested: string) => requested,
+    })
   })
   afterEach(() => { store.close(); rmSync(dir, { recursive: true, force: true }) })
 

@@ -128,53 +128,51 @@ export class AgentCore {
     }
   }
 
-  /** index.ts 组装时注入，避免 core 反向依赖 gateway 模块。 */
-  setGatewayProvider(p: () => { getTicketRouter: () => unknown } | null): void {
-    this.gatewayProvider = p
-  }
-
-  private gatewayProvider: (() => { getTicketRouter: () => unknown } | null) | null = null
-
   /**
-   * Scheduler 的投递通道（设计文档 §3 兜底）。
-   * TicketRouter 可用走队列（持久化/恢复/槽位全复用）；不可用直连
-   * sendMessage + NullOutputChannel（结果落 session transcript，不丢内容）。
-   * 这样 routine 触发不依赖 Gateway 是否启动。
+   * Scheduler 的投递通道。
+   *
+   * 刻意**不**走 Gateway 的 Ticket 队列：那条路会给 routine 新开一个 session id，
+   * Bot 身份和"回复落在原会话"的语义全部丢失（routine 会以默认 Bot 在侧栏新会话里跑），
+   * 而且 dispatch 只表示"已入队"，疲劳规则永远收不到失败信号。
+   * routine 最低 15 分钟一次，并发压力可以忽略，直连是正确的取舍。
    */
-  async dispatchRoutine(d: { text: string; sessionId: string }): Promise<boolean> {
+  async dispatchRoutine(d: { text: string; sessionId: string; botId?: string }): Promise<boolean> {
     const { NullOutputChannel } = await import('./output-channel')
-    const router = this.gatewayProvider?.()?.getTicketRouter?.() as
-      | { dispatch: (msg: Record<string, unknown>, ch: unknown) => unknown }
-      | null
-      | undefined
-    if (router) {
-      router.dispatch(
-        {
-          platform: 'local', userId: 'scheduler', chatId: d.sessionId,
-          threadKey: `local:${d.sessionId}`,
-          text: d.text, cwd: this.config.cwd, kind: 'system' as const,
-        },
-        new NullOutputChannel(),
-      )
-      // 队列语义是"已接收"：真正执行在后台串行链上，成败由 Ticket 阶段体现。
-      return true
+
+    // 会话可能已被删除：回落到 Bot 的 home 会话；仍没有就留在原 id（sendMessage 会重建它）。
+    let sessionId = d.sessionId
+    let botId = d.botId ?? ''
+    try {
+      if (this.sessionStore && !(await this.sessionStore.exists(sessionId))) {
+        const reg = await this.getBotRegistry()
+        const bot = (botId ? await reg.get(botId) : null) ?? (await reg.getDefault())
+        if (bot.homeSessionId) sessionId = bot.homeSessionId
+        botId = bot.id
+      }
+      // 把归属写回 meta：routine 以创建它的 Bot 的身份跑，而不是回落默认 Bot。
+      if (this.sessionStore && botId) {
+        await this.sessionStore.setMeta(sessionId, { botId })
+      }
+    } catch (err) {
+      console.warn('[AgentCore] routine 会话解析失败，按原样投递:', err)
     }
-    // 兜底直连时能拿到本轮成败：sendMessage 内部把错误交给 channel 而不是抛出，
-    // 所以用一个会记下 sendError 的通道来判断，否则失败永远被记成成功、疲劳规则形同虚设。
+
+    // sendMessage 内部把错误交给 channel 而不是抛出，所以用会记下 sendError 的通道
+    // 判断本轮成败；否则失败永远被记成成功、疲劳规则形同虚设。
     class ErrorCapturingChannel extends NullOutputChannel {
       errored = false
-      sendError(message: string): void {
+      sendError(message: string, _runId?: string): void {
         this.errored = true
         console.warn('[AgentCore] routine run reported error:', message)
       }
     }
     const channel = new ErrorCapturingChannel()
     try {
-      const ctx = this.getSessionContextManager().getOrCreate(d.sessionId)
-      await this.sendMessage({ prompt: d.text, sessionId: d.sessionId, cwd: this.config.cwd }, channel, ctx)
+      const ctx = this.getSessionContextManager().getOrCreate(sessionId)
+      await this.sendMessage({ prompt: d.text, sessionId, cwd: this.config.cwd }, channel, ctx)
       return !channel.errored
     } catch (err) {
-      console.error('[AgentCore] dispatchRoutine fallback failed:', err)
+      console.error('[AgentCore] dispatchRoutine failed:', err)
       return false
     }
   }
@@ -415,7 +413,7 @@ export class AgentCore {
 
     try {
       // 准备消息和系统提示
-      const { messages, systemPrompt, mcpTools } = await this.prepareMessages(payload, sessionId)
+      const { messages, systemPrompt, mcpTools, bot } = await this.prepareMessages(payload, sessionId)
 
       // Promote pending tool snapshot (if hot-reload happened between messages)
       this.pluginBus.promotePending()
@@ -438,7 +436,8 @@ export class AgentCore {
         (toolName, content) => { routeImagesRef.fn?.(toolName, content) },
         sessionId,
         cfg,
-        cwd
+        cwd,
+        bot.id
       )
 
       // 图片工具结果路由
@@ -567,7 +566,6 @@ export class AgentCore {
     }
 
     const bot = await this.resolveBot(payload.sessionId ?? '')
-    this.currentBotId = bot.id
     let systemPrompt = composeSystemPrompt({
       soul: this.settings.soul,
       bot: bot.instructions || undefined,
@@ -647,7 +645,7 @@ export class AgentCore {
     // 文稿、文章、草稿等阅读型内容默认直接输出正文，不写文件
     systemPrompt += '\n\n## File Writing Discipline\nUse the `Write` tool ONLY when the user explicitly asks to save, create, or modify a file (or when doing coding work on files in the project). For essays, drafts, articles, plans, letters, and other readable content, output the full text directly in your reply as the response — do NOT write it to a file unless the user asks. Temporary or one-off content lives in the conversation, not on disk. When unsure whether to save, just reply with the content; the user can ask you to save it afterwards.'
 
-    return { messages, systemPrompt, mcpTools }
+    return { messages, systemPrompt, mcpTools, bot }
   }
 
   /**
@@ -686,28 +684,45 @@ export class AgentCore {
    * Routine 工具的上下文工厂：把「当前会话 + 所属 Bot」钉在这一次工具调用上。
    * 模型调 create_routine 时用它决定 botId 和默认投递会话。
    */
-  private routineToolCtx(sessionId: string | undefined) {
-    // botId 必须在这里**立即**取值。currentBotId 是进程级的单个字段，routine 触发和
-    // 用户轮次共用同一个 AgentCore；若在 execute 时才读，另一轮已经把它改成了别的 Bot，
-    // 就会把 routine 记到错误的 Bot 名下（跨 Bot 串数据）。
-    const botId = this.currentBotId
+  private routineToolCtx(botId: string, sessionId: string | undefined) {
+    const store = this.routineStoreForTools()
+    if (!store) return null
     const boundSessionId = sessionId ?? ''
     return {
-      store: this.routineStoreForTools(),
+      store,
       getSession: () => ({ sessionId: boundSessionId, botId }),
+      resolveSession: async (requested: string): Promise<string> => {
+        // 指定的会话存在就用它；否则回落到 Bot 的 home 会话（routine 仍要有地方投递）
+        if (requested && this.sessionStore && (await this.sessionStore.exists(requested))) return requested
+        try {
+          const bot = await (await this.getBotRegistry()).get(botId)
+          if (bot?.homeSessionId) return bot.homeSessionId
+        } catch { /* registry 不可用：按空处理 */ }
+        return requested === '' ? '' : requested
+      },
     }
   }
 
-  /** 当前正在执行的一轮所属 Bot（routine 工具用，resolveBot 之后设置）。 */
-  private currentBotId = ''
-
   /** 工具侧用的 RoutineStore（与 index.ts 的 Scheduler 共用同一个 db 文件）。 */
   private toolsRoutineStore: import('../store/routine-store').RoutineStore | null = null
-  private routineStoreForTools(): import('../store/routine-store').RoutineStore {
-    if (!this.toolsRoutineStore) {
+  private toolsStoreBroken = false
+  /**
+   * 惰性打开；失败返回 null 并记住，不再重试。
+   *
+   * 这里刻意不抛：better-sqlite3 的原生绑定坏掉时，抛出去会让**每一条聊天消息**
+   * 都失败，而 routine 只是附加能力。打不开就整套 routine 工具不注册。
+   */
+  private routineStoreForTools(): import('../store/routine-store').RoutineStore | null {
+    if (this.toolsRoutineStore) return this.toolsRoutineStore
+    if (this.toolsStoreBroken) return null
+    try {
       this.toolsRoutineStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
+      return this.toolsRoutineStore
+    } catch (err) {
+      this.toolsStoreBroken = true
+      console.warn('[AgentCore] routines.db 打开失败，本次会话不提供 routine 工具:', err)
+      return null
     }
-    return this.toolsRoutineStore
   }
 
   /** 退出时关掉工具侧的 routine 连接（与 Scheduler 的是两个独立句柄）。 */
@@ -735,7 +750,10 @@ export class AgentCore {
     cfg: ClaudeConfig = this.config,
     // 必填，不给默认值：这个参数就是本任务的修复本体。原先默认成 this.projectDir，
     // 于是调用点漏传也照样编译、照样全绿，工具却悄悄退回全局目录 —— 正是要根除的 bug。
-    cwd: string
+    cwd: string,
+    // 本轮所属 Bot。显式传参而不是读实例字段：同一进程里 routine 轮次与用户轮次
+    // 可能交错，共享字段会让 A 轮的工具把 routine 写到 B 轮的 Bot 名下。
+    botId: string
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
@@ -759,7 +777,8 @@ export class AgentCore {
         askChannel.sendFlowItem('todo', JSON.stringify(todos), { sessionId })
       },
     } : undefined, this.jobs)
-    Object.assign(builtinTools, buildRoutineTools(this.routineToolCtx(sessionId)))
+    const routineCtx = this.routineToolCtx(botId, sessionId)
+    if (routineCtx) Object.assign(builtinTools, buildRoutineTools(routineCtx))
 
     // TDAI 记忆工具：auto-recall 早就把它们写进了系统提示词，却从未注册 ——
     // 模型被明确告知可以调，实际撞空。合并进 builtinTools 后，下面的

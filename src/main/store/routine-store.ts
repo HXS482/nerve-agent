@@ -75,6 +75,8 @@ export class RoutineStore {
   }
 
   create(input: { botId: string; sessionId: string; instruction: string; schedule: string; createdBy: 'user' | 'model' }): RoutineRow {
+    // 空 sessionId 会让所有 routine 共用一个投递目标，必须由调用方先解析出真实会话
+    if (!input.sessionId) throw new Error('routine 必须绑定一个投递会话')
     const parsed = parseSchedule(input.schedule)
     if (!parsed.ok) throw new Error(`schedule 非法: ${parsed.error}`)
     if (this.countEnabled(input.botId) >= MAX_ENABLED_PER_BOT) {

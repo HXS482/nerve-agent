@@ -449,20 +449,24 @@ app.whenReady().then(async () => {
   // dispatch 走 AgentCore：Gateway 已启动时进 Ticket 队列，否则直连 sendMessage，
   // 所以 routine 触发不依赖 Gateway 是否启动。
   const agentCore = claude.getAgentCore()
-  const routineStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
-  const schedulerBots = await BotRegistry.create(join(NERVE_DIR, 'bots'))
-  const scheduler = new Scheduler({
-    store: routineStore,
-    bots: schedulerBots,
-    dispatch: (d) => agentCore.dispatchRoutine(d),
-  })
-  agentCore.setGatewayProvider(() => {
-    // Gateway 没 start 时队列为 null：主动 ensureQueue 一次（只开 SQLite，不监听端口），
-    // 这样 routine 也能吃到队列的持久化/恢复/槽位语义；开不起来就退回直连通道。
-    try { gateway.ensureQueue() } catch { /* fall through to direct dispatch */ }
-    return gateway.getTicketRouter() ? gateway : null
-  })
-  scheduler.start()
+  // 原生模块 / JSON 目录都可能坏掉。routine 只是附加能力，初始化失败要降级成
+  // "调度器不可用"，而不是让整个 whenReady 抛错 —— 那会留下一个没有 IPC 的窗口。
+  let routineStore: RoutineStore | null = null
+  let schedulerBots: BotRegistry | null = null
+  try {
+    routineStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
+    schedulerBots = await BotRegistry.create(join(NERVE_DIR, 'bots'))
+  } catch (err) {
+    console.error('[Nerve] routine 存储初始化失败，定时任务不可用:', err)
+  }
+  const scheduler = routineStore && schedulerBots
+    ? new Scheduler({
+        store: routineStore,
+        bots: schedulerBots,
+        dispatch: (d) => agentCore.dispatchRoutine(d),
+      })
+    : null
+  scheduler?.start()
 
   // MCP Bridge
   const mcpBridgeConfig = await loadMcpBridgeConfig()
@@ -475,7 +479,7 @@ app.whenReady().then(async () => {
     mcpBridge.start().catch(err => console.error('[Nerve] MCP Bridge start failed:', err.message))
   }
 
-  setupIPC(mainWindow, claude, skinManager, gitService, gateway, mcpBridge, { routineStore, botRegistry: schedulerBots })
+  setupIPC(mainWindow, claude, skinManager, gitService, gateway, mcpBridge, { routineStore: routineStore ?? undefined, botRegistry: schedulerBots ?? undefined })
 
   // Handle pet-sprite:// protocol for serving local spritesheets
   const petsDir = join(homedir(), '.nerve', 'pets')
@@ -556,8 +560,8 @@ app.whenReady().then(async () => {
   quitDrain = createQuitDrain({
     quit: () => app.quit(),
     teardown: async () => {
-      scheduler.stop()
-      routineStore.close()
+      scheduler?.stop()
+      routineStore?.close()
       agentCore.closeToolStores()
       await gateway.stop().catch((err) => { console.warn('[Nerve] gateway stop failed:', err) })
       await mcpBridge.stop().catch(() => {})
