@@ -18,6 +18,8 @@ import { PluginBus } from '../plugin-bus'
 import { ProviderRegistry } from '../provider-registry'
 import { McpPool, McpToolEntry, resolveMcpToolNames } from '../mcp-pool'
 import { getOrchestratorTools } from '../orchestrator'
+import { buildRoutineTools } from '../routine-tools'
+import { RoutineStore } from '../store/routine-store'
 import { runAgenticLoop } from '../agentic-loop'
 import { MemoryTdaiCore } from '../memory-tdai'
 import { createMemoryTools } from '../memory-tools'
@@ -562,6 +564,7 @@ export class AgentCore {
     }
 
     const bot = await this.resolveBot(payload.sessionId ?? '')
+    this.currentBotId = bot.id
     let systemPrompt = composeSystemPrompt({
       soul: this.settings.soul,
       bot: bot.instructions || undefined,
@@ -677,6 +680,28 @@ export class AgentCore {
   }
 
   /**
+   * Routine 工具的上下文工厂：把「当前会话 + 所属 Bot」钉在这一次工具调用上。
+   * 模型调 create_routine 时用它决定 botId 和默认投递会话。
+   */
+  private routineToolCtx(sessionId: string | undefined) {
+    return {
+      store: this.routineStoreForTools(),
+      getSession: () => ({ sessionId: sessionId ?? '', botId: this.currentBotId ?? '' }),
+    }
+  }
+
+  /** 当前正在执行的一轮所属 Bot（routine 工具用，resolveBot 之后设置）。 */
+  private currentBotId = ''
+
+  /** 工具侧用的 RoutineStore（与 index.ts 的 Scheduler 共用同一个 db 文件）。 */
+  private toolsRoutineStore: import('../store/routine-store').RoutineStore | null = null
+  private routineStoreForTools(): import('../store/routine-store').RoutineStore {
+    if (!this.toolsRoutineStore) {
+      this.toolsRoutineStore = RoutineStore.open(join(NERVE_DIR, 'routines.db'))
+    }
+    return this.toolsRoutineStore
+  }
+  /**
    * 构建工具定义和执行器
    */
   private async buildTools(
@@ -718,6 +743,7 @@ export class AgentCore {
         askChannel.sendFlowItem('todo', JSON.stringify(todos), { sessionId })
       },
     } : undefined, this.jobs)
+    Object.assign(builtinTools, buildRoutineTools(this.routineToolCtx(sessionId)))
 
     // TDAI 记忆工具：auto-recall 早就把它们写进了系统提示词，却从未注册 ——
     // 模型被明确告知可以调，实际撞空。合并进 builtinTools 后，下面的
