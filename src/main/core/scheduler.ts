@@ -43,6 +43,9 @@ export class Scheduler {
   start(): void {
     if (this.timer) return
     this.stopped = false
+    // 立即扫一轮：否则启动后最多 30s 内 lastSweep 还是上一轮的值，
+    // 隔了很久再开 app 时 UI 会先闪一段"调度器未运行"的红字。
+    void this.sweep().catch((err) => console.error('[Scheduler] initial sweep failed:', err))
     this.timer = setInterval(() => {
       void this.sweep().catch((err) => console.error('[Scheduler] sweep failed:', err))
     }, this.deps.intervalMs ?? SWEEP_INTERVAL_MS)

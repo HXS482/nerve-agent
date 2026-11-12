@@ -62,12 +62,15 @@ function RoutineRow({ r }: { r: Routine }) {
 }
 
 export function RoutinesView() {
-  const { bots, routines, activeBotId, sweep, loading, error, loadBots, loadRoutines, refreshSweep, create, selectBot, clearError } =
+  const { bots, routines, activeBotId, sweep, loading, error, loadBots, loadRoutines, refreshSweep, create, selectBot, saveBot, clearError } =
     useRoutineStore()
 
   const [instruction, setInstruction] = useState('')
   const [schedule, setSchedule] = useState(SCHEDULE_PRESETS[0].value)
   const [sessionId, setSessionId] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [botName, setBotName] = useState('')
+  const [botInstructions, setBotInstructions] = useState('')
 
   useEffect(() => {
     void loadBots()
@@ -85,6 +88,13 @@ export function RoutinesView() {
   }, [refreshSweep])
 
   const activeBot = useMemo(() => bots.find((b) => b.id === activeBotId) ?? null, [bots, activeBotId])
+
+  // 切 Bot 或重新拉取后把编辑框同步到该 Bot 的当前值（只在非编辑态覆盖，别打断输入）
+  useEffect(() => {
+    if (!activeBot || editing) return
+    setBotName(activeBot.name)
+    setBotInstructions(activeBot.instructions)
+  }, [activeBot, editing])
 
   const submit = async () => {
     if (!activeBotId || !instruction.trim()) return
@@ -168,9 +178,48 @@ export function RoutinesView() {
           placeholder="投递到会话 id（留空 = 该 Bot 的默认会话）"
           className="w-full text-[10px] bg-white/5 rounded px-2 py-1 text-foreground outline-none"
         />
-        {activeBot && (
-          <div className="text-[10px] text-[var(--text-on-surface-variant)]">
-            Bot：{activeBot.name}{activeBot.homeSessionId ? ` · 默认会话 ${activeBot.homeSessionId.slice(0, 8)}…` : ''}
+        {activeBot && !editing && (
+          <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-on-surface-variant)]">
+            <span className="truncate">
+              Bot：{activeBot.name}{activeBot.homeSessionId ? ` · 默认会话 ${activeBot.homeSessionId.slice(0, 8)}…` : ''}
+            </span>
+            <button onClick={() => setEditing(true)} className="shrink-0 hover:text-foreground">编辑</button>
+          </div>
+        )}
+
+        {/* Bot 的角色设定：instructions 会拼进 system prompt 的 bot 层 */}
+        {activeBot && editing && (
+          <div className="flex flex-col gap-1 pt-1 border-t border-white/5">
+            <input
+              value={botName}
+              onChange={(e) => setBotName(e.target.value)}
+              placeholder="Bot 名称"
+              className="w-full text-[11px] bg-white/5 rounded px-2 py-1 text-foreground outline-none"
+            />
+            <textarea
+              value={botInstructions}
+              onChange={(e) => setBotInstructions(e.target.value)}
+              placeholder="角色设定：这个 Bot 是谁、负责什么（会拼进系统提示）"
+              rows={3}
+              className="w-full text-[11px] bg-white/5 rounded px-2 py-1.5 text-foreground resize-none outline-none"
+            />
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={async () => {
+                  await saveBot(activeBot.id, { name: botName.trim() || activeBot.name, instructions: botInstructions })
+                  setEditing(false)
+                }}
+                className="text-[11px] px-2.5 py-1 rounded bg-white/10 text-foreground"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="text-[11px] px-2.5 py-1 rounded border border-white/10 text-[var(--text-on-surface-variant)]"
+              >
+                取消
+              </button>
+            </div>
           </div>
         )}
       </div>

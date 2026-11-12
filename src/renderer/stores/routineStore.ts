@@ -111,6 +111,7 @@ export const useRoutineStore = create<RoutineState>((set, get) => ({
     try {
       await api().routineCreate(input)
       await get().loadRoutines(input.botId)
+      set({ error: null })
       return true
     } catch (err) {
       // 护栏拒绝（15 分钟下限 / 20 个上限）走这里，原样给用户看
