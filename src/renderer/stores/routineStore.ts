@@ -30,6 +30,10 @@ export interface Bot {
   group: string
   /** 头像单字 emoji，空 = 用名字首字 */
   emoji: string
+  /** 头像本体颜色；空 = 按 id 散列取默认色 */
+  avatarColor: string
+  /** true = 动画圆球头像（GrokBot）；false = emoji 方块 */
+  avatarOrb: boolean
   instructions: string
   isDefault: boolean
   homeSessionId: string
@@ -59,8 +63,8 @@ interface RoutineState {
   setEnabled: (id: string, enabled: boolean) => Promise<void>
   remove: (id: string) => Promise<void>
   selectBot: (id: string) => void
-  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; instructions?: string }) => Promise<void>
-  createBot: (input: { name: string; group?: string; emoji?: string; instructions?: string }) => Promise<string | null>
+  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) => Promise<void>
+  createBot: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) => Promise<string | null>
   clearError: () => void
 }
 

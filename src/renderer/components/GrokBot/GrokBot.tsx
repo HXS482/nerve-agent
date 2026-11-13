@@ -26,6 +26,11 @@ interface Props {
   className?: string
   /** 由 useBotStatus 派生（idle/thinking/busy/done/error），不要在调用处写死 */
   status?: BotStatus
+  /**
+   * 是否播放动画。列表里几十个头像同时跑 rAF 会白白吃满主线程，
+   * 所以非激活的头像传 false：只渲染一帧静帧。
+   */
+  animate?: boolean
 }
 
 /** 状态到动画状态序列的映射（循环播放）。 */
@@ -60,7 +65,7 @@ const HOLD: Partial<Record<StateId, number>> = {
   alert: 2.4,
 }
 
-function GrokBotImpl({ size = 40, color = '#0a0a0c', paper = '#f9f9f9', className = '', status = 'idle' }: Props) {
+function GrokBotImpl({ size = 40, color = '#0a0a0c', paper = '#f9f9f9', className = '', status = 'idle', animate = true }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null)
 
   // 共享时钟：主 effect 每帧写、status effect 读
@@ -86,6 +91,7 @@ function GrokBotImpl({ size = 40, color = '#0a0a0c', paper = '#f9f9f9', classNam
     let raf = 0
     let last = 0
     let clock = 0
+
 
     const tick = (ms: number) => {
       raf = requestAnimationFrame(tick)
@@ -167,9 +173,16 @@ function GrokBotImpl({ size = 40, color = '#0a0a0c', paper = '#f9f9f9', classNam
       }
     }
 
+    // 静帧模式：sample 是纯时间函数，取一个固定的"好看时刻"即可，
+    // 不启动 rAF —— 列表里几十个实例同时跑动画会占满主线程。
+    if (!animate) {
+      applyFrame(r.engine.sample(0.6))
+      return
+    }
+
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [animate])
 
   // status 变化：切换状态序列（引擎保留历史做 morph 过渡）
   useEffect(() => {

@@ -13,6 +13,10 @@ export interface BotInfo {
   group: string
   /** 头像：单字 emoji。空 = 用名字首字。 */
   emoji: string
+  /** 头像本体颜色（GrokBot 墨色），空 = 按 id 散列取默认色。 */
+  avatarColor: string
+  /** 是否用动画圆球头像；false = emoji/首字方块。 */
+  avatarOrb: boolean
   instructions: string
   isDefault: boolean
   homeSessionId: string
@@ -44,7 +48,7 @@ export class BotRegistry {
     try {
       const raw = JSON.parse(await readFile(this.path(id), 'utf-8')) as BotInfo
       // 兼容改造前落盘的 Bot 文件（没有 group / emoji 字段）
-      return { ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '' }
+      return { ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '', avatarColor: raw.avatarColor ?? '', avatarOrb: raw.avatarOrb ?? true }
     } catch {
       return null // 不存在或损坏都当没有
     }
@@ -62,7 +66,7 @@ export class BotRegistry {
       if (!name.endsWith('.json')) continue
       try {
         const raw = JSON.parse(await readFile(join(this.baseDir, name), 'utf-8')) as BotInfo
-        bots.push({ ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '' })
+        bots.push({ ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '', avatarColor: raw.avatarColor ?? '', avatarOrb: raw.avatarOrb ?? true })
       } catch {
         // 损坏文件跳过，不炸整体
       }
@@ -82,13 +86,15 @@ export class BotRegistry {
     return this.create({ name: 'Assistant', isDefault: true })
   }
 
-  async create(input: { name: string; group?: string; emoji?: string; instructions?: string; homeSessionId?: string; isDefault?: boolean }): Promise<BotInfo> {
+  async create(input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; isDefault?: boolean }): Promise<BotInfo> {
     const now = Date.now()
     const bot: BotInfo = {
       id: `bot_${randomUUID()}`,
       name: input.name,
       group: input.group ?? '',
       emoji: input.emoji ?? '',
+      avatarColor: input.avatarColor ?? '',
+      avatarOrb: input.avatarOrb ?? true,
       instructions: input.instructions ?? '',
       isDefault: input.isDefault ?? false,
       homeSessionId: input.homeSessionId ?? '',
@@ -101,7 +107,7 @@ export class BotRegistry {
     return bot
   }
 
-  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp'>>): Promise<BotInfo> {
+  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'avatarColor' | 'avatarOrb' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp'>>): Promise<BotInfo> {
     const bot = await this.read(id)
     if (!bot) throw new Error(`Bot not found: ${id}`)
     const updated: BotInfo = { ...bot, ...patch, updatedAt: Date.now() }

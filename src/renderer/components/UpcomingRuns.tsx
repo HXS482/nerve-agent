@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRoutineStore, type Routine } from '../stores/routineStore'
+import { useChatStore } from '../stores/chatStore'
 import { BotAvatar } from './BotList'
 import { describeSchedule, formatWhen, upcomingRuns } from '../lib/routine-schedule'
 
@@ -31,6 +32,7 @@ interface Props {
 
 export function UpcomingRuns({ routines, botId }: Props) {
   const bots = useRoutineStore((s) => s.bots)
+  const theme = useChatStore((s) => s.theme)
   const setEnabled = useRoutineStore((s) => s.setEnabled)
   const remove = useRoutineStore((s) => s.remove)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -165,7 +167,11 @@ export function UpcomingRuns({ routines, botId }: Props) {
                   transition: 'opacity 0.12s',
                 }}
               >
-                <BotAvatar bot={bot} size={22} />
+                <BotAvatar
+                  bot={bot}
+                  size={22}
+                  paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
+                />
               </div>
             )}
             {hovered === `${r.id}-${at}` && (

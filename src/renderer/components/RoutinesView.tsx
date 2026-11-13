@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRoutineStore, type Routine } from '../stores/routineStore'
 import { UpcomingRuns } from './UpcomingRuns'
+import { AVATAR_PALETTE } from './BotList'
 
 function fmtTime(ts: number): string {
   const d = new Date(ts)
@@ -74,6 +75,8 @@ export function RoutinesView() {
   const [botInstructions, setBotInstructions] = useState('')
   const [botGroup, setBotGroup] = useState('')
   const [botEmoji, setBotEmoji] = useState('')
+  const [botAvatarColor, setBotAvatarColor] = useState('')
+  const [botAvatarOrb, setBotAvatarOrb] = useState(true)
   const [adding, setAdding] = useState(false)
   const [newBotName, setNewBotName] = useState('')
 
@@ -101,6 +104,8 @@ export function RoutinesView() {
     setBotInstructions(activeBot.instructions)
     setBotGroup(activeBot.group ?? '')
     setBotEmoji(activeBot.emoji ?? '')
+    setBotAvatarColor(activeBot.avatarColor ?? '')
+    setBotAvatarOrb(activeBot.avatarOrb !== false)
   }, [activeBot, editing])
 
   const submit = async () => {
@@ -230,6 +235,49 @@ export function RoutinesView() {
               placeholder="Bot 名称"
               className="w-full text-[11px] bg-white/5 rounded px-2 py-1 text-foreground outline-none"
             />
+            {/* 头像：动画圆球（GrokBot）或 emoji 方块 + 颜色 */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setBotAvatarOrb(true)}
+                className="text-[10px] px-1.5 py-0.5 rounded"
+                style={{
+                  background: botAvatarOrb ? 'rgba(124,92,214,0.25)' : 'transparent',
+                  border: '1px solid ' + (botAvatarOrb ? 'rgba(124,92,214,0.6)' : 'rgba(255,255,255,0.1)'),
+                  color: botAvatarOrb ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+                }}
+              >
+                圆球
+              </button>
+              <button
+                onClick={() => setBotAvatarOrb(false)}
+                className="text-[10px] px-1.5 py-0.5 rounded"
+                style={{
+                  background: !botAvatarOrb ? 'rgba(124,92,214,0.25)' : 'transparent',
+                  border: '1px solid ' + (!botAvatarOrb ? 'rgba(124,92,214,0.6)' : 'rgba(255,255,255,0.1)'),
+                  color: !botAvatarOrb ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+                }}
+              >
+                方块
+              </button>
+              <div className="flex items-center gap-1 ml-auto">
+                {AVATAR_PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setBotAvatarColor(c)}
+                    title={c}
+                    style={{
+                      width: 13,
+                      height: 13,
+                      borderRadius: '50%',
+                      background: c,
+                      border: botAvatarColor.toLowerCase() === c.toLowerCase() ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <input
                 value={botEmoji}
@@ -258,6 +306,8 @@ export function RoutinesView() {
                     name: botName.trim() || activeBot.name,
                     group: botGroup.trim(),
                     emoji: botEmoji.trim(),
+                    avatarColor: botAvatarColor,
+                    avatarOrb: botAvatarOrb,
                     instructions: botInstructions,
                   })
                   setEditing(false)

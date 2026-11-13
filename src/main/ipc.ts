@@ -636,15 +636,17 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   ipcMain.handle(IPC_CHANNELS.BOT_LIST, async () => (await botRegistry()).list())
 
-  ipcMain.handle(IPC_CHANNELS.BOT_CREATE, async (_event, input: { name: string; group?: string; emoji?: string; instructions?: string }) =>
+  ipcMain.handle(IPC_CHANNELS.BOT_CREATE, async (_event, input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) =>
     (await botRegistry()).create({
       name: input.name,
       group: input.group ?? '',
       emoji: input.emoji ?? '',
+      avatarColor: input.avatarColor ?? '',
+      avatarOrb: input.avatarOrb ?? true,
       instructions: input.instructions ?? '',
     }))
 
-  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; instructions?: string; homeSessionId?: string }) =>
+  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string }) =>
     (await botRegistry()).update(id, patch))
 
   ipcMain.handle(IPC_CHANNELS.SESSION_BIND_BOT, async (_event, sessionId: string, botId: string) =>

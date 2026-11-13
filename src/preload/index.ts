@@ -266,9 +266,9 @@ const api = {
   routineDelete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_DELETE, id),
   routineSweepStatus: () => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_SWEEP_STATUS),
   botList: () => ipcRenderer.invoke(IPC_CHANNELS.BOT_LIST),
-  botCreate: (input: { name: string; group?: string; emoji?: string; instructions?: string }) =>
+  botCreate: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_CREATE, input),
-  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; instructions?: string; homeSessionId?: string }) =>
+  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_UPDATE, id, patch),
   sessionBindBot: (sessionId: string, botId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_BIND_BOT, sessionId, botId),

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useChatStore, type Session } from '../stores/chatStore'
 import { useRoutineStore, type Bot } from '../stores/routineStore'
+import { GrokBot } from './GrokBot/GrokBot'
 
 function relTime(ts: number): string {
   const d = new Date(ts)
@@ -20,7 +21,33 @@ function avatarColor(id: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length]
 }
 
-export function BotAvatar({ bot, size = 34 }: { bot: Bot; size?: number }) {
+export const AVATAR_PALETTE = AVATAR_COLORS
+
+export function BotAvatar({
+  bot,
+  size = 34,
+  animate = false,
+  paper = '#0a0a0a',
+  status = 'idle',
+}: {
+  bot: Bot
+  size?: number
+  /** 是否播放动画；列表里只让当前 Bot 动，其余画静帧（几十个 rAF 会卡主线程） */
+  animate?: boolean
+  /** 头像所在容器的底色：眼睛是轮廓上的洞，靠这层垫住，传错会透出背景 */
+  paper?: string
+  status?: 'idle' | 'thinking' | 'busy' | 'done' | 'error'
+}) {
+  const ink = bot.avatarColor || avatarColor(bot.id)
+
+  if (bot.avatarOrb !== false) {
+    return (
+      <div className="flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
+        <GrokBot size={size} color={ink} paper={paper} animate={animate} status={status} />
+      </div>
+    )
+  }
+
   return (
     <div
       className="flex items-center justify-center shrink-0"
@@ -28,7 +55,7 @@ export function BotAvatar({ bot, size = 34 }: { bot: Bot; size?: number }) {
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.3),
-        background: avatarColor(bot.id),
+        background: ink,
         fontSize: Math.round(size * 0.46),
         lineHeight: 1,
         color: '#fff',
@@ -49,6 +76,7 @@ export function BotList({ onSelectSession, onNewChat }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   const activeBotId = useChatStore((s) => s.activeBotId)
+  const theme = useChatStore((s) => s.theme)
   const setActiveBotId = useChatStore((s) => s.setActiveBotId)
   const bots = useRoutineStore((s) => s.bots)
   const loadBots = useRoutineStore((s) => s.loadBots)
@@ -146,7 +174,11 @@ export function BotList({ onSelectSession, onNewChat }: Props) {
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)' }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                 >
-                  <BotAvatar bot={bot} />
+                  <BotAvatar
+                    bot={bot}
+                    paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
+                    animate={isActive}
+                  />
                   <div className="flex-1 min-w-0" style={{ paddingTop: 1 }}>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface)', fontWeight: 600 }}>
