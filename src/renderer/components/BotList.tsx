@@ -70,9 +70,11 @@ export function BotAvatar({
 interface Props {
   onSelectSession: (session: Session) => void
   onNewChat: () => void
+  /** 当前会话的运行状态：只喂给被选中的那个 Bot 的头像 */
+  status?: 'idle' | 'thinking' | 'busy' | 'done' | 'error'
 }
 
-export function BotList({ onSelectSession, onNewChat }: Props) {
+export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   const activeBotId = useChatStore((s) => s.activeBotId)
@@ -178,6 +180,7 @@ export function BotList({ onSelectSession, onNewChat }: Props) {
                     bot={bot}
                     paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
                     animate={isActive}
+                    status={isActive ? status : 'idle'}
                   />
                   <div className="flex-1 min-w-0" style={{ paddingTop: 1 }}>
                     <div className="flex items-center gap-1.5">

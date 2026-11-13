@@ -10,13 +10,15 @@ import { UsageStatsPanel } from './UsageStatsPanel'
 
 interface SidebarProps {
   onNewChat: () => void
+  /** 当前会话的运行状态（与顶部小球同一份派生），喂给侧栏里选中的 Bot */
+  botStatus?: 'idle' | 'thinking' | 'busy' | 'done' | 'error'
   onOpenSettings: () => void
   onOpenGallery: () => void
   onClose: () => void
   onSelectSession: (sessionId: string) => void
 }
 
-export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onSelectSession }: SidebarProps) {
+export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onSelectSession, botStatus = 'idle' }: SidebarProps) {
   const config = useChatStore((s) => s.config)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   const theme = useChatStore((s) => s.theme)
@@ -180,6 +182,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
         <BotList
           onSelectSession={handleSelectSession}
           onNewChat={onNewChat}
+          status={botStatus}
         />
       </div>
 

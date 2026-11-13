@@ -113,6 +113,7 @@ export default function App() {
           onOpenGallery={() => setGalleryOpen(true)}
           onClose={() => setSidebarOpen(false)}
           onSelectSession={claude.loadSessionMessages}
+          botStatus={botStatus}
         />
       )}
 
