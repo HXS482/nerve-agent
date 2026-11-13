@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRoutineStore, type Routine } from '../stores/routineStore'
+import { UpcomingRuns } from './UpcomingRuns'
 
 function fmtTime(ts: number): string {
   const d = new Date(ts)
@@ -171,16 +172,12 @@ export function RoutinesView() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto py-1">
-        {loading && routines.length === 0 && (
+      <div className="flex-1 overflow-y-auto">
+        {loading && routines.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-[var(--text-on-surface-variant)]">加载中…</div>
+        ) : (
+          <UpcomingRuns routines={routines} botId={activeBotId || ''} />
         )}
-        {!loading && routines.length === 0 && (
-          <div className="px-3 py-2 text-[11px] text-[var(--text-on-surface-variant)]">
-            这个 Bot 还没有定时任务。也可以直接跟它说「每天 9 点提醒我…」，它会自己建。
-          </div>
-        )}
-        {routines.map((r) => <RoutineRow key={r.id} r={r} />)}
       </div>
 
       <div className="border-t border-white/5 p-2 flex flex-col gap-1.5">
