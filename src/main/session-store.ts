@@ -17,6 +17,8 @@ interface SessionSummary {
   lastModified?: number
   createdAt?: number
   tag?: string
+  /** 会话所属 Bot（来自 <id>.meta.json）；旧会话没有 → undefined */
+  botId?: string
   [key: string]: unknown
 }
 
@@ -273,6 +275,12 @@ export class FileSessionStore {
           summary.tag = e.tag
         }
       }
+
+      // 侧栏按 Bot 分组靠这个字段：meta 是独立文件，读失败就当没有（旧会话）
+      try {
+        const meta = JSON.parse(await readFile(join(this.baseDir, `${sessionId}.meta.json`), 'utf-8'))
+        if (typeof meta?.botId === 'string' && meta.botId) summary.botId = meta.botId
+      } catch { /* 没有 meta 文件：保持 undefined */ }
 
       summaries.push(summary)
     }

@@ -9,6 +9,10 @@ import { randomUUID } from 'crypto'
 export interface BotInfo {
   id: string
   name: string
+  /** 侧栏分组名（研发 / 调研 / 闲聊…）。空 = 归到默认分组。 */
+  group: string
+  /** 头像：单字 emoji。空 = 用名字首字。 */
+  emoji: string
   instructions: string
   isDefault: boolean
   homeSessionId: string
@@ -38,7 +42,9 @@ export class BotRegistry {
 
   private async read(id: string): Promise<BotInfo | null> {
     try {
-      return JSON.parse(await readFile(this.path(id), 'utf-8')) as BotInfo
+      const raw = JSON.parse(await readFile(this.path(id), 'utf-8')) as BotInfo
+      // 兼容改造前落盘的 Bot 文件（没有 group / emoji 字段）
+      return { ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '' }
     } catch {
       return null // 不存在或损坏都当没有
     }
@@ -55,7 +61,8 @@ export class BotRegistry {
     for (const name of names) {
       if (!name.endsWith('.json')) continue
       try {
-        bots.push(JSON.parse(await readFile(join(this.baseDir, name), 'utf-8')) as BotInfo)
+        const raw = JSON.parse(await readFile(join(this.baseDir, name), 'utf-8')) as BotInfo
+        bots.push({ ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '' })
       } catch {
         // 损坏文件跳过，不炸整体
       }
@@ -75,11 +82,13 @@ export class BotRegistry {
     return this.create({ name: 'Assistant', isDefault: true })
   }
 
-  async create(input: { name: string; instructions?: string; homeSessionId?: string; isDefault?: boolean }): Promise<BotInfo> {
+  async create(input: { name: string; group?: string; emoji?: string; instructions?: string; homeSessionId?: string; isDefault?: boolean }): Promise<BotInfo> {
     const now = Date.now()
     const bot: BotInfo = {
       id: `bot_${randomUUID()}`,
       name: input.name,
+      group: input.group ?? '',
+      emoji: input.emoji ?? '',
       instructions: input.instructions ?? '',
       isDefault: input.isDefault ?? false,
       homeSessionId: input.homeSessionId ?? '',
@@ -92,7 +101,7 @@ export class BotRegistry {
     return bot
   }
 
-  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp'>>): Promise<BotInfo> {
+  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp'>>): Promise<BotInfo> {
     const bot = await this.read(id)
     if (!bot) throw new Error(`Bot not found: ${id}`)
     const updated: BotInfo = { ...bot, ...patch, updatedAt: Date.now() }

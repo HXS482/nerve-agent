@@ -41,6 +41,7 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       files: payload.files,
       runId: payload.runId,
       cwd: payload.cwd,
+      botId: payload.botId,
     })
   })
 
@@ -588,7 +589,7 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   for (const ch of [
     IPC_CHANNELS.ROUTINE_LIST, IPC_CHANNELS.ROUTINE_CREATE, IPC_CHANNELS.ROUTINE_UPDATE,
     IPC_CHANNELS.ROUTINE_DELETE, IPC_CHANNELS.ROUTINE_SWEEP_STATUS,
-    IPC_CHANNELS.BOT_LIST, IPC_CHANNELS.BOT_UPDATE, IPC_CHANNELS.SESSION_BIND_BOT,
+    IPC_CHANNELS.BOT_LIST, IPC_CHANNELS.BOT_CREATE, IPC_CHANNELS.BOT_UPDATE, IPC_CHANNELS.SESSION_BIND_BOT,
   ]) {
     ipcMain.removeHandler(ch)
   }
@@ -634,6 +635,14 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   })
 
   ipcMain.handle(IPC_CHANNELS.BOT_LIST, async () => (await botRegistry()).list())
+
+  ipcMain.handle(IPC_CHANNELS.BOT_CREATE, async (_event, input: { name: string; group?: string; emoji?: string; instructions?: string }) =>
+    (await botRegistry()).create({
+      name: input.name,
+      group: input.group ?? '',
+      emoji: input.emoji ?? '',
+      instructions: input.instructions ?? '',
+    }))
 
   ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; instructions?: string; homeSessionId?: string }) =>
     (await botRegistry()).update(id, patch))

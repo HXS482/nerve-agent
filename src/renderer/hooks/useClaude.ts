@@ -220,6 +220,8 @@ export function useClaude() {
         mode: sessionModes[rs.sessionId] ?? modeMap[rs.sessionId],
         // 保留渲染层已有的 cwd；旧会话/首次见到没有 → undefined，发送时回落全局
         cwd: cwdMap[rs.sessionId],
+        // 后端从 <id>.meta.json 读出的归属 Bot；侧栏按它分组
+        botId: (rs as any).botId,
       }))
 
       const remoteIds = new Set(remoteMapped.map((s) => s.id))
@@ -520,6 +522,7 @@ export function useClaude() {
           mode: tempSession?.mode,
           // 临时 id 摘牌换后端 id：cwd 跟着搬过去，否则新建会话第二轮起就丢了项目目录
           cwd: tempSession?.cwd,
+          botId: tempSession?.botId,
         })
 
         // 权威 mode 映射随 id 一起迁移
@@ -687,6 +690,7 @@ export function useClaude() {
           updatedAt: Date.now(),
           mode: workspace,
           cwd: store.config.cwd,
+          botId: store.activeBotId ?? undefined,
         })
         if (workspace === 'stage') useStageStore.getState().setStageSessionId(sid)
         else setSessionId(sid)
@@ -765,7 +769,15 @@ export function useClaude() {
 
       try {
         // Only pass sessionId to backend if it's a real (persisted) session
-        await window.claude.sendMessage(prompt, isRealSession ? sid : undefined, files, runId, sessionCwd)
+        await window.claude.sendMessage(
+          prompt,
+          isRealSession ? sid : undefined,
+          files,
+          runId,
+          sessionCwd,
+          // 侧栏选中的 Bot：主进程据此决定本轮角色并写入会话 meta
+          useChatStore.getState().activeBotId ?? undefined,
+        )
         clearWatchdog()
       } catch (err: unknown) {
         clearWatchdog()

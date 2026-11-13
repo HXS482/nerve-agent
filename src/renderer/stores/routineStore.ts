@@ -26,6 +26,10 @@ export interface Routine {
 export interface Bot {
   id: string
   name: string
+  /** 侧栏分组名（研发 / 调研 / 闲聊…），空 = 未分组 */
+  group: string
+  /** 头像单字 emoji，空 = 用名字首字 */
+  emoji: string
   instructions: string
   isDefault: boolean
   homeSessionId: string
@@ -55,7 +59,8 @@ interface RoutineState {
   setEnabled: (id: string, enabled: boolean) => Promise<void>
   remove: (id: string) => Promise<void>
   selectBot: (id: string) => void
-  saveBot: (id: string, patch: { name?: string; instructions?: string }) => Promise<void>
+  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; instructions?: string }) => Promise<void>
+  createBot: (input: { name: string; group?: string; emoji?: string; instructions?: string }) => Promise<string | null>
   clearError: () => void
 }
 
@@ -141,6 +146,17 @@ export const useRoutineStore = create<RoutineState>((set, get) => ({
   },
 
   selectBot: (id) => set({ activeBotId: id }),
+
+  createBot: async (input) => {
+    try {
+      const bot = (await api().botCreate(input)) as Bot
+      set({ bots: [...get().bots, bot], activeBotId: bot.id })
+      return bot.id
+    } catch (err) {
+      set({ error: errText(err) })
+      return null
+    }
+  },
 
   saveBot: async (id, patch) => {
     try {

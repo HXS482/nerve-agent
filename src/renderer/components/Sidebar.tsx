@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
-import { SessionList } from './SessionList'
+import { BotList } from './BotList'
 import { SidebarToggleIcon } from './SidebarToggleIcon'
 import { PetPixelArt, ColorScheme } from './PetPixelArt'
 import { PetSkin } from '../../shared/types'
@@ -177,10 +177,9 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
           </span>
         </button>
 
-        <SessionList
-          currentSessionId={currentSessionId}
+        <BotList
           onSelectSession={handleSelectSession}
-          mode="chat"
+          onNewChat={onNewChat}
         />
       </div>
 

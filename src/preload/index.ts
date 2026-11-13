@@ -15,8 +15,9 @@ const api = {
     sessionId?: string,
     files?: FileAttachment[],
     runId?: string,
-    cwd?: string
-  ) => ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files, runId, cwd }),
+    cwd?: string,
+    botId?: string
+  ) => ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, { prompt, sessionId, files, runId, cwd, botId }),
   cancel: (sessionId?: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL, sessionId),
   // sessionId 可选：带了只改该会话（主进程写 ctx.config），缺省保持旧的全局写入
   setModel: (model: string, sessionId?: string) =>
@@ -265,7 +266,9 @@ const api = {
   routineDelete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_DELETE, id),
   routineSweepStatus: () => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_SWEEP_STATUS),
   botList: () => ipcRenderer.invoke(IPC_CHANNELS.BOT_LIST),
-  botUpdate: (id: string, patch: { name?: string; instructions?: string; homeSessionId?: string }) =>
+  botCreate: (input: { name: string; group?: string; emoji?: string; instructions?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.BOT_CREATE, input),
+  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; instructions?: string; homeSessionId?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_UPDATE, id, patch),
   sessionBindBot: (sessionId: string, botId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_BIND_BOT, sessionId, botId),

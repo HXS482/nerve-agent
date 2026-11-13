@@ -19,6 +19,8 @@ export interface Session {
   mode?: 'chat' | 'stage'
   /** 建会话时的工作目录；旧会话无此字段 → 回落到当前 config.cwd */
   cwd?: string
+  /** 会话所属 Bot；旧会话无此字段 → 归默认 Bot */
+  botId?: string
 }
 
 export interface FlowItem {
@@ -38,6 +40,8 @@ interface ChatState {
   /** 最近一次运行期错误的时间戳（0 = 还没出过错）。Grok Bot 靠它闪红点，错误收尾不等于跑完 */
   lastRunErrorAt: number
   currentSessionId: string | null
+  /** 侧栏当前选中的 Bot。新会话归属它，发消息时一并传给主进程。 */
+  activeBotId: string | null
   config: ClaudeConfig
   sidebarOpen: boolean
   sidebarWidth: number
@@ -103,6 +107,7 @@ interface ChatState {
   setLoading: (loading: boolean) => void
   noteRunError: (at?: number) => void
   setSessionId: (id: string | null) => void
+  setActiveBotId: (id: string | null) => void
   setConfig: (config: Partial<ClaudeConfig>) => void
   setSidebarOpen: (open: boolean) => void
   setSidebarWidth: (width: number) => void
@@ -163,6 +168,7 @@ export const useChatStore = create<ChatState>()(
       isLoading: false,
       lastRunErrorAt: 0,
       currentSessionId: null,
+      activeBotId: null,
       config: {
         model: 'sonnet',
         effort: 'medium',
@@ -238,6 +244,7 @@ export const useChatStore = create<ChatState>()(
       setLoading: (loading) => set({ isLoading: loading }),
       noteRunError: (at) => set({ lastRunErrorAt: at ?? Date.now() }),
       setSessionId: (id) => set({ currentSessionId: id }),
+      setActiveBotId: (id) => set({ activeBotId: id }),
       setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSidebarWidth: (width) => set({ sidebarWidth: Math.max(160, Math.min(360, width)) }),

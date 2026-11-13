@@ -96,9 +96,10 @@ export class AgentCore {
   }
 
   /** 解析会话所属 Bot：session 元数据 botId 优先，失效回落默认 Bot（设计文档 §1）。 */
-  private async resolveBot(sessionId: string): Promise<import('./bot-registry').BotInfo> {
+  private async resolveBot(sessionId: string, explicitBotId?: string): Promise<import('./bot-registry').BotInfo> {
     const reg = await this.getBotRegistry()
-    const botId = await this.getSessionBotId(sessionId)
+    // 显式指定的 Bot（渲染层按侧栏选中的 Bot 发消息）优先于会话历史绑定
+    const botId = explicitBotId || (await this.getSessionBotId(sessionId))
     if (botId) {
       const bot = await reg.get(botId)
       if (bot) return bot
@@ -565,7 +566,11 @@ export class AgentCore {
       }
     }
 
-    const bot = await this.resolveBot(payload.sessionId ?? '')
+    const bot = await this.resolveBot(payload.sessionId ?? '', payload.botId)
+    // 把归属写进会话 meta：下次不带 botId 打开时也能解析到同一个 Bot，侧栏分组也靠它
+    if (payload.botId && this.sessionStore && sessionId) {
+      try { await this.sessionStore.setMeta(sessionId, { botId: payload.botId }) } catch { /* 元数据失败不阻断本轮 */ }
+    }
     let systemPrompt = composeSystemPrompt({
       soul: this.settings.soul,
       bot: bot.instructions || undefined,
@@ -1267,6 +1272,7 @@ export class AgentCore {
       lastModified: s.lastModified,
       createdAt: s.createdAt,
       tag: s.tag,
+      botId: s.botId,
     }))
   }
 

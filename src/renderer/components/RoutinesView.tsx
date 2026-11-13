@@ -62,7 +62,7 @@ function RoutineRow({ r }: { r: Routine }) {
 }
 
 export function RoutinesView() {
-  const { bots, routines, activeBotId, sweep, loading, error, loadBots, loadRoutines, refreshSweep, create, selectBot, saveBot, clearError } =
+  const { bots, routines, activeBotId, sweep, loading, error, loadBots, loadRoutines, refreshSweep, create, selectBot, saveBot, createBot, clearError } =
     useRoutineStore()
 
   const [instruction, setInstruction] = useState('')
@@ -71,6 +71,10 @@ export function RoutinesView() {
   const [editing, setEditing] = useState(false)
   const [botName, setBotName] = useState('')
   const [botInstructions, setBotInstructions] = useState('')
+  const [botGroup, setBotGroup] = useState('')
+  const [botEmoji, setBotEmoji] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [newBotName, setNewBotName] = useState('')
 
   useEffect(() => {
     void loadBots()
@@ -94,6 +98,8 @@ export function RoutinesView() {
     if (!activeBot || editing) return
     setBotName(activeBot.name)
     setBotInstructions(activeBot.instructions)
+    setBotGroup(activeBot.group ?? '')
+    setBotEmoji(activeBot.emoji ?? '')
   }, [activeBot, editing])
 
   const submit = async () => {
@@ -110,16 +116,47 @@ export function RoutinesView() {
       <div className="px-3 py-2 border-b border-white/5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-foreground">Routines</span>
-          <select
-            value={activeBotId ?? ''}
-            onChange={(e) => selectBot(e.target.value)}
-            className="text-[11px] bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-foreground"
-          >
-            {bots.map((b) => (
-              <option key={b.id} value={b.id} className="bg-[#1a1a1c]">{b.name}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1">
+            <select
+              value={activeBotId ?? ''}
+              onChange={(e) => selectBot(e.target.value)}
+              className="text-[11px] bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-foreground"
+            >
+              {bots.map((b) => (
+                <option key={b.id} value={b.id} className="bg-[#1a1a1c]">{b.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setAdding((v) => !v)}
+              title="新建 Bot"
+              className="text-[11px] px-1.5 py-0.5 rounded border border-white/10 text-[var(--text-on-surface-variant)] hover:text-foreground"
+            >
+              +
+            </button>
+          </div>
         </div>
+        {adding && (
+          <div className="flex items-center gap-1 mt-1.5">
+            <input
+              value={newBotName}
+              onChange={(e) => setNewBotName(e.target.value)}
+              placeholder="新 Bot 名字"
+              className="flex-1 text-[11px] bg-white/5 rounded px-2 py-1 text-foreground outline-none"
+            />
+            <button
+              onClick={async () => {
+                const name = newBotName.trim()
+                if (!name) return
+                const id = await createBot({ name })
+                if (id) { setNewBotName(''); setAdding(false) }
+              }}
+              className="text-[11px] px-2 py-1 rounded bg-white/10 text-foreground"
+            >
+              建
+            </button>
+          </div>
+        )}
+
         <div className={`text-[10px] mt-1 ${sweep.healthy ? 'text-[var(--text-on-surface-variant)]' : 'text-[var(--error)]'}`}>
           {sweep.healthy && sweep.lastSweep
             ? `调度器：${relative(sweep.lastSweep)}巡检`
@@ -196,6 +233,20 @@ export function RoutinesView() {
               placeholder="Bot 名称"
               className="w-full text-[11px] bg-white/5 rounded px-2 py-1 text-foreground outline-none"
             />
+            <div className="flex items-center gap-1.5">
+              <input
+                value={botEmoji}
+                onChange={(e) => setBotEmoji(e.target.value.slice(0, 2))}
+                placeholder="🙂"
+                className="w-10 text-center text-[12px] bg-white/5 rounded px-1 py-1 text-foreground outline-none"
+              />
+              <input
+                value={botGroup}
+                onChange={(e) => setBotGroup(e.target.value)}
+                placeholder="分组（研发 / 调研 / 闲聊…）"
+                className="flex-1 text-[11px] bg-white/5 rounded px-2 py-1 text-foreground outline-none"
+              />
+            </div>
             <textarea
               value={botInstructions}
               onChange={(e) => setBotInstructions(e.target.value)}
@@ -206,7 +257,12 @@ export function RoutinesView() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={async () => {
-                  await saveBot(activeBot.id, { name: botName.trim() || activeBot.name, instructions: botInstructions })
+                  await saveBot(activeBot.id, {
+                    name: botName.trim() || activeBot.name,
+                    group: botGroup.trim(),
+                    emoji: botEmoji.trim(),
+                    instructions: botInstructions,
+                  })
                   setEditing(false)
                 }}
                 className="text-[11px] px-2.5 py-1 rounded bg-white/10 text-foreground"

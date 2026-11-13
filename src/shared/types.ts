@@ -144,6 +144,7 @@ export const IPC_CHANNELS = {
   ROUTINE_DELETE: 'routine:delete',
   ROUTINE_SWEEP_STATUS: 'routine:sweepStatus',
   BOT_LIST: 'bot:list',
+  BOT_CREATE: 'bot:create',
   BOT_UPDATE: 'bot:update',
   SESSION_BIND_BOT: 'session:bindBot',
   MCP_BRIDGE_STATUS: 'mcp-bridge:status',
@@ -234,6 +235,8 @@ export interface SendMessagePayload {
   runId?: string
   /** 会话级工作目录；缺省或空串表示沿用全局 cwd（老会话兼容） */
   cwd?: string
+  /** 本轮所属 Bot。给了就把会话绑定到这个 Bot（侧栏按 Bot 组织会话）。 */
+  botId?: string
 }
 
 /** 一轮 run 的结束原因：abort 收尾不能报成 complete，否则中断和跑完在 UI 上同形 */
