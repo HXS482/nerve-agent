@@ -12,10 +12,12 @@ import { useRoutineStore, type Routine } from '../stores/routineStore'
 import { BotAvatar } from './BotList'
 import { describeSchedule, formatWhen, upcomingRuns } from '../lib/routine-schedule'
 
-/** 卡片里最多展示多少条未来触发（含停用任务不参与） */
-const MAX_ROWS = 8
-/** 每个 routine 最多取几次未来触发 */
-const PER_ROUTINE = 5
+/** 每个粒度下：总共最多展示几行 / 单个任务最多取几次 */
+const LIMITS = {
+  day: { total: 6, perRoutine: 3 },
+  week: { total: 10, perRoutine: 5 },
+  month: { total: 14, perRoutine: 8 },
+} as const
 
 interface Row {
   routine: Routine
@@ -32,19 +34,30 @@ export function UpcomingRuns({ routines, botId }: Props) {
   const setEnabled = useRoutineStore((s) => s.setEnabled)
   const remove = useRoutineStore((s) => s.remove)
   const [hovered, setHovered] = useState<string | null>(null)
+  const [range, setRange] = useState<'day' | 'week' | 'month'>('day')
 
   const bot = useMemo(() => bots.find((b) => b.id === botId) ?? null, [bots, botId])
 
+  const RANGE_MS = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000 }
+
   const rows = useMemo(() => {
     const now = Date.now()
+    const horizon = now + RANGE_MS[range]
+    const limit = LIMITS[range]
     const out: Row[] = []
     for (const r of routines) {
       if (!r.enabled) continue
-      for (const at of upcomingRuns(r.schedule, now, PER_ROUTINE)) out.push({ routine: r, at })
+      // 按粒度截取窗口内的触发；单任务取几次有上限，避免高频任务淹没其他任务
+      let taken = 0
+      for (const at of upcomingRuns(r.schedule, now, limit.perRoutine)) {
+        if (at > horizon) break
+        out.push({ routine: r, at })
+        if (++taken >= limit.perRoutine) break
+      }
     }
     out.sort((a, b) => a.at - b.at)
-    return out.slice(0, MAX_ROWS)
-  }, [routines])
+    return out.slice(0, limit.total)
+  }, [routines, range])
 
   const disabled = useMemo(() => routines.filter((r) => !r.enabled), [routines])
 
@@ -59,19 +72,58 @@ export function UpcomingRuns({ routines, botId }: Props) {
       }}
     >
       <div
-        className="text-[11px]"
         style={{
-          padding: '10px 12px 6px',
-          color: 'var(--text-on-surface-variant)',
-          fontWeight: 500,
+          padding: '8px 10px 6px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
         }}
       >
-        即将运行
+        <span className="text-[11px]" style={{ color: 'var(--text-on-surface-variant)', fontWeight: 500 }}>
+          即将运行
+        </span>
+
+        {/* 分段控件：日 / 周 / 月 —— 决定时间窗口，不是分组方式 */}
+        <div
+          style={{
+            display: 'flex',
+            padding: 2,
+            borderRadius: 7,
+            background: 'rgba(255,255,255,0.045)',
+            gap: 2,
+          }}
+        >
+          {([
+            { id: 'day', label: '日' },
+            { id: 'week', label: '周' },
+            { id: 'month', label: '月' },
+          ] as const).map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => setRange(opt.id)}
+              style={{
+                minWidth: 26,
+                padding: '2px 6px',
+                borderRadius: 5,
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: range === opt.id ? 600 : 400,
+                background: range === opt.id ? 'rgba(255,255,255,0.1)' : 'transparent',
+                color: range === opt.id ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+                transition: 'background 0.12s, color 0.12s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {rows.length === 0 && disabled.length === 0 && (
         <div className="text-[11px]" style={{ padding: '2px 12px 12px', color: 'var(--text-outline-variant)' }}>
-          还没有定时任务
+          {range === 'day' ? '今天没有要运行的任务' : range === 'week' ? '这一周没有要运行的任务' : '这 30 天没有要运行的任务'}
         </div>
       )}
 
