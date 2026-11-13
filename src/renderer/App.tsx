@@ -17,9 +17,11 @@ import { ApprovalBar } from './components/ApprovalBar'
 import { SelectionActions } from './components/SelectionActions'
 import { GrokBot } from './components/GrokBot/GrokBot'
 import { useBotStatus } from './hooks/useBotStatus'
+import { useRoutineStore } from './stores/routineStore'
+import { botInk } from './lib/bot-avatar'
 import { AskUserCard } from './components/AskUserCard'
 import { ResizeBorder } from './components/ResizeBorder'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 export default function App() {
   // Hash routing: #/pet renders the pet window
@@ -41,6 +43,27 @@ export default function App() {
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   // 小球跟着本轮任务状态走（与 Stage 同一套派生：转环/脉动/眨眼/红点）
   const botStatus = useBotStatus(currentSessionId)
+
+  // 顶部球的颜色跟随「当前 Bot」：侧栏选中的优先，否则用当前会话绑定的那个
+  const bots = useRoutineStore((s) => s.bots)
+  const activeBotId = useChatStore((s) => s.activeBotId)
+  const loadBots = useRoutineStore((s) => s.loadBots)
+  useEffect(() => { void loadBots() }, [loadBots])
+  const currentBot = useMemo(() => {
+    if (bots.length === 0) return null
+    const byActive = activeBotId ? bots.find((b) => b.id === activeBotId) : null
+    if (byActive) return byActive
+    const session = useChatStore.getState().sessions.find((s) => s.id === currentSessionId)
+    const bySession = session?.botId ? bots.find((b) => b.id === session.botId) : null
+    return bySession ?? bots.find((b) => b.isDefault) ?? bots[0] ?? null
+  }, [bots, activeBotId, currentSessionId])
+  const topInk = botInk(currentBot)
+
+  // 顶部球的状态：当前 Bot 与当前会话所属 Bot 不一致时，不跟着跑状态（那只球不是它）
+  const sessionBotId = useChatStore((s) =>
+    s.sessions.find((x) => x.id === s.currentSessionId)?.botId
+  )
+  const topStatus = !currentBot || !sessionBotId || currentBot.id === sessionBotId ? botStatus : 'idle'
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const resizing = useRef(false)
@@ -208,8 +231,8 @@ export default function App() {
         >
           <GrokBot
             size={44}
-            status={botStatus}
-            color={theme === 'light' ? '#0a0a0c' : '#f1efe9'}
+            status={topStatus}
+            color={topInk ?? (theme === 'light' ? '#0a0a0c' : '#f1efe9')}
             paper={theme === 'light' ? '#eef1f6' : '#0a0a0a'}
           />
         </button>

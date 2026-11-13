@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useChatStore, type Session } from '../stores/chatStore'
 import { useRoutineStore, type Bot } from '../stores/routineStore'
 import { GrokBot } from './GrokBot/GrokBot'
+import { AVATAR_PALETTE, avatarColor } from '../lib/bot-avatar'
+export { AVATAR_PALETTE }
 
 function relTime(ts: number): string {
   const d = new Date(ts)
@@ -13,15 +15,6 @@ function relTime(ts: number): string {
   return (d.getMonth() + 1) + '月' + d.getDate() + '日'
 }
 
-const AVATAR_COLORS = ['#F5A524', '#5B8DEF', '#7C5CD6', '#2DBE8A', '#E5484D', '#00A3A3', '#D6409F']
-
-function avatarColor(id: string): string {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return AVATAR_COLORS[h % AVATAR_COLORS.length]
-}
-
-export const AVATAR_PALETTE = AVATAR_COLORS
 
 export function BotAvatar({
   bot,
