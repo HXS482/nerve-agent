@@ -175,8 +175,15 @@ export function computeLineDiff(before: string, after: string): { added: number;
   return { added, removed, patch: out.join('\n') }
 }
 
+/** visit_jobs 等待作业结束的上限：渲染晨报这种 30s 级任务要够长，但也不能无限等。 */
+const VISIT_JOBS_WAIT_MS = 120_000
+
+/** 作业还在跑时的尾巴。别只说"没完成"——要告诉模型还能再取一次，否则它就去 echo 空转。 */
+const STILL_RUNNING_NOTE =
+  '\n\n[仍在运行：等了 ' + VISIT_JOBS_WAIT_MS / 1000 + ' 秒还没结束。以上是目前已拿到的输出；稍后再 visit_jobs 同一个 jobId 可以取走剩余部分。]'
+
 /** 把后台作业的结果排版成模型能直接读的文本。 */
-function formatJobResult(r: {
+export function formatJobResult(r: {
   jobId: string; command: string; exitCode: number | null; signal: string | null
   stdout: string; stderr: string; truncated: boolean; startedAt: number; endedAt: number
 }): string {
@@ -200,16 +207,26 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
   const PS_EXE = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
   const bashSchema = z.object({
-    command: z.string().describe(hasGitBash
-      ? 'The bash command to execute (bash/sh syntax only, even though the OS is Windows)'
-      : 'The PowerShell command to execute (PowerShell syntax, NOT bash)'),
+    /*
+     * command 必须 optional。
+     *
+     * 原来它是必填，但工具在自己转后台时返回的是「用 Bash({ visit_jobs: "xxx" }) 读取结果」
+     * —— 这个调用形状会被 schema 判为非法（缺 command），模型照做必然失败。
+     *
+     * 实测后果：一个 50 步的 run 里 48 次 Bash 调用、0 次带 visit_jobs，
+     * 模型最后放弃读结果，开始 echo p2…echo p38 空转直到撞步数上限。
+     * 「按文档调用」和「按 schema 调用」必须是同一件事。
+     */
+    command: z.string().optional().describe(hasGitBash
+      ? 'The bash command to execute (bash/sh syntax only, even though the OS is Windows). Omit when using visit_jobs.'
+      : 'The PowerShell command to execute (PowerShell syntax, NOT bash). Omit when using visit_jobs.'),
     /** 显式要求后台执行：立刻返回 jobId，不等命令结束 */
     background: z.boolean().optional().describe(
-      'Run in the background and return immediately with a jobId. Use visit_jobs to read its output later.',
+      'Run in the background and return immediately with a jobId. Its output is delivered to you automatically when it finishes.',
     ),
     /** 取走某个已完成后台作业的输出 */
     visit_jobs: z.string().optional().describe(
-      'Pass a jobId (or "all") to read the output of finished background jobs instead of running a command.',
+      'Read a background job result instead of running a command (pass its jobId, or "all"). No command needed; waits for it to finish.',
     ),
   })
   const writeSchema = z.object({
@@ -270,10 +287,18 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             })
             return { content: parts.filter(Boolean).join('\n\n') }
           }
-          const result = jobs.takeFinished(visit_jobs)
-          return result
-            ? { content: formatJobResult(result) }
-            : { error: `找不到作业 ${visit_jobs}（可能已完成并被读取过，或 id 有误）` }
+          // 等到它跑完为止（有时限）。原来只取「已完成」的，作业还在跑就回「找不到」，
+          // 模型会当成 id 打错了 —— 而它其实只是在跑。
+          const waited = await jobs.waitFor(visit_jobs, VISIT_JOBS_WAIT_MS)
+          if (!waited.result) {
+            return { error: `找不到作业 ${visit_jobs}（id 有误，或结果已被读取过）` }
+          }
+          if (waited.stillRunning) {
+            return {
+              content: formatJobResult(waited.result) + STILL_RUNNING_NOTE,
+            }
+          }
+          return { content: formatJobResult(waited.result) }
         }
 
         if (!command) return { error: 'command is required' }
@@ -335,7 +360,13 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
             if (outcome.kind === 'background') {
               return {
-                content: `命令超过 ${INLINE_WAIT_MS / 1000} 秒还在跑，已转入后台。\njobId: ${outcome.jobId}\n用 Bash({ visit_jobs: "${outcome.jobId}" }) 读取结果。\n（同一进程继续跑，输出从第一秒起都保留）`,
+                content:
+                  `命令超过 ${INLINE_WAIT_MS / 1000} 秒还在跑，已转入后台。\n` +
+                  `jobId: ${outcome.jobId}\n\n` +
+                  '这个作业继续在跑，输出完整保留。你有两个选择：\n' +
+                  `1. 直接继续做别的事 —— 它结束后结果会**自动**出现在你的下一步里，不需要你去取。\n` +
+                  `2. 确实现在就想要结果：Bash({ visit_jobs: "${outcome.jobId}" })（会一直等到它结束）。\n\n` +
+                  '⚠️ 不要用 echo / sleep / ls 之类的空命令去"试探进度"—— 那些命令既看不到作业状态，也只会白白消耗步数。',
               }
             }
 
@@ -861,13 +892,16 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
           description: `Load a skill by name to access its full instructions. Available skills: ${skillRegistry.listNames().join(', ')}. Only load when the skill is relevant to the current task.`,
           input_schema: zodToInputSchema(loadSkillSchema),
           execute: async (args: { skill_name: string }) => {
-            const skill = skillRegistry.get(args.skill_name)
+            const skill = skillRegistry.getAvailable(args.skill_name)
             if (!skill) {
-              return { error: `Skill "${args.skill_name}" not found. Available: ${skillRegistry.listNames().join(', ')}` }
+              return { error: `Skill "${args.skill_name}" is not available to this Bot (disabled globally or not in its allowed list). Available: ${skillRegistry.listNames().join(', ')}` }
             }
             const prompt = skillRegistry.resolvePrompt(skill)
             const promptTokens = estimateTokens(prompt)
             return {
+              // 技能脚本都在这个目录下。不给绝对路径，模型就得 Glob 全盘找 ——
+              // 实测这一步能耗掉 3-5 步，而且经常找不到（它在 cwd 里搜）。
+              skill_dir: skill.skillDir,
               skill_name: skill.name,
               description: skill.description,
               content: prompt,

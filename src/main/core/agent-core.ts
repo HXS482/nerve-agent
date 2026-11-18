@@ -8,10 +8,10 @@
 import { join } from 'path'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { randomUUID } from 'crypto'
+import { randomUUID, createHash } from 'crypto'
 import { FileSessionStore } from '../session-store'
 import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins, saveRuntimeConfig } from '../settings'
-import { getBuiltinTools } from '../tools'
+import { getBuiltinTools, formatJobResult } from '../tools'
 import { JobRegistry } from './job-registry'
 import { SkillRegistry } from '../skill-registry'
 import { PluginBus } from '../plugin-bus'
@@ -19,6 +19,15 @@ import { ProviderRegistry } from '../provider-registry'
 import { McpPool, McpToolEntry, resolveMcpToolNames } from '../mcp-pool'
 import { getOrchestratorTools } from '../orchestrator'
 import { buildRoutineTools } from '../routine-tools'
+import {
+  buildBotHandoffTools,
+  readHandoffCaps,
+  scratchSessionId,
+  type HandoffCtx,
+} from './bot-handoff'
+import { createHandoffRunner, type HandoffWork } from './handoff-runner'
+import { HopQueue } from '../store/hop-queue'
+import type { BotInfo } from './bot-registry'
 import { RoutineStore } from '../store/routine-store'
 import { runAgenticLoop } from '../agentic-loop'
 import { MemoryTdaiCore } from '../memory-tdai'
@@ -27,7 +36,7 @@ import { OffloadBridge } from '../offload-bridge'
 import { HookRegistry } from '../hook-registry'
 import type { OutputChannel } from './output-channel'
 import { isElectronChannel } from './output-channel'
-import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock } from '../../shared/types'
+import type { ClaudeConfig, SendMessagePayload, FileAttachment, ContentBlock, BotActivity } from '../../shared/types'
 import { SessionContext, SessionContextManager, createSessionContext } from './session-context'
 import { mergeConfig, mergeConfigForSession } from './session-config'
 import { resolveCwd } from './session-cwd'
@@ -200,6 +209,14 @@ export class AgentCore {
   // 会话上下文管理器（用于多 session 并发）
   private sessionContextManager = new SessionContextManager()
 
+  /** Bot 交接队列。惰性打开：不用交接的人不该多一个 sqlite 句柄。 */
+  private hopQueue: HopQueue | null = null
+  private hopQueueBroken = false
+  /** 交接 sweep 的定时器。只在真正用到交接时才起。 */
+  private hopTimer: ReturnType<typeof setInterval> | null = null
+  /** 正在 sweep 中：避免上一轮还没跑完就叠上下一轮（B 可能跑几分钟）。 */
+  private hopping = false
+
   constructor(config: AgentCoreConfig) {
     this.settings = config.settings || loadSettings()
     this.sourceDir = config.sourceDir
@@ -335,7 +352,47 @@ export class AgentCore {
           }
         }
       } else if (e.type === 'assistant') {
-        const content = e.message?.content
+        // entries 是 unknown[]（存储层不认识消息形状），这里一次性收窄成本地视图，
+        // 免得每读一个字段都要 as 一遍（也免得 e.message 直接取字段时报 unknown）。
+        const msg = e.message as
+          | { content?: unknown; answeredBy?: unknown; answeredByName?: unknown; speakerIsAsker?: unknown }
+          | undefined
+        const content = msg?.content
+        const answeredBy = msg?.answeredBy
+        const speakerIsAsker = msg?.speakerIsAsker
+        /*
+         * 另一个 Bot 的交接答复，回放时必须当成「别人说的话」，不能当成自己说的。
+         *
+         * 存储层把它记成 assistant（只有 assistant 能落进别人的会话），但如果原样回放，
+         * 模型会读到自己「说过」一段它从没说过的话 —— 之后被问到「你上次说什么」，
+         * 它会照着这段认领。所以这里改写成一条**带署名**的 user 消息：
+         * 谁说的、原话是什么，都写清楚，并且明确标成外部内容。
+         *
+         * 发起方自己的通知（speakerIsAsker）不走这条路：那本来就是它该说的话。
+         */
+        if (Array.isArray(content) && typeof answeredBy === 'string' && answeredBy && speakerIsAsker !== true) {
+          const said = content
+            .filter((c: any) => c.type === 'text' && c.text)
+            .map((c: any) => c.text as string)
+            .join('\n')
+            .trim()
+          const name =
+            typeof msg?.answeredByName === 'string' && msg.answeredByName
+              ? msg.answeredByName
+              : answeredBy
+          if (said) {
+            messages.push({
+              role: 'user',
+              content:
+                `[交接答复] ${name}（另一个 Bot）回答了你先前派给它的那件事。` +
+                `这不是你说的话，也不是用户说的话，是它自己的原话：
+
+` +
+                said,
+            })
+          }
+          continue
+        }
         if (Array.isArray(content)) {
           // 先提取 tool_result（需要放到单独的 user 消息中）
           const toolResults = content
@@ -438,7 +495,8 @@ export class AgentCore {
         sessionId,
         cfg,
         cwd,
-        bot.id
+        bot.id,
+        payload.handoff
       )
 
       // 图片工具结果路由
@@ -503,6 +561,24 @@ export class AgentCore {
       // 注意：不删除上下文，因为可能还有后续消息
     }
   }
+  /**
+   * 这个 Bot 能看见的技能。
+   *
+   * 语义是**索引过滤**，不是权限：不在白名单的技能不会出现在系统提示里，
+   * 也不能被 load_skill 加载。为什么不是权限 —— 技能本身不提供能力，它只是
+   * 「怎么用现有工具」的说明书（image-generator 要 Bash，svg 要 Write）。
+   * 承诺「加载了就能用」会误导：缺工具照样跑不起来。
+   *
+   * 空数组 = 不过滤（全部可见）。这个默认值很重要：现有 Bot 的 boundSkills 都是 []，
+   * 解释成「一个都没有」会让升级后所有 Bot 立刻失去全部技能。
+   */
+  private visibleSkills(bot: { boundSkills?: string[] } | null | undefined) {
+    const enabled = this.skillRegistry.getEnabled()
+    const allow = bot?.boundSkills ?? []
+    if (allow.length === 0) return enabled
+    return enabled.filter((s) => allow.includes(s.id))
+  }
+
 
   /**
    * 准备消息和系统提示
@@ -571,11 +647,47 @@ export class AgentCore {
     if (payload.botId && this.sessionStore && sessionId) {
       try { await this.sessionStore.setMeta(sessionId, { botId: payload.botId }) } catch { /* 元数据失败不阻断本轮 */ }
     }
+    /*
+     * 同事名单：只有真的能派活（有授权的其他人）才写进提示。
+     *
+     * 判定和 handoffToolCtx 同一份逻辑，但这里独立算一次 —— prepareMessages 在工具构建
+     * 之前跑，顺序上拿不到 ctx。重复读一次 registry 是几十微秒，比把两个阶段耦合成
+     * 「提示依赖工具构建结果」划算得多。
+     *
+     * 一个都没有时整段不出现：没有可派的同事，却在提示里教模型怎么交接，
+     * 只会让它去找不存在的工具。
+     */
+    let coworkers: { name: string; role?: string }[] = []
+    try {
+      const reg = await this.getBotRegistry()
+      const self = await reg.get(bot.id)
+      const grant = self?.canAskBots
+      const caps = readHandoffCaps()
+      if (caps.maxDepth > 0 && caps.maxPerRun > 0) {
+        coworkers = (await reg.list())
+          .filter((b) => {
+            if (b.id === bot.id) return false
+            if (grant === null || grant === undefined) return true
+            return grant.includes(b.id)
+          })
+          .map((b) => ({
+            name: b.name,
+            // 角色只取第一句：整段 instructions 塞进系统提示会挤掉真正重要的东西，
+            // 而这句话的作用只是让模型知道「该找谁」，不是替它写人设。
+            ...(b.instructions ? { role: (b.instructions.split(/[\n。]/)[0] || '').slice(0, 80) } : {}),
+          }))
+      }
+    } catch (err) {
+      console.warn('[AgentCore] 读取同事名单失败，本轮不注入:', err)
+    }
+
     let systemPrompt = composeSystemPrompt({
       soul: this.settings.soul,
       bot: bot.instructions || undefined,
+      botName: bot.name,
       persona: recalledPersona,
       memoryContext,
+      coworkers,
     })
 
     // 语音指令是当前轮的临时指令，接在四层之后
@@ -620,19 +732,21 @@ export class AgentCore {
       disabledSkills
     )
     this.skillRegistry.setSessionId(sessionId)
+    // 同一轮里 load_skill 也要守同一个白名单，否则模型能绕过索引直接加载
+    this.skillRegistry.setAllowedSkills(bot?.boundSkills ?? [])
 
     const skillLoading = (this.settings as any).skillLoading || 'lazy'
 
     if (skillLoading === 'eager') {
       // 兼容模式：全量注入（现有行为）
-      const skills = this.skillRegistry.getEnabled()
+      const skills = this.visibleSkills(bot)
       for (const skill of skills) {
         const resolvedPrompt = this.skillRegistry.resolvePrompt(skill, sessionId)
         systemPrompt += `\n\n---\n\n# Skill: ${skill.name}\n\nBase directory for this skill: ${skill.skillDir}\n\n${resolvedPrompt}`
       }
     } else {
       // 两层模型：只注入 index，LLM 通过 load_skill 按需加载
-      const skillIndex = this.skillRegistry.listIndex()
+      const skillIndex = this.visibleSkills(bot).map((s) => ({ name: s.name, description: s.description }))
       if (skillIndex.length > 0) {
         const indexText = skillIndex
           .map(s => `- **${s.name}**: ${s.description}`)
@@ -708,6 +822,490 @@ export class AgentCore {
     }
   }
 
+  /**
+   * Bot 交接的工具上下文。
+   *
+   * 返回 null 的情形只有一个：这个 Bot 谁都问不了（授权是空数组，或者名单里只剩它自己）。
+   * 这时整块工具都不注册 —— 授权是「能不能看见这个工具」，不是「调了之后被拒」。
+   */
+  private async handoffToolCtx(
+    botId: string,
+    sessionId: string | undefined,
+    cwd: string,
+    handoff: { depth: number; chain: string[] } | undefined
+  ): Promise<HandoffCtx | null> {
+    // 没有 Bot 身份就没有「谁在问」，深度链也断了：这种情况不给工具。
+    if (!botId) return null
+    const caps = readHandoffCaps()
+    // 能力被关掉（上限为 0）时连 registry 都不用碰。
+    if (caps.maxDepth <= 0 || caps.maxPerRun <= 0) return null
+
+    const reg = await this.getBotRegistry()
+
+    // 授权每次现读，不缓存：刚被收回的授权应该在下一次交接就失效，而不是等重启。
+    // 名单已经按「自己 / 不可见 / 已删除」过滤过，工具那一侧不用再判一遍。
+    const reachableNow = async (): Promise<BotInfo[]> => {
+      const self = await reg.get(botId)
+      if (!self) return []
+      const grant = self.canAskBots
+      return (await reg.list()).filter((b) => {
+        if (b.id === botId) return false
+        // null / undefined = 所有其他 Bot 都能问（老 Bot 文件没这个字段）
+        if (grant === null || grant === undefined) return true
+        return grant.includes(b.id)
+      })
+    }
+
+    /*
+     * 读一次就够：这份快照既用于「有没有人能问」的判断，也用来生成 schema 里的枚举。
+     * 它**只**决定这一次工具长什么样；真正派发时仍然由 listReachable 现读，
+     * 所以刚被收回的授权下一次交接就失效，而不是等下次重建工具。
+     */
+    const reachable = await reachableNow()
+    // 授权为空就等于没有这个能力：不注册工具。
+    if (reachable.length === 0) return null
+
+    return {
+      fromBotId: botId,
+      sessionId: sessionId ?? '',
+      cwd,
+      // 深度来自载荷（递归交接时由派发方 +1），不是模型报的数。
+      depth: handoff?.depth ?? 0,
+      chain: handoff?.chain ?? [],
+      caps,
+      reachable,
+      listReachable: reachableNow,
+      getBot: async (id: string) => reg.get(id),
+      enqueue: async (input) => this.enqueueHop({
+        kind: 'hop',
+        threadId: input.threadId,
+        fromBotId: input.fromBotId,
+        ...(input.fromName ? { fromName: input.fromName } : {}),
+        toBotId: input.toBotId,
+        ...(input.toName ? { toName: input.toName } : {}),
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        envelope: input.envelope,
+        ...(input.deliver ? { deliver: input.deliver } : {}),
+        depth: input.depth,
+        chain: input.chain,
+      }),
+    }
+  }
+
+  /**
+   * 交接队列。惰性打开 + 失败后不再重试。
+   *
+   * 和 routines.db 一样的取舍：better-sqlite3 的原生绑定坏掉时，抛出去会让**每一条聊天
+   * 消息**都失败，而 bot 交接只是附加能力。打不开就当作没有这个能力。
+   */
+  private hopQueueFor(): HopQueue | null {
+    if (this.hopQueue) return this.hopQueue
+    if (this.hopQueueBroken) return null
+    try {
+      this.hopQueue = HopQueue.open(join(NERVE_DIR, 'hops.db'))
+      return this.hopQueue
+    } catch (err) {
+      this.hopQueueBroken = true
+      console.warn('[AgentCore] hops.db 打开失败，本次运行不提供 bot 交接:', err)
+      return null
+    }
+  }
+
+  /**
+   * 入队一跳，并保证 worker 在跑。
+   *
+   * 幂等键由「发起会话 + 双端 Bot + 任务三件套」算出：模型在一轮里重复调同一个工具是
+   * 常见行为，而一跳就是完整的一轮 agent，重复执行真的花钱。同一次交接只入队一次，
+   * 第二次静默返回 —— 既不重复跑，也不骗模型说「又发了一次」。
+   */
+  private async enqueueHop(work: HandoffWork): Promise<void> {
+    const queue = this.hopQueueFor()
+    if (!queue) throw new Error('交接队列不可用')
+
+    const key =
+      'hop:' +
+      createHash('sha256')
+        .update(
+          JSON.stringify([
+            work.threadId,
+            work.fromBotId,
+            work.toBotId,
+            work.envelope.task,
+            work.envelope.constraints ?? '',
+            work.envelope.expecting ?? '',
+          ]),
+        )
+        .digest('hex')
+        .slice(0, 24)
+
+    const offered = queue.offer(key, work)
+    if (offered === 'queued') {
+      this.ensureHopWorker()
+      // 别等那 2 秒：刚派出去的活，界面上要马上看见那个 Bot 动起来。
+      this.sweepNow()
+    }
+  }
+
+  /** sweep 的 runner 与定时器。分开存是为了「入队后立刻催一把」。 */
+  private hopRunner: ReturnType<typeof createHandoffRunner> | null = null
+
+  /**
+   * 立刻扫一轮。
+   *
+   * 定时器是 2 秒一次，但「我刚派了活」这个时刻不该等那 2 秒：
+   * 用户点完发送，界面上要马上看见那个 Bot 开始动。空扫一次是几毫秒的查询，代价可以忽略。
+   * 已经在扫的时候不叠（B 可能跑几分钟，叠上去会白跑同一跳）。
+   */
+  private sweepNow(): void {
+    if (this.hopping) return
+    const runner = this.hopRunner
+    if (!runner) return
+    this.hopping = true
+    void runner
+      .sweep()
+      .catch((err) => console.warn('[AgentCore] handoff sweep 失败:', err))
+      .finally(() => {
+        this.hopping = false
+      })
+  }
+
+  /** 起 sweep 定时器（幂等）。有活就跑，没活就是一次空查询。 */
+  private ensureHopWorker(): void {
+    if (this.hopTimer) return
+    const queue = this.hopQueueFor()
+    if (!queue) return
+
+    const runner = createHandoffRunner({
+      queue,
+      owner: HopQueue.ownerId(),
+      delivery: {
+        run: async ({ work, prompt, depth, chain }) => {
+          /*
+           * 起止各广播一次，finally 里收 —— 跑失败也要收。
+           *
+           * 收不掉的后果不是「多一个小转圈」：侧栏那个 Bot 会一直画成正在干活，
+           * 用户会以为它卡住了，然后去点它、去重启。
+           */
+          this.notifyBotActivity({
+            botId: work.toBotId,
+            botName: work.toName ?? '',
+            threadId: work.threadId,
+            working: true,
+          })
+          try {
+            return await this.runHandoffTurn({
+              botId: work.toBotId,
+              prompt,
+              depth,
+              chain,
+              // 沿用发起方会话的目录；老行没有这个字段就退回全局目录。
+              cwd: work.cwd || this.projectDir,
+            })
+          } finally {
+            this.notifyBotActivity({
+              botId: work.toBotId,
+              botName: work.toName ?? '',
+              threadId: work.threadId,
+              working: false,
+            })
+          }
+        },
+        appendBotMessage: async (input) => this.appendBotMessage(input),
+        resolveBotSession: async (botId, fallback) => this.resolveBotSession(botId, fallback),
+      },
+      onSettled: (work) => this.notifySessionUpdated(work.threadId),
+    })
+
+    this.hopRunner = runner
+
+    /*
+     * 把库里「正在跑」的跳补一次 working 广播。
+     *
+     * 进程重启后 resumeHandoffQueue() 会接上上一轮没跑完的跳，但那条跳的「开始」
+     * 发生在上一个进程里 —— 界面收不到，那个 Bot 的头像就不会有动静，
+     * 而它其实正在干活。反过来，上次没收到「结束」的话它会一直转。
+     * 两种都靠这一段按库里的实际情况校准。
+     */
+    void (async () => {
+      try {
+        for (const row of queue.running()) {
+          const work = JSON.parse(row.payload) as HandoffWork
+          if (work.kind !== 'hop') continue
+          this.notifyBotActivity({
+            botId: work.toBotId,
+            botName: work.toName ?? '',
+            threadId: work.threadId,
+            working: true,
+          })
+        }
+      } catch (err) {
+        console.warn('[AgentCore] 校准交接活动状态失败:', err)
+      }
+    })()
+
+    this.hopTimer = setInterval(() => this.sweepNow(), 2000)
+    // 定时器不该把进程吊住（测试里尤其明显）。
+    this.hopTimer.unref?.()
+  }
+
+  /**
+   * 启动时把上次没跑完的交接接上。
+   *
+   * 队列是落盘的，但 worker 是进程内的：上次退出时可能还有 queued 的跳，
+   * 或者是「hop 跑完了、relay 还没落地」这种半步状态。不接的话它们永远不会被执行，
+   * 用户看到的是「Bot 说它问了，然后什么都没有」—— 而这条路已经有答案躺在库里了。
+   *
+   * 只有真的有活才起定时器：不用交接的人不该多一个每 2 秒的查询。
+   */
+  resumeHandoffQueue(): void {
+    const queue = this.hopQueueFor()
+    if (!queue) return
+    try {
+      const stats = queue.stats()
+      if (stats.queued === 0 && stats.running === 0) return
+      console.log(
+        `[AgentCore] 接上未完成的 bot 交接: queued=${stats.queued} running=${stats.running}`,
+      )
+      this.ensureHopWorker()
+    } catch (err) {
+      console.warn('[AgentCore] 读取交接队列状态失败:', err)
+    }
+  }
+
+  /** 关掉 worker（退出时调用；不关也不影响正确性，只是留个定时器）。 */
+  stopHopWorker(): void {
+    if (this.hopTimer) {
+      clearInterval(this.hopTimer)
+      this.hopTimer = null
+    }
+    this.hopRunner = null
+  }
+
+  /**
+   * 把一段文本作为某个 Bot 说的话写进会话。
+   *
+   * answeredBy 是渲染层唯一的依据：有它就画成那个 Bot 的头像 + 名字，没有就还是当前 Bot。
+   * 这就是「B 的原话出现在 A 的会话里」的全部实现 —— 不跑模型，不转述。
+   */
+  private async appendBotMessage(input: {
+    sessionId: string
+    botId: string
+    botName?: string
+    text: string
+    speakerIsAsker: boolean
+  }): Promise<void> {
+    const store = await this.ensureSessionStore()
+    await store.append({ sessionId: input.sessionId }, [
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'text', text: input.text }],
+          // 消息级元数据，不动 content 结构：历史回放只认 content 里的块类型，
+          // 往 content 里塞自定义块会让模型看到它不认识的东西。
+          answeredBy: input.botId,
+          answeredByName: input.botName ?? '',
+          speakerIsAsker: input.speakerIsAsker,
+        },
+        timestamp: new Date().toISOString(),
+      },
+    ])
+    await store.append({ sessionId: input.sessionId }, [{ type: 'tag', tag: 'gui' }])
+    /*
+     * 这里刻意**不**通知。
+     *
+     * 通知由 runner 的 onSettled 统一发，它手里有「这一行最终写进了哪个会话」
+     * （deliver=message 时会和发起方会话不同）。两处都发等于同一个会话被强制重载
+     * 两次，用户正在看的时候内容会闪一下。
+     */
+  }
+
+  /**
+   * 某个 Bot 自己的会话 —— deliver=message 的答复落到这里。
+   *
+   * 三级回退，每一级都有它存在的理由：
+   *   1. 登记过的 home 会话还在 → 用它。这是 B 的「收件箱」，越稳定越好：
+   *      用户切到 B 的窗口，历次收到的消息该在同一个地方，而不是每次一个新会话。
+   *   2. 没登记（旧数据）或已被用户删掉 → 找 B 名下最近那个会话，顺手补登记。
+   *   3. 一个都没有 → 新建。此时 jsonl 还不存在，appendBotMessage 会用 flag:a
+   *      把第一条写出来；先写 meta 是为了让它一出生就归属正确的 Bot。
+   *
+   * 返回 fallback（发起方会话）是最后一招：答错地方也比把答复丢掉好，
+   * 至少用户看得到有人在说话。
+   */
+  async resolveBotSession(botId: string, fallback: string): Promise<string> {
+    const reg = await this.getBotRegistry()
+    const bot = await reg.get(botId)
+    if (!bot) return fallback
+    const store = await this.ensureSessionStore()
+
+    if (bot.homeSessionId && (await store.exists(bot.homeSessionId))) return bot.homeSessionId
+
+    try {
+      const summaries = await store.listSessionSummaries()
+      const mine = summaries.filter((x) => x.botId === botId)
+      if (mine.length > 0) {
+        mine.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0))
+        const latest = mine[0].sessionId
+        await reg.update(botId, { homeSessionId: latest })
+        return latest
+      }
+    } catch (err) {
+      console.warn('[AgentCore] 查找 Bot 已有会话失败:', botId, err)
+    }
+
+    const fresh = randomUUID()
+    try {
+      /*
+       * 带上 customTitle，否则侧栏那个会话显示 Untitled。
+       *
+       * 这条会话没有用户提问 —— 它是「别的 Bot 发消息给你」落地的收件箱，
+       * 标题只能由我们自己给。firstPrompt 是空的，兜底逻辑给不出东西。
+       */
+      await store.setMeta(fresh, { botId, customTitle: `${bot.name} 的消息` })
+      await reg.update(botId, { homeSessionId: fresh })
+    } catch (err) {
+      console.warn('[AgentCore] 新建 Bot 会话失败:', botId, err)
+      return fallback
+    }
+    return fresh
+  }
+
+  /** 订阅会话内容变化（IPC / gateway 用来把变化推给自己的客户端）。 */
+  private sessionUpdatedListeners = new Set<(sessionId: string) => void>()
+
+  /**
+   * 订阅「某个 Bot 正在/不再跑一跳」。
+   *
+   * 交接是异步的：用户下发任务后，A 那一轮几秒就结束了，B 还在后台跑。
+   * 不给一个状态信号的话，界面上「问了 → 一片空白 → 突然冒出一段话」，
+   * 中间那段等待完全不可见 —— 而这恰恰是最需要「它在动」的时刻。
+   */
+  private botActivityListeners = new Set<(a: BotActivity) => void>()
+
+  onSessionUpdated(fn: (sessionId: string) => void): () => void {
+    this.sessionUpdatedListeners.add(fn)
+    return () => {
+      this.sessionUpdatedListeners.delete(fn)
+    }
+  }
+
+  onBotActivity(fn: (a: BotActivity) => void): () => void {
+    this.botActivityListeners.add(fn)
+    return () => {
+      this.botActivityListeners.delete(fn)
+    }
+  }
+
+  private notifyBotActivity(a: BotActivity): void {
+    for (const fn of this.botActivityListeners) {
+      try {
+        fn(a)
+      } catch {
+        /* 监听方的错误不该影响队列 */
+      }
+    }
+  }
+
+  private notifySessionUpdated(sessionId: string): void {
+    for (const fn of this.sessionUpdatedListeners) {
+      try {
+        fn(sessionId)
+      } catch {
+        /* 监听方的错误不该影响队列 */
+      }
+    }
+  }
+
+  /**
+   * 以目标 Bot 的身份，在一个一次性会话里跑完整一轮，把它说的话取回来。
+   *
+   * 为什么必须开独立会话：sendMessage() 一进来就会 cancelSession(它自己的 sessionId)，
+   * 拿发起方 A 的会话去跑 B，等于 A 把自己掐掉。独立 sessionId + 独立 SessionContext，
+   * 两边互不影响。
+   *
+   * 为什么要删会话：一次交接一个会话的话，侧栏会被 handoff-xxxx 塞满。它跑完就没用了，
+   * 失败也要删 —— 半截会话比没有更糟。
+   */
+  private async runHandoffTurn(input: {
+    botId: string
+    prompt: string
+    depth: number
+    chain: string[]
+    cwd: string
+  }): Promise<string> {
+    // 捕获通道：只收正文（thinking / 工具调用不进答复），sendError 记下来让这一跳变成失败。
+    //
+    // 写成完整的 OutputChannel 而不是继承 NullOutputChannel：基类把方法声明成无参，
+    // 子类带参数的覆写在结构化类型下不兼容（dispatchRoutine 的 ErrorCapturingChannel
+    // 就是这么一直在报错的）。这里明确列出每个方法，多几行但一眼能读懂它到底拦了什么。
+    const answer: string[] = []
+    let errored = ''
+    const captureChannel: OutputChannel = {
+      sendStreamDelta(text: string): void {
+        answer.push(text)
+      },
+      sendThinkingDelta(): void {},
+      sendToolCall(): void {},
+      sendToolResult(): void {},
+      sendDone(): void {},
+      sendError(message: string): void {
+        errored = message
+      },
+      sendImage(): void {},
+      isReady(): boolean {
+        return true
+      },
+    }
+
+    const scratchId = scratchSessionId()
+    const store = await this.ensureSessionStore()
+
+    try {
+      // 独立上下文：绝不复用发起方的 SessionContext（见方法注释）。
+      const ctx = createSessionContext(scratchId)
+      await this.sendMessage(
+        {
+          prompt: input.prompt,
+          sessionId: scratchId,
+          botId: input.botId,
+          cwd: input.cwd,
+          // 深度一路带下去：目标 Bot 若继续交接，闸门接着数。
+          handoff: { depth: input.depth, chain: input.chain },
+        },
+        captureChannel,
+        ctx,
+      )
+      if (errored) throw new Error(errored)
+
+      const streamed = answer.join('').trim()
+      if (streamed) return streamed
+
+      // 流式正文是空的：这一轮可能只做了工具调用，而 handleResult 会把 "Done. Bash → x"
+      // 这类总结**直接写进落盘内容**、不再走 sendStreamDelta。直接读刚落盘的会话，
+      // 比让发起方收到一句「它什么都没说」诚实 —— 它其实做了事，只是没说话。
+      const entries = (await store.load({ sessionId: scratchId })) ?? []
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i] as { type?: string; message?: { content?: unknown } }
+        if (e.type !== 'assistant') continue
+        const content = e.message?.content
+        if (!Array.isArray(content)) continue
+        const text = content
+          .filter((c: any) => c?.type === 'text' && typeof c.text === 'string')
+          .map((c: any) => c.text as string)
+          .join('\n')
+        if (text.trim()) return text.trim()
+      }
+      return ''
+    } finally {
+      // 无论成败都收掉这个一次性会话（sendMessage 失败也会留下半个文件）。
+      try {
+        if (await store.exists(scratchId)) await store.delete({ sessionId: scratchId })
+      } catch (err) {
+        console.warn('[AgentCore] 清理 handoff 会话失败:', scratchId, err)
+      }
+    }
+  }
+
   /** 工具侧用的 RoutineStore（与 index.ts 的 Scheduler 共用同一个 db 文件）。 */
   private toolsRoutineStore: import('../store/routine-store').RoutineStore | null = null
   private toolsStoreBroken = false
@@ -758,7 +1356,10 @@ export class AgentCore {
     cwd: string,
     // 本轮所属 Bot。显式传参而不是读实例字段：同一进程里 routine 轮次与用户轮次
     // 可能交错，共享字段会让 A 轮的工具把 routine 写到 B 轮的 Bot 名下。
-    botId: string
+    botId: string,
+    // Bot 交接链（只有被别的 Bot 派起来的一轮才带）。没给默认值：默认成 0 看起来方便，
+    // 实际会让「忘了传」和「真的是根」长得一模一样，深度闸就永远关着了。
+    handoff: { depth: number; chain: string[] } | undefined
   ) {
     const allToolCalls: Array<{ id: string; name: string; input: unknown }> = []
     const allToolResults: Array<{ toolCallId: string; content: string; is_error?: boolean }> = []
@@ -784,6 +1385,11 @@ export class AgentCore {
     } : undefined, this.jobs)
     const routineCtx = this.routineToolCtx(botId, sessionId)
     if (routineCtx) Object.assign(builtinTools, buildRoutineTools(routineCtx))
+
+    // Bot 交接：拿不到上下文（= 这个 Bot 谁都不能问）就整块不注册，
+    // 而不是注册了每次都被拒 —— 后者会让模型对用户说「我试了但失败了」。
+    const handoffCtx = await this.handoffToolCtx(botId, sessionId, cwd, handoff)
+    if (handoffCtx) Object.assign(builtinTools, buildBotHandoffTools(handoffCtx))
 
     // TDAI 记忆工具：auto-recall 早就把它们写进了系统提示词，却从未注册 ——
     // 模型被明确告知可以调，实际撞空。合并进 builtinTools 后，下面的
@@ -920,6 +1526,18 @@ export class AgentCore {
       tools: allToolDefs,
       toolExecutors: allToolExecutors,
       maxSteps: 50,
+      /*
+       * 后台作业结果自动投递。
+       *
+       * 不接这一根的话，Bash 转后台之后模型永远看不到输出 —— 它会以为任务挂了，
+       * 然后放弃。实测表现是 echo p2…p38 空转。
+       */
+      drainJobs: () => {
+        const done = this.jobs.drainFinished()
+        if (done.length === 0) return ''
+        const head = `\n\n[后台作业已完成 ${done.length} 个，以下是结果]`
+        return head + '\n\n' + done.map((j) => formatJobResult(j)).join('\n\n---\n\n')
+      },
       effort: cfg.effort,
       abortSignal: ctx.abort.signal,
       onTextDelta: (text) => {
@@ -1060,7 +1678,10 @@ export class AgentCore {
     await store.append({ sessionId }, [{ type: 'tag', tag: 'gui' }])
 
     // Memory capture
-    if (fullText && this.memoryCore) {
+    //
+    // 交接轮（payload.handoff 存在）不写记忆：那是一段「另一个 Bot 请求我做某事」的
+    // 机器对话，写进长期记忆后会被当成用户说过的话召回，污染后续每一轮。
+    if (fullText && this.memoryCore && !payload.handoff) {
       this.memoryCore.handleTurnCommitted({
         userText: payload.prompt,
         assistantText: fullText,
@@ -1380,6 +2001,16 @@ export class AgentCore {
   async close() {
     if (this.memoryCore) {
       await this.memoryCore.destroy().catch((err) => console.error('[TDAI] destroy failed:', err))
+    }
+    // 交接的 sweep 定时器和 sqlite 句柄：不关进程会留一个悬着的定时器和一条打开的文件。
+    this.stopHopWorker()
+    if (this.hopQueue) {
+      try {
+        this.hopQueue.close()
+      } catch {
+        /* 已经关了 */
+      }
+      this.hopQueue = null
     }
     await this.mcpPool.close()
   }

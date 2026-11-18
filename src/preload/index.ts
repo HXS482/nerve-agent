@@ -82,6 +82,18 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.DONE, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.DONE, handler)
   },
+  /** 某个 Bot 正在/不再跑交接的一跳（侧栏头像据此转圈）。 */
+  onBotActivity: (callback: (activity: import('../shared/types').BotActivity) => void) => {
+    const handler = (_event: any, activity: import('../shared/types').BotActivity) => callback(activity)
+    ipcRenderer.on(IPC_CHANNELS.BOT_ACTIVITY, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.BOT_ACTIVITY, handler)
+  },
+  /** 某个会话的内容被别的 Bot 写入了（交接答复落地）。参数是 sessionId。 */
+  onSessionUpdated: (callback: (sessionId: string) => void) => {
+    const handler = (_event: any, sessionId: string) => callback(sessionId)
+    ipcRenderer.on(IPC_CHANNELS.SESSION_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_UPDATED, handler)
+  },
   onHeartbeat: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.HEARTBEAT, handler)
@@ -268,7 +280,7 @@ const api = {
   botList: () => ipcRenderer.invoke(IPC_CHANNELS.BOT_LIST),
   botCreate: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_CREATE, input),
-  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string }) =>
+  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_UPDATE, id, patch),
   sessionBindBot: (sessionId: string, botId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_BIND_BOT, sessionId, botId),

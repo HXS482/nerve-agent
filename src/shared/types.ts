@@ -147,6 +147,10 @@ export const IPC_CHANNELS = {
   BOT_CREATE: 'bot:create',
   BOT_UPDATE: 'bot:update',
   SESSION_BIND_BOT: 'session:bindBot',
+  /** 会话内容被别的 Bot 写入了（交接答复落地）：渲染层据此重新拉一次消息 */
+  SESSION_UPDATED: 'session:updated',
+  /** 某个 Bot 正在/不再跑交接的一跳（侧栏按它画转圈） */
+  BOT_ACTIVITY: 'bot:activity',
   MCP_BRIDGE_STATUS: 'mcp-bridge:status',
   MCP_BRIDGE_TOGGLE: 'mcp-bridge:toggle',
 } as const
@@ -237,6 +241,13 @@ export interface SendMessagePayload {
   cwd?: string
   /** 本轮所属 Bot。给了就把会话绑定到这个 Bot（侧栏按 Bot 组织会话）。 */
   botId?: string
+  /**
+   * Bot 交接（message_bot）的传递链，只有「被别的 Bot 派起来的一轮」才带。
+   *
+   * depth 由派发方 +1 后塞进来，chain 一路追加，所以 A→B→C→A 这种环会在深度闸处被拒。
+   * 刻意放在载荷里而不是让模型自己报：模型能改的数字等于没有闸。
+   */
+  handoff?: { depth: number; chain: string[] }
 }
 
 /** 一轮 run 的结束原因：abort 收尾不能报成 complete，否则中断和跑完在 UI 上同形 */
@@ -309,12 +320,37 @@ export interface ContentBlock {
   reason?: string
 }
 
+/**
+ * 一个 Bot 此刻是否在跑交接的一跳。
+ *
+ * 只表达「在动 / 不在动」，不表达进度：一跳是一整轮 agent，中途没有可靠的百分比，
+ * 编一个出来只会让人盯着一个假数字。
+ *
+ * threadId 是发起方会话 —— 侧栏只在「这个 Bot 与我正在看的会话有关」时才该亮状态，
+ * 否则别的会话里它干活会让我这边的头像跟着闪。
+ */
+export interface BotActivity {
+  botId: string
+  botName: string
+  threadId: string
+  working: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: ContentBlock[]
   timestamp: number
   sessionId?: string
+  /**
+   * 这段话是**另一个 Bot** 在写，不是本会话的 Bot。
+   *
+   * 交接（message_bot）的答复会作为一条独立的 assistant 消息落进发起方会话，
+   * 落款是回答的那个 Bot。渲染层凭这两个字段画成它的头像和名字 ——
+   * 没有它们的话，用户会以为本会话的 Bot 忽然说了别人的话。
+   */
+  answeredBy?: string
+  answeredByName?: string
   cost?: number
   usage?: {
     inputTokens: number

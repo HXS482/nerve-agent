@@ -3568,6 +3568,12 @@ pre.hljs {
   color: transparent;
   animation: shimmer-text 1.4s linear infinite;
 }
+/* 卡片头部那枚火花：思考进行中轻微呼吸 + 旋转，静止时不动。
+   只做 transform/opacity，不动布局，避免整行抖动。 */
+@keyframes think-spark {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.75; }
+  50% { transform: scale(1.18) rotate(24deg); opacity: 1; }
+}
 @keyframes shimmer-text {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -3605,8 +3611,17 @@ pre.hljs {
   position: absolute;
   left: 3px;
   top: -8px;
+  /*
+   * 1px 是硬下限（再细在高 DPI 上会被抹掉），所以「看起来细」只能靠颜色和渐变：
+   * 原来用 --text-outline(#8c909f)，那是正文副标题的亮度，一条贯穿整段思考的实线
+   * 在深底上比文字还抢眼。改成 variant(#424754)，亮度降到约 1/3。
+   *
+   * 上下各 6px 淡出，让它像「一条渐隐的注记」而不是「一个框」。
+   */
   width: 1px;
-  background: var(--text-outline);
+  background: var(--text-outline-variant);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 6px, #000 calc(100% - 6px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 6px, #000 calc(100% - 6px), transparent);
   transition: height 500ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .think-trace-content {

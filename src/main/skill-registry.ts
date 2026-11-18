@@ -24,6 +24,35 @@ export class SkillRegistry {
     return this.skills.get(name)
   }
 
+  /**
+   * 取一个「真的能用」的技能：同时过全局 disabled 和 Bot 白名单。
+   *
+   * 为什么单独一个方法而不是改 get()：get() 是「有没有这个技能」，
+   * 语义上不该掺权限。而 load_skill 工具问的是「这个 Bot 能不能用它」，
+   * 两者混在一起会让调用方猜不透。
+   */
+  getAvailable(name: string): Skill | undefined {
+    const skill = this.skills.get(name)
+    if (!skill) return undefined
+    if (this.disabled.has(skill.id)) return undefined
+    const allow = this.allowedSkills
+    if (allow.length > 0 && !allow.includes(skill.id)) return undefined
+    return skill
+  }
+
+  /** 当前 Bot 的技能白名单；空数组 = 不限制（由调用方在每轮设置）。 */
+  private allowedSkills: string[] = []
+
+  /**
+   * 设置当前 Bot 的技能白名单。空数组 = 不限制。
+   *
+   * 由 AgentCore 在每轮 prepareMessages 时设置 —— 不能放在构造里，
+   * 因为同一个 registry 实例会服务多个 Bot（会话切换、routine、交接）。
+   */
+  setAllowedSkills(ids: string[]) {
+    this.allowedSkills = ids
+  }
+
   getEnabled(): Skill[] {
     return Array.from(this.skills.values()).filter(s => !this.disabled.has(s.id))
   }

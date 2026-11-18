@@ -226,7 +226,7 @@ export function UsageStatsPanel() {
       {/* 头部：与 Recent / Channels 同一套节奏（可折叠） */}
       <div
         className="flex items-center justify-between cursor-pointer select-none"
-        style={{ padding: '6px 6px 4px 6px' }}
+        style={{ padding: '2px 0 6px' }}
         onClick={() => setCollapsed(!collapsed)}
       >
         <div className="flex items-center gap-1.5">
@@ -251,8 +251,8 @@ export function UsageStatsPanel() {
            这里只保留一层轮廓，框内底色轻到几乎看不出，作用是把热力图和读数收成一个整体 */
         <div
           style={{
-            margin: '0 -4px 6px',
-            padding: '6px 8px 8px',
+            margin: '0 0 8px',
+            padding: '8px 8px 9px',
             borderRadius: 10,
             background: isLight ? 'rgba(0, 0, 0, 0.022)' : 'rgba(255, 255, 255, 0.028)',
             border: `1px solid ${isLight ? 'rgba(0, 0, 0, 0.07)' : 'rgba(255, 255, 255, 0.07)'}`,

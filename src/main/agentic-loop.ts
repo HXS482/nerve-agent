@@ -26,6 +26,14 @@ export interface AgenticLoopParams {
   onToolResult?: (id: string, content: string, isError?: boolean) => void
   onToolApproval?: (id: string, name: string, input: Record<string, unknown>) => Promise<boolean>
   onBeforeStep?: (messages: Array<{ role: string; content: unknown }>) => Promise<void>
+  /**
+   * 把已结束的后台作业结果交出来，拼成一段文本注入下一步。
+   *
+   * 为什么是「自动投递」而不是「让模型 visit_jobs」：实测模型不会去取。
+   * 一个 50 步的 run 里 48 次 Bash 调用、0 次带 visit_jobs —— 它宁可 echo p2…p38
+   * 空转也不读结果。后台化的收益（不阻塞对话）只有在结果能自己回来时才成立。
+   */
+  drainJobs?: () => string
   onAfterToolCall?: (toolName: string, toolCallId: string, params: unknown, result: unknown) => void
   hookRegistry?: import('./hook-registry').HookRegistry
   sessionId?: string
@@ -354,6 +362,15 @@ async function runAnthropicLoop(params: AgenticLoopParams): Promise<AgenticLoopR
     if (tickTodoNudge(todoNudge, toolUseBlocks.map((b: any) => b.name))) {
       toolResults.push({ type: 'text', text: TODO_NUDGE })
     }
+    /*
+     * 后台作业的结果自动投递。
+     *
+     * 必须在 toolResults 之后、下一轮 LLM 之前：它就是这一步的「迟到结果」。
+     * 拼成一条独立 text block 而不是塞进上一条 tool_result —— 后者会破坏
+     * tool_use / tool_result 的一一对应，真 Anthropic 会直接 400。
+     */
+    const jobDigest = params.drainJobs ? params.drainJobs() : ''
+    if (jobDigest) toolResults.push({ type: 'text', text: jobDigest })
     messages.push({ role: 'user', content: toolResults })
   }
 
@@ -948,6 +965,9 @@ async function runOpenAILoop(params: AgenticLoopParams): Promise<AgenticLoopResu
 
     messages.push(assistantMsg)
     messages.push(...toolMessages)
+    // 与 Anthropic 分支同理：后台作业的结果在这一步之后自动补上
+    const jobDigest = params.drainJobs ? params.drainJobs() : ''
+    if (jobDigest) messages.push({ role: 'user', content: jobDigest })
     if (tickTodoNudge(todoNudge, [...toolCallAccumulators.values()].map((a) => a.name))) {
       messages.push({ role: 'user', content: TODO_NUDGE })
     }

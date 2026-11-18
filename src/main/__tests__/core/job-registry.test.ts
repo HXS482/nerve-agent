@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { JobRegistry } from '../../core/job-registry'
+import { getBuiltinTools } from '../../tools'
 
 /**
  * 用 Git Bash 跑真命令（这台机器上有），避免依赖 shell 差异。
@@ -159,5 +160,63 @@ describe('JobRegistry', () => {
     expect(result).toBeDefined()
     // 被信号杀掉：signal 有值，或退出码非 0
     expect(result!.signal || result!.exitCode !== 0).toBeTruthy()
+  })
+})
+
+describe('waitFor / drainFinished（后台结果自动投递的基础）', () => {
+  const reg = new JobRegistry()
+  afterEach(() => reg.killAll())
+
+  it('waitFor 在作业结束后拿到结果', async () => {
+    const r = await run(reg, 'sleep 0.3 && echo late', 50)
+    expect(r.kind).toBe('background')
+    if (r.kind !== 'background') throw new Error('unreachable')
+
+    const waited = await reg.waitFor(r.jobId, 5000)
+    expect(waited.stillRunning).toBe(false)
+    expect(waited.result?.stdout).toContain('late')
+  })
+
+  it('waitFor 超时时返回已收集输出 + stillRunning', async () => {
+    const r = await run(reg, 'sleep 5 && echo never', 50)
+    if (r.kind !== 'background') throw new Error('unreachable')
+
+    const waited = await reg.waitFor(r.jobId, 150)
+    expect(waited.stillRunning).toBe(true)
+    // 没结束也要有 result 对象（带 jobId），模型要靠它再取一次
+    expect(waited.result?.jobId).toBe(r.jobId)
+  })
+
+  it('waitFor 对未知 id 返回 undefined', async () => {
+    const waited = await reg.waitFor('no-such-job', 100)
+    expect(waited.result).toBeUndefined()
+    expect(waited.stillRunning).toBe(false)
+  })
+
+  it('drainFinished 一次交出全部已完成作业，且只交一次', async () => {
+    const a = await run(reg, 'sleep 0.2 && echo A', 30)
+    const b = await run(reg, 'sleep 0.2 && echo B', 30)
+    if (a.kind !== 'background' || b.kind !== 'background') throw new Error('unreachable')
+
+    await waitForFinish(reg, a.jobId)
+    await waitForFinish(reg, b.jobId)
+
+    const first = reg.drainFinished()
+    expect(first.length).toBe(2)
+    expect(first.map((j) => j.stdout.trim()).sort()).toEqual(['A', 'B'])
+
+    // 取走即删：模型不需要第二轮又看到同一段输出
+    expect(reg.drainFinished()).toEqual([])
+  })
+})
+
+describe('Bash schema：visit_jobs 必须能单独调用', () => {
+  it('command 是可选字段，否则「按提示调用 visit_jobs」会被 schema 判非法', async () => {
+    const tools = getBuiltinTools(process.cwd())
+    const schema = tools.Bash.input_schema as { properties: Record<string, unknown>; required?: string[] }
+    expect(Object.keys(schema.properties)).toEqual(
+      expect.arrayContaining(['command', 'background', 'visit_jobs']),
+    )
+    expect(schema.required ?? []).not.toContain('command')
   })
 })

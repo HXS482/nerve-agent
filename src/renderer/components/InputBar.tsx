@@ -4,6 +4,7 @@ import { useChatStore } from '../stores/chatStore'
 import { useRoutineStore } from '../stores/routineStore'
 import { useStageStore } from '../stores/stageStore'
 import { useGitStore } from '../stores/gitStore'
+import { BotAvatar } from './BotList'
 import { ModelIsland } from './ModelIsland'
 import { ContextRing } from './ContextRing'
 import type { ClaudeConfig, FileAttachment } from '../../shared/types'
@@ -45,6 +46,11 @@ function FileIcon({ mimeType }: { mimeType: string }) {
 }
 
 export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectModel, workingDirectory }: Props) {
+  /* 当前 Bot：用来在输入框上方显示「在跟谁说话」。空 = 不显示。 */
+  const activeBotId = useChatStore((s) => s.activeBotId)
+  const bots = useRoutineStore((s) => s.bots)
+  const activeBot = activeBotId ? bots.find((b) => b.id === activeBotId) ?? null : null
+  const isLightTheme = useChatStore((s) => s.theme) === 'light'
   const [input, setInput] = useState('')
   const [hasVoice, setHasVoice] = useState(false)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
@@ -332,6 +338,37 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
           className="flex flex-col gap-1 flex-1 min-w-0 max-w-4xl"
           style={{ maxWidth: conversationWidth > 0 ? conversationWidth : undefined }}
         >
+          {/*
+           * 归属条：在输入框上方永远写着「现在是谁在听」。
+           *
+           * 多 Bot 之后最容易迷路的就是这个 —— 侧栏能看出选中了谁，但输入框附近
+           * 什么都没有，打字的时候完全没有「这句话说给谁听」的线索。
+           */}
+          {activeBot && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                paddingLeft: 6,
+                marginBottom: 2,
+              }}
+            >
+              <BotAvatar
+                bot={activeBot}
+                size={14}
+                animate={false}
+                paper={isLightTheme ? '#eeeeee' : '#201f1f'}
+              />
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-on-surface-variant)' }}>
+                {activeBot.name}
+              </span>
+              {activeBot.group ? (
+                <span style={{ fontSize: 9, color: 'var(--text-outline-variant)' }}>· {activeBot.group}</span>
+              ) : null}
+            </div>
+          )}
+
           {/* Main Input Container */}
           <div
             className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group w-full h-9"

@@ -65,12 +65,15 @@ interface Props {
   onNewChat: () => void
   /** 当前会话的运行状态：只喂给被选中的那个 Bot 的头像 */
   status?: 'idle' | 'thinking' | 'busy' | 'done' | 'error'
+  /** 侧栏搜索框的查询串：按名字 / 分组 / 角色设定过滤 */
+  query?: string
 }
 
-export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) {
+export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '' }: Props) {
   const sessions = useChatStore((s) => s.sessions)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   const activeBotId = useChatStore((s) => s.activeBotId)
+  const workingBots = useChatStore((s) => s.workingBots)
   const theme = useChatStore((s) => s.theme)
   const setActiveBotId = useChatStore((s) => s.setActiveBotId)
   const bots = useRoutineStore((s) => s.bots)
@@ -94,7 +97,17 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
   const groups = useMemo(() => {
     const order: string[] = []
     const byGroup = new Map<string, Bot[]>()
-    for (const b of bots) {
+    /*
+     * 搜索过滤放在分组之前：这样「分组里一个都没匹配上」的分组会整组消失，
+     * 而不是留一个空标题在那 —— 空分组标题是最让人怀疑「搜索是不是坏了」的东西。
+     */
+    const q = query.trim().toLowerCase()
+    const visible = q
+      ? bots.filter((b) =>
+          (b.name + ' ' + (b.group ?? '') + ' ' + (b.instructions ?? '')).toLowerCase().includes(q),
+        )
+      : bots
+    for (const b of visible) {
       const g = b.group || '未分组'
       if (!byGroup.has(g)) { byGroup.set(g, []); order.push(g) }
       const list = byGroup.get(g)
@@ -102,7 +115,7 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
     }
     order.sort((a, b) => (a === '未分组' ? 1 : b === '未分组' ? -1 : 0))
     return order.map((g) => ({ name: g, bots: byGroup.get(g) || [] }))
-  }, [bots])
+  }, [bots, query])
 
   const openBot = (bot: Bot) => {
     setActiveBotId(bot.id)
@@ -135,18 +148,49 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
         const isCollapsed = collapsed.has(name)
         return (
           <div key={name} style={{ marginBottom: 6 }}>
+            {/*
+             * 分组标题 = 折叠开关。
+             *
+             * 三样东西缺一不可：箭头（说明能点）、名字、数量（说明这组有几个 Bot）。
+             * 原来只有文件夹图标 + 名字，既看不出可点、也不知道收起后会藏在什么后面。
+             */}
             <button
               onClick={() => toggleGroup(name)}
               className="flex items-center gap-1.5 w-full text-left cursor-pointer transition-colors"
-              style={{ padding: '6px 6px 4px 6px', background: 'transparent', border: 'none', borderRadius: 4 }}
+              style={{ padding: '5px 4px', background: 'transparent', border: 'none', borderRadius: 5, marginBottom: 2 }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-on-surface-variant)', flexShrink: 0 }}>
-                <path d="M4 6a2 2 0 0 1 2-2h3.5l2 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+              <svg
+                width="9"
+                height="9"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--text-outline-variant)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  flexShrink: 0,
+                  transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.15s',
+                }}
+              >
+                <path d="M6 9l6 6 6-6" />
               </svg>
-              <span className="text-[11px] flex-1 truncate" style={{ color: 'var(--text-on-surface-variant)', fontWeight: 600 }}>
+              <span
+                className="flex-1 truncate"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  color: 'var(--text-outline)',
+                }}
+              >
                 {name}
+              </span>
+              <span style={{ fontSize: 9, color: 'var(--text-outline-variant)', flexShrink: 0 }}>
+                {groupBots.length}
               </span>
             </button>
 
@@ -155,8 +199,12 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
               const isActive = activeBotId === bot.id || (!!latest && latest.id === currentSessionId)
               const preview = latest && latest.preview ? latest.preview.trim() : ''
               return (
-                <button
+                <div
                   key={bot.id}
+                  className="group/bot relative"
+                  style={{ marginBottom: 2 }}
+                >
+                <button
                   onClick={() => openBot(bot)}
                   className="flex items-start gap-2.5 w-full text-left transition-colors cursor-pointer"
                   style={{
@@ -164,7 +212,7 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
                     borderRadius: 9,
                     background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
                     border: 'none',
-                    marginBottom: 2,
+                    width: '100%',
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-surface-container)' }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
@@ -172,27 +220,35 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
                   <BotAvatar
                     bot={bot}
                     paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
-                    animate={isActive}
-                    status={isActive ? status : 'idle'}
+                    /*
+                     * 两层判断，故意不一样：
+                     *
+                     * animate —— 这个 Bot 只要在干活就让它动，哪怕不是我在看的那个会话。
+                     *   「它在别处忙」本身是有用的信息，静止的头像会让人以为它闲着。
+                     *
+                     * status —— 只有「它干活的那个会话就是我正在看的会话」才画成 busy。
+                     *   别的会话里它在跑，我这边画忙绿转圈，读起来像我这一轮出问题了。
+                     */
+                    animate={isActive || !!workingBots[bot.id]}
+                    status={
+                      isActive
+                        ? status
+                        : workingBots[bot.id] && workingBots[bot.id] === currentSessionId
+                          ? 'busy'
+                          : 'idle'
+                    }
                   />
                   <div className="flex-1 min-w-0" style={{ paddingTop: 1 }}>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface)', fontWeight: 600 }}>
                         {bot.name}
                       </span>
-                      {bot.group ? (
-                        <span
-                          className="text-[9px] shrink-0"
-                          style={{
-                            padding: '1px 5px',
-                            borderRadius: 4,
-                            background: 'var(--bg-surface-container-highest)',
-                            color: 'var(--text-on-surface-variant)',
-                          }}
-                        >
-                          {bot.group}
-                        </span>
-                      ) : null}
+                      {/*
+                       * 这里不再画分组徽标。
+                       *
+                       * 上面的分组标题已经写着组名，行内再重复一遍是纯冗余 —— 而它正好占着
+                       * 名字右边的位置，把稍长的名字逼成省略号。宽度全留给名字。
+                       */}
                       <span className="flex-1" />
                       <span className="text-[9px] shrink-0" style={{ color: 'var(--text-outline-variant)' }}>
                         {latest ? relTime(latest.updatedAt || latest.createdAt) : ''}
@@ -203,6 +259,45 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle' }: Props) 
                     </div>
                   </div>
                 </button>
+
+                {/*
+                 * 悬停才出现的「新会话」。
+                 *
+                 * 每个 Bot 行原本只能点进它最近那个会话；想跟同一个 Bot 开新对话，
+                 * 得先点顶部的 New session，再去底部把绑定切过来 —— 两步且反直觉。
+                 * 这个 + 就是那条路径的一步版：切到这个 Bot 并新建空会话。
+                 */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveBotId(bot.id)
+                    void loadRoutines(bot.id)
+                    onNewChat()
+                  }}
+                  title={'和 ' + bot.name + ' 开新对话'}
+                  className="absolute opacity-0 group-hover/bot:opacity-100 transition-opacity"
+                  style={{
+                    right: 6,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 18,
+                    height: 18,
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 5,
+                    cursor: 'pointer',
+                    background: 'var(--bg-surface-container-highest)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-on-surface-variant)',
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+                </div>
               )
             })}
           </div>

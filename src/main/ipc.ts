@@ -646,11 +646,36 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
       instructions: input.instructions ?? '',
     }))
 
-  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string }) =>
+  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }) =>
     (await botRegistry()).update(id, patch))
 
   ipcMain.handle(IPC_CHANNELS.SESSION_BIND_BOT, async (_event, sessionId: string, botId: string) =>
     claude.getAgentCore().setSessionBot(sessionId, botId))
+
+  /*
+   * 交接的答复是**另一个 Bot** 在另一个会话里跑出来、再被写回这个会话的，
+   * 期间没有任何 IPC 事件经过渲染层。不推这一下，用户得手动切走再切回来才看得到。
+   *
+   * 推的是「哪个会话变了」，不是消息内容：渲染层已经有一条拉取路径
+   * （getSessionMessages），再开一条推送路径就得维护两份格式。让 UI 自己重新拉，
+   * 天然不会和正在流式输出的那一轮打架。
+   */
+  const offSessionUpdated = claude.getAgentCore().onSessionUpdated((sessionId: string) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.SESSION_UPDATED, sessionId)
+    }
+  })
+  // setupIPC 会被调用不止一次（macOS dock 点击会新建窗口）。不摘监听的话每次开窗都往
+  // AgentCore 的监听集合里多塞一个闭包，而且它们都捏着已销毁的 window。
+  window.on('closed', offSessionUpdated)
+
+  // 交接的「正在跑」状态：侧栏那个 Bot 的头像靠它转圈。同样是只推事实，不推进度。
+  const offBotActivity = claude.getAgentCore().onBotActivity((activity) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.BOT_ACTIVITY, activity)
+    }
+  })
+  window.on('closed', offBotActivity)
   // ── Tickets（右侧栏 Tasks 视图）──────────────────────────
     //
     // Gateway 未启动时这几个都返回空/失败而不是抛错：

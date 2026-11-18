@@ -22,6 +22,17 @@ export interface BotInfo {
   homeSessionId: string
   boundSkills: string[]
   boundMcp: string[]
+  /**
+   * 这个 Bot 允许把活派给哪些 Bot（message_bot 的授权）。
+   *
+   * - null / undefined：所有其他 Bot 都能问（老 Bot 文件没有这个字段，落地成 null，保证开箱可用）
+   * - []：谁都不能问，这时 message_bot 工具**根本不会出现在工具列表里**
+   * - [id, ...]：只允许这些
+   *
+   * 为什么不给空数组当默认：默认拒绝会让「刚建好两个 Bot 想让他们协作」变成一个需要
+   * 到处翻设置才能解决的空转问题；而默认全开的风险由深度闸和扇出闸兜住。
+   */
+  canAskBots: string[] | null
   createdAt: number
   updatedAt: number
 }
@@ -48,7 +59,16 @@ export class BotRegistry {
     try {
       const raw = JSON.parse(await readFile(this.path(id), 'utf-8')) as BotInfo
       // 兼容改造前落盘的 Bot 文件（没有 group / emoji 字段）
-      return { ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '', avatarColor: raw.avatarColor ?? '', avatarOrb: raw.avatarOrb ?? true }
+      return {
+        ...raw,
+        group: raw.group ?? '',
+        emoji: raw.emoji ?? '',
+        avatarColor: raw.avatarColor ?? '',
+        avatarOrb: raw.avatarOrb ?? true,
+        canAskBots: raw.canAskBots ?? null,
+        boundSkills: raw.boundSkills ?? [],
+        boundMcp: raw.boundMcp ?? [],
+      }
     } catch {
       return null // 不存在或损坏都当没有
     }
@@ -66,7 +86,16 @@ export class BotRegistry {
       if (!name.endsWith('.json')) continue
       try {
         const raw = JSON.parse(await readFile(join(this.baseDir, name), 'utf-8')) as BotInfo
-        bots.push({ ...raw, group: raw.group ?? '', emoji: raw.emoji ?? '', avatarColor: raw.avatarColor ?? '', avatarOrb: raw.avatarOrb ?? true })
+        bots.push({
+          ...raw,
+          group: raw.group ?? '',
+          emoji: raw.emoji ?? '',
+          avatarColor: raw.avatarColor ?? '',
+          avatarOrb: raw.avatarOrb ?? true,
+          canAskBots: raw.canAskBots ?? null,
+          boundSkills: raw.boundSkills ?? [],
+          boundMcp: raw.boundMcp ?? [],
+        })
       } catch {
         // 损坏文件跳过，不炸整体
       }
@@ -86,7 +115,7 @@ export class BotRegistry {
     return this.create({ name: 'Assistant', isDefault: true })
   }
 
-  async create(input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; isDefault?: boolean }): Promise<BotInfo> {
+  async create(input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; isDefault?: boolean; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }): Promise<BotInfo> {
     const now = Date.now()
     const bot: BotInfo = {
       id: `bot_${randomUUID()}`,
@@ -98,8 +127,9 @@ export class BotRegistry {
       instructions: input.instructions ?? '',
       isDefault: input.isDefault ?? false,
       homeSessionId: input.homeSessionId ?? '',
-      boundSkills: [],
-      boundMcp: [],
+      boundSkills: input.boundSkills ?? [],
+      boundMcp: input.boundMcp ?? [],
+      canAskBots: input.canAskBots ?? null,
       createdAt: now,
       updatedAt: now,
     }
@@ -107,7 +137,7 @@ export class BotRegistry {
     return bot
   }
 
-  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'avatarColor' | 'avatarOrb' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp'>>): Promise<BotInfo> {
+  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'avatarColor' | 'avatarOrb' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp' | 'canAskBots'>>): Promise<BotInfo> {
     const bot = await this.read(id)
     if (!bot) throw new Error(`Bot not found: ${id}`)
     const updated: BotInfo = { ...bot, ...patch, updatedAt: Date.now() }

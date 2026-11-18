@@ -16,6 +16,13 @@ interface Props {
   blocks: ContentBlock[]
   /** 所在消息是否正在流式输出（纯 thinking 单元据此判断思考仍在进行） */
   isStreaming?: boolean
+  /**
+   * 思考内容的展开状态由卡片头部（名字右边那枚火花）控制。
+   *
+   * 传了就别再自己画 header —— 「思考完成」那行字要去掉，只保留图标，
+   * 而图标得在名字那一行，跨组件了，所以状态必须上提。
+   */
+  think?: { open: boolean; onToggle: () => void }
 }
 
 // 通用折叠单元：autoMode latch —— 状态变化时自动展开/收起，用户手动操作后锁定
@@ -58,7 +65,6 @@ function Pill({ kind, status, label, expanded, onClick }: {
 
 function ThinkUnit({ text, status }: { text: string; status: UnitStatus }) {
   const { expanded, toggle } = useAutoExpanded(status === 'active')
-  const working = status === 'active'
   return (
     <div className="think-trace">
       <button
@@ -69,22 +75,29 @@ function ThinkUnit({ text, status }: { text: string; status: UnitStatus }) {
         aria-expanded={expanded}
         title="思考"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill={working ? 'var(--text-on-surface-variant)' : 'var(--text-outline-variant)'}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill={status === 'active' ? 'var(--text-on-surface-variant)' : 'var(--text-outline-variant)'}>
           <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z" />
         </svg>
-        {working ? (
-          <span className="think-trace-status is-working" role="status">思考中</span>
-        ) : (
-          <span className="think-trace-status" role="status">思考完成</span>
-        )}
         <svg className="think-trace-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      <div className="think-trace-body" data-open={expanded}>
-        <div className="think-trace-clip">
-          <ThinkTraceContent text={text} working={working} />
-        </div>
+      <ThinkBody text={text} working={status === 'active'} open={expanded} />
+    </div>
+  )
+}
+
+/**
+ * 只有思考正文，没有 header。
+ *
+ * 火花图标搬到卡片头部之后，正文这一侧不需要任何自己的标题 —— 一个消息里
+ * 出现两处「思考」是之前的问题：上面一行「思考完成」，下面又一段灰字。
+ */
+function ThinkBody({ text, working, open }: { text: string; working: boolean; open: boolean }) {
+  return (
+    <div className="think-trace-body" data-open={open}>
+      <div className="think-trace-clip">
+        <ThinkTraceContent text={text} working={working} />
       </div>
     </div>
   )
@@ -153,7 +166,7 @@ function ToolsUnit({ tools, status }: { tools: ToolPair[]; status: UnitStatus })
   )
 }
 
-export const ToolflowUnit = memo(function ToolflowUnit({ blocks, isStreaming }: Props) {
+export const ToolflowUnit = memo(function ToolflowUnit({ blocks, isStreaming, think }: Props) {
   const unitStatus: UnitStatus = useMemo(() => deriveUnitStatus(blocks), [blocks])
   const { reasoningText, tools } = useMemo(() => pairTools(blocks), [blocks])
 
@@ -168,7 +181,16 @@ export const ToolflowUnit = memo(function ToolflowUnit({ blocks, isStreaming }: 
 
   return (
     <div>
-      {hasReasoning && <ThinkUnit text={reasoningText} status={thinkStatus} />}
+      {/*
+       * 思考正文永远跟着工具流走，但它的开关可能在外面（卡片头部那枚火花）。
+       * 两种模式的差别只有一行 header 而已，正文是同一个组件。
+       */}
+      {hasReasoning &&
+        (think ? (
+          <ThinkBody text={reasoningText} working={thinkStatus === 'active'} open={think.open} />
+        ) : (
+          <ThinkUnit text={reasoningText} status={thinkStatus} />
+        ))}
       {tools.length > 0 && <ToolsUnit tools={tools} status={unitStatus} />}
     </div>
   )

@@ -1,11 +1,14 @@
-import React, { useState, memo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, memo, useCallback } from 'react'
 import { useImageSrc } from '../hooks/useImageSrc'
 import { ChatMessage, ContentBlock } from '../../shared/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { groupBlocks, TIMELINE } from './toolflow-utils'
+import { groupBlocks, pairTools, deriveUnitStatus, TIMELINE, type UnitStatus } from './toolflow-utils'
 import { ToolflowUnit } from './ToolflowUnit'
+import { BotAvatar } from './BotList'
+import { useRoutineStore } from '../stores/routineStore'
+import { useChatStore } from '../stores/chatStore'
 
 interface Props {
   message: ChatMessage
@@ -170,6 +173,30 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
   const isSystem = message.role === 'system'
   const sameRole = prevRole === message.role
   const handleRetry = useCallback(() => { onRetry?.(message) }, [onRetry, message])
+
+  /*
+   * 思考：内容在工具流里，开关在卡片头部的火花图标上。
+   *
+   * 状态必须提到这里 —— 图标和正文不在同一个子树里。默认收起：思考是过程，
+   * 不该抢正文的位置；但进行中要自动展开，否则用户看不出它还在动。
+   */
+  const thinkInfo = useMemo(() => {
+    if (message.role !== 'assistant') return null
+    const groups = groupBlocks(message.content)
+    const flows = groups.filter((g) => g.kind === 'toolflow') as Array<{ kind: 'toolflow'; blocks: ContentBlock[] }>
+    const text = flows.map((f) => pairTools(f.blocks).reasoningText).join('')
+    if (!text.trim()) return null
+    const status: UnitStatus = flows.some((f) => deriveUnitStatus(f.blocks) === 'active') ? 'active' : 'done'
+    return { text, status }
+  }, [message])
+  const [thinkOpen, setThinkOpen] = useState(false)
+  const thinkWorking = thinkInfo?.status === 'active'
+  // 进行中自动展开、结束自动收起；用户手动点过之后就不再干预。
+  const [thinkTouched, setThinkTouched] = useState(false)
+  useEffect(() => {
+    if (thinkTouched) return
+    setThinkOpen(thinkWorking)
+  }, [thinkWorking, thinkTouched])
   const mb = sameRole ? 'mb-2' : ''
 
   if (isSystem) {
@@ -252,14 +279,78 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     )
   }
 
+  /*
+   * 另一个 Bot 的答复（交接的 relay 落地）。
+   *
+   * 刻意**不走** renderBlocks：那段话里没有工具调用、没有 thinking，它就是一段正文，
+   * 需要的只是一个落款 —— 谁是说的。画上它的头像和名字，用户看到的就是
+   * 「我问的那个 Bot 回来答了」，而不是「本会话的 Bot 忽然用别人的口气讲话」。
+   *
+   * 这个分支必须排在普通 assistant 之前：否则 answeredBy 只被当成装饰，
+   * 那段话会被当成当前 Bot 的正文渲染，落款等于没生效。
+   */
+  if (message.answeredBy) {
+    const text = getMessageText(message)
+    return (
+      <div className="animate-fade-in" style={{ marginBottom: sameRole ? 8 : 20 }}>
+        <HandoffSpeaker botId={message.answeredBy} name={message.answeredByName} />
+        <div
+          className="rounded-lg"
+          style={{
+            background: 'var(--bg-surface-container)',
+            padding: '6px 10px',
+            border: '1px solid var(--border-subtle)',
+            display: 'inline-block',
+            maxWidth: '80%',
+            wordBreak: 'break-word',
+            marginTop: 4,
+          }}
+        >
+          <p className="whitespace-pre-wrap" style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
+            <RichText text={text} />
+          </p>
+        </div>
+        <div className="flex items-center gap-1 mt-1" style={{ paddingRight: 2 }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-outline-variant)' }}>
+            {formatMessageTime(message.timestamp)}
+          </span>
+          <UserCopyButton text={text} />
+        </div>
+      </div>
+    )
+  }
+
   // Assistant message: 归组分发
+  /*
+   * 这条消息里作为 image block 出现的图。正文里的同名引用会被它挡掉。
+   *
+   * 事故现场：模型在正文里写了 `![晨报](...png)`，同时 moveImageToGallery 的产物
+   * 又被追加成 image block —— 同一张图渲染两遍，用户看到两份晨报。
+   * 两个来源都是合法数据，只能在渲染层去重。
+   */
+  const imageBlockKeys = new Set(
+    message.content.filter((b) => b.type === 'image' && b.src).map((b) => imageKey(b.src as string)),
+  )
   const renderBlocks = () => {
     const groups = groupBlocks(message.content)
     return groups.map((group, idx) => {
       if (group.kind === 'toolflow') {
-        return <ToolflowUnit key={`tf-${idx}`} blocks={group.blocks} isStreaming={isStreaming} />
+        return (
+          <ToolflowUnit
+            key={`tf-${idx}`}
+            blocks={group.blocks}
+            isStreaming={isStreaming}
+            {...(thinkInfo ? { think: { open: thinkOpen, onToggle: () => { setThinkTouched(true); setThinkOpen((v) => !v) } } } : {})}
+          />
+        )
       }
-      return <ContentBlockView key={`in-${idx}`} block={group.block} />
+      return (
+        <ContentBlockView
+          key={`in-${idx}`}
+          block={group.block}
+          skipImages={imageBlockKeys}
+        />
+      )
     })
   }
 
@@ -271,17 +362,179 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
   return (
       <div className="animate-fade-in flex justify-center group/msg" style={{ marginBottom: sameRole ? 8 : 48 }}>
         <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
-        {renderBlocks()}
-        {fileRefs.length > 0 && (
-          <div className="mt-2 flex flex-col gap-2">
-            {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
+          {/*
+           * 一张卡片，不是散落的裸文本。
+           *
+           * 之前正文直接铺在背景上：没有边界、没有落款位置、也没有「这一段属于谁」
+           * 的视觉容器。多 Bot 之后这个问题被放大 —— 滚动时只能靠字号猜这是谁说的。
+           *
+           * 现在是一张浅色卡片：
+           *   - 卡片顶部一行 = 头像 + 名字 + 分组（换人时才画）；
+           *   - 卡内是正文与工具流；
+           *   - 卡外是操作按钮（复制/重试），不污染卡片本体。
+           *
+           * 用 inline-block 而不是撑满：短回答不该独占一整行，那看起来像公告栏。
+           */}
+          <div
+            style={{
+              display: 'inline-block',
+              maxWidth: '100%',
+              padding: '10px 14px',
+              borderRadius: 12,
+              background: 'var(--bg-surface-container)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <SpeakerLine
+              {...(thinkInfo
+                ? {
+                    think: {
+                      working: thinkWorking,
+                      open: thinkOpen,
+                      onToggle: () => {
+                        setThinkTouched(true)
+                        setThinkOpen((v) => !v)
+                      },
+                    },
+                  }
+                : {})}
+            />
+            {renderBlocks()}
+            {fileRefs.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
+              </div>
+            )}
           </div>
-        )}
-        <MessageActions message={message} onRetry={handleRetry} />
+          <MessageActions message={message} onRetry={handleRetry} />
+        </div>
       </div>
-    </div>
   )
 })
+
+/**
+ * 正文归属：这一轮是哪个 Bot 在说话。
+ *
+ * 只在「换人」时画一次（`!sameRole`）—— 连续多条 assistant 消息属于同一轮，
+ * 每句都标一遍反而吵。
+ *
+ * 取的是当前 activeBot：用户在一个会话里看到的助手消息，就是这个会话绑定的 Bot
+ * 说的。这个假设在多 Bot 下成立的前提是「一个会话只属于一个 Bot」—— 当前代码确实如此
+ * （session meta 里存 botId），交接答复那一路另有 answeredBy 走 HandoffSpeaker。
+ */
+function SpeakerLine({ think }: {
+  /**
+   * 思考开关键：有思考内容时才出现，画在名字右边。
+   *
+   * 为什么放这儿 —— 「思考完成」那行字原来是卡片内单独的一行 header，
+   * 视觉上把一条消息切成了两段。它本来就是这条消息的属性，和名字同级。
+   */
+  think?: { working: boolean; open: boolean; onToggle: () => void }
+}) {
+  const activeBotId = useChatStore((s) => s.activeBotId)
+  const bots = useRoutineStore((s) => s.bots)
+  const isLight = useChatStore((s) => s.theme) === 'light'
+  const bot = activeBotId ? bots.find((b) => b.id === activeBotId) ?? null : null
+  if (!bot) return null
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 7,
+      }}
+    >
+      <BotAvatar bot={bot} size={20} animate={false} paper={isLight ? '#eeeeee' : '#201f1f'} />
+      <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--text-on-surface)' }}>
+        {bot.name}
+      </span>
+      {bot.group ? (
+        <span style={{ fontSize: 9, color: 'var(--text-outline-variant)' }}>· {bot.group}</span>
+      ) : null}
+      {think && <ThinkToggle {...think} />}
+    </div>
+  )
+}
+
+/**
+ * 火花图标：思考的开关，贴在名字右边。
+ *
+ * 不带文字。原来那行「思考完成」有 13px 字重加换行，在一条短消息里比正文还显眼；
+ * 而它想表达的只是「这条消息里有思考过程，点开能看」。一个图标就够了。
+ * 进行中时图标换成流光/旋转，把「还在想」这个信息留在原地。
+ */
+function ThinkToggle({ working, open, onToggle }: { working: boolean; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={working ? '思考中' : '思考过程'}
+      aria-expanded={open}
+      aria-label={working ? '思考中' : '思考过程'}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 18,
+        height: 18,
+        padding: 0,
+        marginLeft: 1,
+        borderRadius: 5,
+        cursor: 'pointer',
+        background: open ? 'var(--bg-surface-container-high)' : 'transparent',
+        border: 'none',
+        color: working ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+        transition: 'background .12s, color .12s',
+      }}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        style={{
+          animation: working ? 'think-spark 1.2s ease-in-out infinite' : undefined,
+          transformOrigin: 'center',
+        }}
+      >
+        <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z" />
+      </svg>
+    </button>
+  )
+}
+
+/**
+ * 交接答复的落款：谁在说这段话。
+ *
+ * 头像是那个 Bot 自己的（同一个 BotAvatar 组件，侧栏里长什么样这里就长什么样），
+ * 所以用户不需要读名字也能认出「这是我问的那个」。
+ *
+ * 找不到 Bot（刚被删掉）时退回一个名字方块：答案已经写进会话了，
+ * 落款丢了比头像难看糟糕得多。
+ */
+function HandoffSpeaker({ botId, name }: { botId: string; name?: string }) {
+  const bots = useRoutineStore((s) => s.bots)
+  const bot = bots.find((b) => b.id === botId)
+  const label = bot?.name || name || 'Bot'
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {bot ? (
+        <BotAvatar bot={bot} size={18} animate={false} paper="var(--bg-surface)" />
+      ) : (
+        <div
+          className="shrink-0 rounded-full flex items-center justify-center"
+          style={{ width: 18, height: 18, background: 'var(--bg-surface-container-high)', fontSize: 9, color: 'var(--text-on-surface-variant)' }}
+        >
+          {label.slice(0, 1)}
+        </div>
+      )}
+      <span style={{ fontSize: '11px', color: 'var(--text-on-surface-variant)' }}>{label}</span>
+      <span style={{ fontSize: '10px', color: 'var(--text-outline-variant)' }}>· 交接答复</span>
+    </div>
+  )
+}
 
 function FileReferenceCard({ filePath }: { filePath: string }) {
   const fileName = filePath.split(/[\\]/).pop() || filePath
@@ -428,6 +681,19 @@ function MessageActions({ message, onRetry }: { message: ChatMessage; onRetry?: 
       )}
     </div>
   )
+}
+
+/**
+ * 图片路径的归一化键：只取文件名，统一小写、正斜杠。
+ *
+ * 同一张图在这条消息里会以两种形态各出现一次：
+ *   1. 正文里的 markdown 链接（模型自己写的 `![](H:\...\x.png)`）
+ *   2. 系统追加的 image block（产物图自动入消息）
+ * 两条路径的写法可能一个反斜杠一个正斜杠，所以按键比对而不是直接比字符串。
+ */
+function imageKey(src: string): string {
+  const base = src.split(/[\/]/).pop() ?? src
+  return base.toLowerCase()
 }
 
 const IMAGE_PATH_RE = /(?<!\w)[\w\\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)\b/gi
@@ -698,18 +964,45 @@ const MARKDOWN_COMPONENTS = {
   },
 }
 
-export function ContentBlockView({ block }: { block: ContentBlock }) {
+export function ContentBlockView({ block, skipImages }: { block: ContentBlock; skipImages?: Set<string> }) {
   if (block.type === 'image' && block.src) {
     return <ImageView src={block.src} />
   }
 
   if (block.type === 'text' && block.text) {
+    /*
+     * 先摘掉「已经有 image block」的 markdown 图片引用。
+     *
+     * 只在这一处摘：正文里的 ![](x.png)、裸路径 x.png、`x.png` 三种写法
+     * 最终都会走到同一个路径，从源头删掉引用比在三个渲染点各拦一次可靠。
+     */
+    const mdImageRe = /!\[[^\]]*\]\(([^)]+)\)/g
+    let text = block.text.replace(mdImageRe, (whole: string, src: string) => {
+      const clean = src.trim()
+      // 已经有 image block 的：整段删掉（否则同一张图会画两遍）
+      if (skipImages?.has(imageKey(clean))) return ''
+      // 没有 image block 的：退化成裸路径，交给下面的 split 渲染。
+      // 不能原样保留 markdown 语法 —— split(IMAGE_PATH_RE) 会把 "![alt](" 和 ")" 当普通文本留下，
+      // 屏幕上就会出现 "![晨报](" 这种残句。
+      return clean
+    })
+    // 裸路径 / 反引号路径：按 token 逐个判断，命中就整段抹掉
+    text = text.replace(/`?[\w\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)`?/gi,
+      (m: string) => (skipImages?.has(imageKey(m.replace(/`/g, ''))) ? '' : m),
+    )
+    if (!text.trim()) return null
+
     // Strip backticks from potential image paths before matching
-    const cleaned = block.text.replace(/`([^`]+\.(?:png|jpe?g|gif|webp|svg|bmp))`/gi, '$1')
+    const cleaned = text.replace(/`([^`]+\.(?:png|jpe?g|gif|webp|svg|bmp))`/gi, '$1')
     // Split text by image file paths, render images inline
     const parts = cleaned.split(IMAGE_PATH_RE)
     const matches = cleaned.match(IMAGE_PATH_RE) || []
-    if (matches.length > 0) {
+    /*
+     * 去重：这条消息已经有 image block 的图，正文里就别再画一遍。
+     * 两处都画是「同一张晨报出现两次」的直接原因。
+     */
+    const already = (src: string) => skipImages?.has(imageKey(src)) ?? false
+    if (matches.some((m) => !already(m))) {
       return (
         <div style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.7 }}>
           {parts.map((part, i) => (
@@ -721,7 +1014,7 @@ export function ContentBlockView({ block }: { block: ContentBlock }) {
                   </ReactMarkdown>
                 </span>
               )}
-              {matches[i] && <ImageView src={matches[i]} />}
+              {matches[i] && !already(matches[i]) && <ImageView src={matches[i]} />}
             </span>
           ))}
         </div>
@@ -741,7 +1034,7 @@ export function ContentBlockView({ block }: { block: ContentBlock }) {
           rehypePlugins={[[rehypeHighlight, { detect: false }]]}
           components={MARKDOWN_COMPONENTS}
         >
-          {block.text}
+          {text}
         </ReactMarkdown>
       </div>
     )

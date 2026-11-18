@@ -98,6 +98,14 @@ interface ChatState {
   removeApproval: (approvalId: string) => void
   // AskUser 提问队列（agent 结构化提问，卡片逐个作答）
   pendingAsks: AskUserRequest[]
+  /**
+   * 正在跑交接的 Bot（key = botId，value = 发起方会话 id）。
+   *
+   * 和 isLoading（当前会话主轮）是两回事：主轮几秒就结束了，被派出去的 Bot 还在后台跑。
+   * 侧栏靠这个把那个 Bot 的头像画成「在干活」，不然这段等待在界面上完全不可见。
+   */
+  workingBots: Record<string, string>
+  setBotWorking: (botId: string, threadId: string, working: boolean) => void
   addAsk: (req: AskUserRequest) => void
   removeAsk: (askId: string) => void
 
@@ -219,6 +227,7 @@ export const useChatStore = create<ChatState>()(
       addApproval: (req) => set((s) => ({ pendingApprovals: [...s.pendingApprovals, req] })),
       removeApproval: (approvalId) => set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.approvalId !== approvalId) })),
       pendingAsks: [],
+      workingBots: {},
       addAsk: (req) => set((s) => ({ pendingAsks: [...s.pendingAsks, req] })),
       removeAsk: (askId) => set((s) => ({ pendingAsks: s.pendingAsks.filter((a) => a.askId !== askId) })),
 
@@ -250,6 +259,13 @@ export const useChatStore = create<ChatState>()(
       setSidebarWidth: (width) => set({ sidebarWidth: Math.max(160, Math.min(360, width)) }),
       clearMessages: () => set({ currentSessionId: null, messages: [] }),
       setMessages: (messages) => set({ messages }),
+      setBotWorking: (botId, threadId, working) =>
+        set((s) => {
+          const next = { ...s.workingBots }
+          if (working) next[botId] = threadId
+          else delete next[botId]
+          return { workingBots: next }
+        }),
 
       // Theme actions
       toggleTheme: () => {

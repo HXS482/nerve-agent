@@ -468,6 +468,12 @@ app.whenReady().then(async () => {
     : null
   scheduler?.start()
 
+  // 上次退出时没跑完的 bot 交接：队列在磁盘上，worker 在进程里，不接就永远不会被执行。
+  // 必须是异步的（它会碰 sqlite），但也不该拖住窗口 —— 所以不 await。
+  void Promise.resolve()
+    .then(() => agentCore.resumeHandoffQueue())
+    .catch((err) => console.warn('[Nerve] 恢复交接队列失败:', err))
+
   // MCP Bridge
   const mcpBridgeConfig = await loadMcpBridgeConfig()
   mcpBridgeConfig.cwd = app.getPath('home')

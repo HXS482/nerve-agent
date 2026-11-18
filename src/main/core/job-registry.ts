@@ -218,6 +218,69 @@ export class JobRegistry {
     return r
   }
 
+  /**
+   * 等一个作业结束并取走结果。
+   *
+   * 为什么需要它：`visit_jobs` 原来只会「取已完成的」，作业还在跑时返回「找不到」。
+   * 模型拿到「找不到」就会以为读错了 id，然后……开始 echo 空转。真实语义应该是
+   * 「读这个作业」= 等它跑完再给结果，最多等 timeoutMs。
+   *
+   * 超时不杀进程，返回当前已收集的输出 + running 标记 —— 模型可以再读一次，
+   * 而不是把 30 秒的渲染当成"没有输出"。
+   */
+  async waitFor(jobId: string, timeoutMs: number): Promise<{ result?: JobResult; stillRunning: boolean }> {
+    const done = this.finished.get(jobId)
+    if (done) {
+      this.finished.delete(jobId)
+      return { result: done, stillRunning: false }
+    }
+
+    const job = this.jobs.get(jobId)
+    if (!job) return { stillRunning: false }
+
+    const timedOut = await Promise.race([
+      job.exited.then(() => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(true), timeoutMs)),
+    ])
+
+    if (timedOut) {
+      // 没结束：把「到目前为止」的输出交出去，作业继续跑
+      return {
+        stillRunning: true,
+        result: {
+          jobId: job.id,
+          command: job.command,
+          exitCode: null,
+          signal: null,
+          stdout: job.stdout,
+          stderr: job.stderr,
+          truncated: job.truncated,
+          startedAt: job.startedAt,
+          endedAt: Date.now(),
+        },
+      }
+    }
+
+    const finished = this.finished.get(jobId)
+    if (finished) {
+      this.finished.delete(jobId)
+      return { result: finished, stillRunning: false }
+    }
+    return { stillRunning: false }
+  }
+
+  /**
+   * 把**所有**已完成但还没被取走的作业结果一次交出来，不清空注册表之外的任何东西。
+   *
+   * 这是「不用轮询」的关键：作业在后面跑完，模型下一步就能看到结果，
+   * 不必自己想起来去 visit_jobs（实测它想不起来，会宁可 echo 空转）。
+   */
+  drainFinished(): JobResult[] {
+    const out = [...this.finished.values()]
+    this.finished.clear()
+    return out
+  }
+
   /** 只看不取（给 UI / 排查用）。 */
   peekFinished(): JobResult[] {
     return [...this.finished.values()]

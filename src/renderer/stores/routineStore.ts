@@ -39,6 +39,12 @@ export interface Bot {
   homeSessionId: string
   boundSkills: string[]
   boundMcp: string[]
+  /**
+   * 允许把活派给哪些 Bot（message_bot 的授权）。
+   *
+   * null / 缺省 = 所有其他 Bot 都能问；[] = 谁都不能问，此时工具不会出现在它的工具列表里。
+   */
+  canAskBots?: string[] | null
   createdAt: number
   updatedAt: number
 }
@@ -63,7 +69,7 @@ interface RoutineState {
   setEnabled: (id: string, enabled: boolean) => Promise<void>
   remove: (id: string) => Promise<void>
   selectBot: (id: string) => void
-  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) => Promise<void>
+  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; canAskBots?: string[] | null; boundSkills?: string[] }) => Promise<void>
   createBot: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) => Promise<string | null>
   clearError: () => void
 }

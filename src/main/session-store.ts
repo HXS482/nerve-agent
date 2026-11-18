@@ -280,6 +280,10 @@ export class FileSessionStore {
       try {
         const meta = JSON.parse(await readFile(join(this.baseDir, `${sessionId}.meta.json`), 'utf-8'))
         if (typeof meta?.botId === 'string' && meta.botId) summary.botId = meta.botId
+        // 自定义标题也住 meta：交接落地的会话没有用户提问，靠 firstPrompt 只能得到 Untitled
+        if (typeof meta?.customTitle === 'string' && meta.customTitle) {
+          summary.customTitle = meta.customTitle
+        }
       } catch { /* 没有 meta 文件：保持 undefined */ }
 
       summaries.push(summary)
@@ -390,6 +394,14 @@ export class FileSessionStore {
     try {
       await access(branchesFile)
       await unlink(branchesFile)
+    } catch { /* not found, ignore */ }
+
+    // 元数据也跟着走：只删消息文件会在磁盘上留一个孤儿 meta。handoff 的一次性会话
+    // 就是靠这个清理的，留着虽然侧栏看不见（它只看 .jsonl），但文件会一直堆。
+    const metaFile = this.metaPath(key.sessionId)
+    try {
+      await access(metaFile)
+      await unlink(metaFile)
     } catch { /* not found, ignore */ }
 
   }

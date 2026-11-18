@@ -66,6 +66,10 @@ declare global {
       onError: (callback: (data: { message: string; runId?: string }) => void) => () => void
       onDone: (callback: (data: { sessionId: string; cost: number; maxContextTokens: number; reason: import('../../shared/types').DoneReason; runId?: string }) => void) => () => void
       onHeartbeat: (callback: () => void) => () => void
+      /** 某个会话的内容被别的 Bot 写入了（交接答复落地） */
+      onSessionUpdated: (callback: (sessionId: string) => void) => () => void
+      /** 某个 Bot 正在/不再跑交接的一跳 */
+      onBotActivity: (callback: (activity: import('../../shared/types').BotActivity) => void) => () => void
       getNerveSettings: () => Promise<any>
       saveNerveSettings: (settings: any) => Promise<{ ok: boolean; error?: string; models?: { alias: string; name: string }[] }>
       testConnection: (baseURL: string, authToken: string) => Promise<{ ok: boolean; error?: string }>
@@ -234,7 +238,15 @@ export function useClaude() {
     }
   }, [])
 
-  const loadSessionMessages = useCallback(async (sessionId: string, workspace: Workspace = 'chat') => {
+  const loadSessionMessages = useCallback(async (
+    sessionId: string,
+    workspace: Workspace = 'chat',
+    /**
+     * 强制重读。交接答复落地时用：那时会话里已经有消息了，普通路径会直接跳过
+     * （它只在「这个会话一条消息都没有」时读盘），于是新消息永远不出现。
+     */
+    force = false,
+  ) => {
     if (workspace === 'stage') {
       useStageStore.getState().setStageSessionId(sessionId)
       // 自愈：在 stage 空间打开的会话重新打上 stage 标记（修复历史上丢失 mode 的会话）
@@ -245,7 +257,7 @@ export function useClaude() {
     useChatStore.getState().setSessionUsage(null)
 
     const store = useChatStore.getState()
-    if (!store.messages.some((m) => m.sessionId === sessionId)) {
+    if (force || !store.messages.some((m) => m.sessionId === sessionId)) {
       try {
         const raw = await window.claude.getSessionMessages(sessionId)
         console.log('[Nerve] getSessionMessages raw:', sessionId, Array.isArray(raw) ? raw.length + ' entries' : raw)
@@ -254,7 +266,9 @@ export function useClaude() {
         const loaded: ChatMessage[] = raw
           .filter((m: any) => m.type === 'user' || m.type === 'assistant')
           .map((m: any) => ({
-            id: m.uuid || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            // 优先用落盘 entry 自己的 id：重载时 id 必须稳定，否则增量合并（交接答复落地
+            // 之后要重新拉一次）会把整段历史重复插一遍。
+            id: m.uuid || m.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             role: m.type as 'user' | 'assistant',
             content: (() => {
               const raw = m.message?.content
@@ -272,9 +286,31 @@ export function useClaude() {
             })(),
             timestamp: new Date(m.timestamp).getTime(),
             sessionId,
+            // 交接答复的落款：历史加载时也要带上，否则刷新页面之后
+            // B 说的话又变回 A 说的了。
+            ...(typeof m.message?.answeredBy === 'string' && m.message.answeredBy
+              ? { answeredBy: m.message.answeredBy }
+              : {}),
+            ...(typeof m.message?.answeredByName === 'string' && m.message.answeredByName
+              ? { answeredByName: m.message.answeredByName }
+              : {}),
           }))
 
         const latest = useChatStore.getState()
+        if (force) {
+          /*
+           * 强制重读：以盘上的内容为准，**不要**再和内存里的做并集。
+           *
+           * 内存里那些流式期间生成的消息 id 是临时的（`msg-<时间戳>`），和盘上的 entry id
+           * 对不上，并集会把同一段话插两遍 —— 而交接答复落地正好发生在流式刚结束的时候。
+           * 保留别的会话的消息，只替换本会话这一段。
+           */
+          latest.setMessages([
+            ...latest.messages.filter((m) => m.sessionId !== sessionId),
+            ...loaded,
+          ])
+          return
+        }
         const messageIds = new Set(latest.messages.map((m) => m.id))
         latest.setMessages([...latest.messages, ...loaded.filter((m) => !messageIds.has(m.id))])
       } catch (err) {
@@ -457,6 +493,39 @@ export function useClaude() {
           }
         }
       }
+    })
+
+    /*
+     * 交接答复落地：另一个 Bot 把话写进了某个会话。这里只做一件事 ——
+     * 把那个会话重新拉一遍。刻意不接收消息内容：那会变成第二条消息格式的维护点，
+     * 而且和正在流式输出的那一轮很容易打架。
+     *
+     * 只处理「当前正在看的那个会话」：其余会话等用户切过去时自然会重新加载。
+     */
+    const unsubSessionUpdated = window.claude.onSessionUpdated?.((updatedSessionId: string) => {
+      const viewing = getWorkspaceSessionId(pendingWorkspace.current)
+      if (updatedSessionId === viewing) {
+        void loadSessionMessages(updatedSessionId, pendingWorkspace.current, true)
+        return
+      }
+      /*
+       * 更新的是别的会话：不重载（那会把正在看的这一轮冲掉），但**列表必须刷新**。
+       *
+       * 「让 nerve 给我发条消息」这条路的答案落在 nerve 自己的会话里。那个会话可能是
+       * 刚刚才被创建出来的（它以前没有 home 会话），不刷新列表的话侧栏里根本看不到它，
+       * 用户会以为消息丢了 —— 而它就躺在磁盘上。
+       */
+      void syncSessions()
+    })
+
+    /*
+     * 交接的「正在跑」状态：把它写进 store，侧栏那个 Bot 的头像就会转起来。
+     *
+     * 这份状态只表达在动/不在动 —— 一跳是一整轮 agent，中途没有可靠的进度，
+     * 编个百分比出来只会让人盯着假数字。
+     */
+    const unsubBotActivity = window.claude.onBotActivity?.((activity) => {
+      useChatStore.getState().setBotWorking(activity.botId, activity.threadId, activity.working)
     })
 
     const unsubHeartbeat = window.claude.onHeartbeat(() => {
@@ -661,6 +730,8 @@ export function useClaude() {
       unsubApproval()
       unsubAskUser()
       unsubHeartbeat()
+      unsubSessionUpdated?.()
+      unsubBotActivity?.()
       clearWatchdog()
     }
   }, [addMessage, setLoading, setSessionId, setConfig, updateLastMessage, flushPendingText, addSession, deleteSession, setMessages, syncSessions, getWorkspaceSessionId, demoteInProgressTodos, clearWatchdog])

@@ -38,8 +38,17 @@ const STATUS_STATES: Record<BotStatus, StateId[]> = {
   idle: ['idle'],
   // 思考中：官方的三个点脉动
   thinking: ['thinking'],
-  // 长任务执行：轨道环
-  busy: ['orbit'],
+  /*
+   * 长任务执行：球 + 三道环（swirl）。
+   *
+   * 原来用 orbit，而 orbit 的前 1.6 秒身体是**旋转的三角形** —— 从球变成三角，
+   * 再花 0.9 秒变回球。三角形在界面上读起来是「出故障」而不是「在干活」，
+   * 用户第一反应就是来问这是什么。
+   *
+   * swirl 本来就是为界面转场做的：身体保持圆球，只叠三道依次进入、再一起淡出的环。
+   * 观感是「在转」，没有形变 —— 这才是长任务该有的样子。
+   */
+  busy: ['swirl'],
   // 完成后眨个眼回到 idle
   done: ['wink', 'idle'],
   error: ['alert', 'idle'],
