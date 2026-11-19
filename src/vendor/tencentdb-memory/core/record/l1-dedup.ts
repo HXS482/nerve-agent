@@ -319,6 +319,7 @@ const VALID_TYPES: MemoryType[] = [
   "episodic",
   "instruction",
   "agent_skill",
+  "agent_style",
   "agent_pitfall",
 ];
 

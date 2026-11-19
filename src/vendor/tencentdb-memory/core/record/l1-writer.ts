@@ -40,6 +40,7 @@ export type MemoryType =
   | "instruction"   // 用户对 AI 的长期行为规则
   // ── Bot 档：私有 ──
   | "agent_skill"   // 我（这个 Bot）验证过有效的做法
+  | "agent_style"   // 我（这个 Bot）自己的表达风格、判断取向
   | "agent_pitfall" // 我踩过的坑、以及它为什么是坑
 
 /** Metadata for episodic memories (activity time range) */

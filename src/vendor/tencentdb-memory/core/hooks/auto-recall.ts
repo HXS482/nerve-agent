@@ -217,7 +217,13 @@ async function performAutoRecallInner(params: {
     }
     if (agentLines.length > 0) {
       parts.push(
-        `<my-experience>\n以下是**你自己**（当前这个 Bot）过去的经验，只有你记得。参考它们可以少走弯路，但不要当成对用户的了解：\n\n${agentLines.join("\n")}\n</my-experience>`,
+        [
+          '<my-experience>',
+          '以下是你（当前这个 Bot）自己的经验与习惯 —— 做法、踩过的坑、用户对你说话方式的反馈。只有你记得，参考它们可以少走弯路，但不要当成对用户的了解：',
+          '',
+          ...agentLines,
+          '</my-experience>',
+        ].join('\n'),
       );
     }
     prependContext = parts.join("\n\n");
@@ -719,7 +725,7 @@ interface FormatableMemory {
  * 混成一段时模型分不清哪条是事实、哪条是自己的旧经验，于是会拿自己的工作记忆
  * 去回答关于用户的问题 —— 这种错很难从输出里看出来。
  */
-const AGENT_TRACK_TYPES = new Set(["agent_skill", "agent_pitfall"]);
+const AGENT_TRACK_TYPES = new Set(["agent_skill", "agent_style", "agent_pitfall"]);
 
 /**
  * 按档拆开已格式化的记忆行。

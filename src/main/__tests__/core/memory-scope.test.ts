@@ -77,9 +77,10 @@ describe('agentIdForType — 两档分流', () => {
     }
   })
 
-  it('Bot 档跟着会话所属的 Bot 走', () => {
-    expect(agentIdForType('agent_skill', nerveSession)).toBe('bot-nerve')
-    expect(agentIdForType('agent_pitfall', nerveSession)).toBe('bot-nerve')
+  it('Bot 档三个类型都跟着会话所属的 Bot 走', () => {
+    for (const t of ['agent_skill', 'agent_style', 'agent_pitfall']) {
+      expect(agentIdForType(t, nerveSession)).toBe('bot-nerve')
+    }
   })
 
   it('Bot 档在没有 Bot 维度的会话里退回 shared（不丢，而不是写空串）', () => {
@@ -93,7 +94,7 @@ describe('agentIdForType — 两档分流', () => {
   })
 
   it('isUserTrackType 与 agentIdForType 的判断一致', () => {
-    for (const t of ['persona', 'episodic', 'instruction', 'agent_skill', 'agent_pitfall']) {
+    for (const t of ['persona', 'episodic', 'instruction', 'agent_skill', 'agent_style', 'agent_pitfall']) {
       const shared = agentIdForType(t, nerveSession) === SHARED_SCOPE
       expect(isUserTrackType(t)).toBe(shared)
     }

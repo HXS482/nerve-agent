@@ -24,6 +24,7 @@ export const EXTRACT_MEMORIES_SYSTEM_PROMPT = `你是专业的"情境切分与�
 
 **B. Bot 档**（描述「我」这个 AI 自己怎么干活）—— 只有自己看得见，别的 Bot 看不到。
    - agent_skill：我验证过有效的做法（用什么工具、什么顺序、什么参数解决了什么）
+   - agent_style：我自己的表达风格与判断取向（用户夸过/纠正过的语气、详细度、取舍偏好）
    - agent_pitfall：我踩过的坑，以及它为什么是坑（下次怎么避开）
 
 两档互不干扰：用户档里不写「我怎么做的」，Bot 档里不写「用户喜欢什么」。
@@ -79,7 +80,20 @@ export const EXTRACT_MEMORIES_SYSTEM_PROMPT = `你是专业的"情境切分与�
    - 触发条件：报错后改对了、试了两种方案其中一种明显更好、用户明确说「这样对」
    - 打分 (priority)：80-100（通用、跨任务可复用）；60-79（这个项目专用）；<60（直接丢弃）
 
-5. 我的踩坑记录 (type: "agent_pitfall")
+5. 我的表达风格 (type: "agent_style")
+   - 定义：**我**（AI）的说话方式与判断取向里，被用户明确认可或纠正过的那部分。
+     不是「我喜欢简洁」这种自我描述，而是「用户要求 X 之后我改成 Y，效果更好」。
+   - 提取句式："[场景] 时应 [表达方式]，因为用户 [反馈]"
+   - 反例：「我说话比较直接」—— 没有来源，不可验证
+   - 正例：「写晨报时开头不要客套，直接进主题 —— 用户明确说过不要长篇大论」
+   - 触发条件：用户夸过「就这样说」、纠正过语气/长度/格式、明确表达过偏好
+   - 打分 (priority)：80-100（长期人设）；60-79（特定场景）；<60（直接丢弃）
+
+   ⚠️ 注意区分：用户说「你以后都别这样」→ instruction（用户档，所有 Bot 都遵守）；
+      用户说「redbook 这样写挺好」→ agent_style（只有 redbook 记住）。判据是谁受益，
+      不是谁说的。
+
+6. 我的踩坑记录 (type: "agent_pitfall")
    - 定义：**我**（AI）做错过的、以后容易再犯的事。重点写「为什么错」，不是「我错了」。
    - 提取句式："[场景] 时不要 [做法]，因为 [后果]；应该 [替代做法]"
    - 反例：「我犯了一个错误」—— 没有可操作信息
@@ -92,7 +106,7 @@ export const EXTRACT_MEMORIES_SYSTEM_PROMPT = `你是专业的"情境切分与�
 - 琐碎闲聊、问候；临时性的纯工具性请求（如"这次帮我翻译一下"）
 - 一次性操作指令（如"这次、本单"相关）
 - AI 自己的流水账（「我跑了测试」「我读了这个文件」）—— 但带因果关系的失败/成功要按 agent_skill / agent_pitfall 提取
-- 不属于以上 5 类的信息
+- 不属于以上 6 类的信息
 - 纯主观感受（不带客观事件的情绪表达）
 
 ---
@@ -107,7 +121,7 @@ export const EXTRACT_MEMORIES_SYSTEM_PROMPT = `你是专业的"情境切分与�
     "memories": [
       {
         "content": "完整、独立的记忆陈述（按对应类型的句式要求）",
-        "type": "persona|episodic|instruction|agent_skill|agent_pitfall",
+        "type": "persona|episodic|instruction|agent_skill|agent_style|agent_pitfall",
         "priority": 80,
         "source_message_ids": ["消息ID_1", "消息ID_2"],
         "metadata": {}
