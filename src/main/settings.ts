@@ -545,6 +545,24 @@ export function getDisabledSkills(): string[] {
   }
 }
 
+/**
+ * 技能注入模式。默认 lazy（只注入索引），settings.json 里写 "skillLoading": "eager"
+ * 才全量注入正文。
+ *
+ * 与 getDisabledSkills 一样直读文件而不是走 loadSettings()：这两个字段只在
+ * AgentCore 组装提示词时用，塞进 ClaudeSettings 会让 settings 的语义变宽。
+ */
+export function getSkillLoadingMode(): 'lazy' | 'eager' {
+  const nerveSettingsPath = join(NERVE_DIR, 'settings.json')
+  if (!existsSync(nerveSettingsPath)) return 'lazy'
+  try {
+    const raw = JSON.parse(readFileSync(nerveSettingsPath, 'utf-8'))
+    return raw.skillLoading === 'eager' ? 'eager' : 'lazy'
+  } catch {
+    return 'lazy'
+  }
+}
+
 // MCP Bridge 配置
 
 const MCP_BRIDGE_CONFIG_PATH = join(NERVE_DIR, 'mcp-bridge.json')

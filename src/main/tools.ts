@@ -196,7 +196,7 @@ export function formatJobResult(r: {
   return `jobId: ${r.jobId}\n命令: ${r.command}\n${status} · 用时 ${dur}s\n\n${body.slice(0, 20000) || '(无输出)'}${truncNote}`
 }
 
-export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers>; onTodos?: (todos: TodoItem[]) => void }, jobs?: import('./core/job-registry').JobRegistry): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
+export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }, projectDir?: string, skillRegistry?: import('./skill-registry').SkillRegistry, hooks?: { askUser?: (questions: import('../shared/types').AskUserQuestion[]) => Promise<import('../shared/types').AskUserAnswers>; onTodos?: (todos: TodoItem[]) => void }, jobs?: import('./core/job-registry').JobRegistry, runScope?: { allowedSkills: string[]; sessionId?: string }): Record<string, { description: string; input_schema: Record<string, unknown>; execute: (args: any) => Promise<any> }> {
   const effectiveCwd = existsSync(cwd) ? cwd : homedir()
   const artifactRoot = projectDir && existsSync(projectDir) ? projectDir : effectiveCwd
 
@@ -272,7 +272,10 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
         // 这是后台化的另一半：命令转后台之后，模型得能把结果捞回来。
         if (visit_jobs && jobs) {
           if (visit_jobs === 'all') {
-            const done = jobs.peekFinished()
+            // 只列本会话的作业：注册表是进程级的，别的会话的输出不该在这里冒出来
+            const done = jobs.peekFinished().filter(
+              (j) => !runScope?.sessionId || !j.ownerSessionId || j.ownerSessionId === runScope.sessionId,
+            )
             if (done.length === 0) {
               const running = jobs.runningIds()
               return {
@@ -309,6 +312,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
             shell: hasGitBash ? GIT_BASH : PS_EXE,
             args: hasGitBash ? ['-c', command] : ['-NoProfile', '-Command', command],
             cwd: effectiveCwd,
+            sessionId: runScope?.sessionId,
           })
           return { content: `已在后台启动，jobId: ${jobId}\n用 Bash({ visit_jobs: "${jobId}" }) 读取结果。` }
         }
@@ -356,6 +360,7 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
               cwd: effectiveCwd,
               env: bashEnv,
               inlineWaitMs: INLINE_WAIT_MS,
+              sessionId: runScope?.sessionId,
             })
 
             if (outcome.kind === 'background') {
@@ -884,19 +889,26 @@ export function getBuiltinTools(cwd: string, gitNotify?: { refresh: () => void }
 
     // load_skill — on-demand skill loading (two-layer model)
     ...(skillRegistry ? (() => {
+      const allowed = runScope?.allowedSkills ?? []
+      // 给出的名字必须和能加载的那批是同一批，否则模型照着提示调一个必然被拒的技能
+      const visibleNames = () => skillRegistry.getEnabled()
+        .filter(s => allowed.length === 0 || allowed.includes(s.id))
+        .map(s => s.name)
+        .join(', ')
       const loadSkillSchema = z.object({
         skill_name: z.string().describe('Name of the skill to load'),
       })
       return {
         load_skill: {
-          description: `Load a skill by name to access its full instructions. Available skills: ${skillRegistry.listNames().join(', ')}. Only load when the skill is relevant to the current task.`,
+          description: `Load a skill by name to access its full instructions. Available skills: ${visibleNames()}. Only load when the skill is relevant to the current task.`,
           input_schema: zodToInputSchema(loadSkillSchema),
           execute: async (args: { skill_name: string }) => {
-            const skill = skillRegistry.getAvailable(args.skill_name)
+            const skill = skillRegistry.getAvailable(args.skill_name, allowed)
             if (!skill) {
-              return { error: `Skill "${args.skill_name}" is not available to this Bot (disabled globally or not in its allowed list). Available: ${skillRegistry.listNames().join(', ')}` }
+              return { error: `Skill "${args.skill_name}" is not available to this Bot (disabled globally or not in its allowed list). Available: ${visibleNames()}` }
             }
-            const prompt = skillRegistry.resolvePrompt(skill)
+            // sessionId 跟着本轮走，不读 registry 上的共享字段：并发轮次会互相覆盖。
+            const prompt = skillRegistry.resolvePrompt(skill, runScope?.sessionId)
             const promptTokens = estimateTokens(prompt)
             return {
               // 技能脚本都在这个目录下。不给绝对路径，模型就得 Glob 全盘找 ——

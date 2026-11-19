@@ -10,8 +10,9 @@ import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID, createHash } from 'crypto'
 import { FileSessionStore } from '../session-store'
-import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins, saveRuntimeConfig } from '../settings'
+import { loadSettings, NERVE_DIR, ClaudeSettings, togglePluginSetting, getDisabledPlugins, getDisabledSkills, getSkillLoadingMode, saveRuntimeConfig } from '../settings'
 import { getBuiltinTools, formatJobResult } from '../tools'
+import { buildScopeKey, visibleAgentIds } from '../../vendor/tencentdb-memory/utils/scope'
 import { JobRegistry } from './job-registry'
 import { SkillRegistry } from '../skill-registry'
 import { PluginBus } from '../plugin-bus'
@@ -148,23 +149,30 @@ export class AgentCore {
    */
   async dispatchRoutine(d: { text: string; sessionId: string; botId?: string }): Promise<boolean> {
     const { NullOutputChannel } = await import('./output-channel')
+    const store = await this.ensureSessionStore()
 
     // 会话可能已被删除：回落到 Bot 的 home 会话；仍没有就留在原 id（sendMessage 会重建它）。
     let sessionId = d.sessionId
     let botId = d.botId ?? ''
     try {
-      if (this.sessionStore && !(await this.sessionStore.exists(sessionId))) {
+      if (!(await store.exists(sessionId))) {
         const reg = await this.getBotRegistry()
         const bot = (botId ? await reg.get(botId) : null) ?? (await reg.getDefault())
         if (bot.homeSessionId) sessionId = bot.homeSessionId
         botId = bot.id
       }
-      // 把归属写回 meta：routine 以创建它的 Bot 的身份跑，而不是回落默认 Bot。
-      if (this.sessionStore && botId) {
-        await this.sessionStore.setMeta(sessionId, { botId })
-      }
     } catch (err) {
       console.warn('[AgentCore] routine 会话解析失败，按原样投递:', err)
+    }
+    /*
+     * 只在会话**还没有归属**时补写 botId。
+     * 无条件写会把用户刚切到 B 的会话静默改回 routine 所属的 A；
+     * 完全不写又会让新会话在侧栏里落不回它的 Bot。所以只补空。
+     */
+    if (botId) {
+      try {
+        if (!(await this.getSessionBotId(sessionId))) await store.setMeta(sessionId, { botId })
+      } catch { /* 元数据失败不阻断本轮 */ }
     }
 
     // sendMessage 内部把错误交给 channel 而不是抛出，所以用会记下 sendError 的通道
@@ -179,7 +187,13 @@ export class AgentCore {
     const channel = new ErrorCapturingChannel()
     try {
       const ctx = this.getSessionContextManager().getOrCreate(sessionId)
-      await this.sendMessage({ prompt: d.text, sessionId, cwd: this.config.cwd }, channel, ctx)
+      // 显式带 botId：会话 meta 可能属于另一个 Bot（上面刻意没抢），
+      // 而这一轮必须按 routine 创建时的 Bot 身份跑。
+      await this.sendMessage(
+        { prompt: d.text, sessionId, botId: botId || undefined, bindSession: false, cwd: this.config.cwd },
+        channel,
+        ctx,
+      )
       return !channel.errored
     } catch (err) {
       console.error('[AgentCore] dispatchRoutine failed:', err)
@@ -471,7 +485,7 @@ export class AgentCore {
 
     try {
       // 准备消息和系统提示
-      const { messages, systemPrompt, mcpTools, bot } = await this.prepareMessages(payload, sessionId)
+      const { messages, systemPrompt, mcpTools, bot, scopeKey } = await this.prepareMessages(payload, sessionId)
 
       // Promote pending tool snapshot (if hot-reload happened between messages)
       this.pluginBus.promotePending()
@@ -496,6 +510,7 @@ export class AgentCore {
         cfg,
         cwd,
         bot.id,
+        { botId: bot.id, boundSkills: bot.boundSkills ?? [], boundMcp: bot.boundMcp ?? [] },
         payload.handoff
       )
 
@@ -540,7 +555,7 @@ export class AgentCore {
         )
 
         // 处理结果
-        await this.handleResult(result, sessionId, payload, channel, ctx, sentImages, cfg)
+        await this.handleResult(result, sessionId, payload, channel, ctx, sentImages, cfg, scopeKey)
       } finally {
         if (heartbeat) clearInterval(heartbeat)
         pluginSnapshot.unref()
@@ -613,6 +628,23 @@ export class AgentCore {
     let memoryContext = ''
     let recalledPersona = ''
 
+    /*
+     * Bot 必须先解析：记忆的 scope 要带上它是谁。
+     *
+     * 原来这两步是反的（recall 在前），于是每轮召回都只能拿到裸 sessionId，
+     * 记忆层不知道「现在是谁在说话」，四个 Bot 读写同一份库。
+     * resolveBot 是纯读操作（registry + session meta），提前没有副作用。
+     */
+    const bot = await this.resolveBot(payload.sessionId ?? '', payload.botId)
+
+    /*
+     * scope key：`agent:<botId>:<sessionId>`。
+     *
+     * 编进 sessionKey 而不是新增参数，是因为 vendor 的 extractAgentId()
+     * 本来就认这个前缀（tcvdb.ts:105），而 nerve 一直传裸 UUID，
+     * 于是 agent_id 永远是空串、按它建的索引从来没用过。
+     */
+    const scopeKey = buildScopeKey(bot.id, sessionId)
     // Memory recall via TencentDB (3s timeout to allow sqlite-vec init + FTS5 + file I/O)
     if (this.memoryCore) {
       // 兜底定时器必须在 recall 正常返回后清掉。Promise.race 不会取消败者，
@@ -622,7 +654,7 @@ export class AgentCore {
       try {
         const start = Date.now()
         const recall = await Promise.race([
-          this.memoryCore.handleBeforeRecall(payload.prompt, sessionId),
+          this.memoryCore.handleBeforeRecall(payload.prompt, scopeKey),
           new Promise<{ prependContext?: string; appendSystemContext?: string; recalledL3Persona?: string | null }>((r) => {
             recallTimer = setTimeout(() => {
               console.warn(`[Nerve] memory recall timed out after 3000ms — no memories injected this turn`)
@@ -642,10 +674,17 @@ export class AgentCore {
       }
     }
 
-    const bot = await this.resolveBot(payload.sessionId ?? '', payload.botId)
-    // 把归属写进会话 meta：下次不带 botId 打开时也能解析到同一个 Bot，侧栏分组也靠它
-    if (payload.botId && this.sessionStore && sessionId) {
-      try { await this.sessionStore.setMeta(sessionId, { botId: payload.botId }) } catch { /* 元数据失败不阻断本轮 */ }
+    /*
+     * 把归属写进会话 meta：下次不带 botId 打开时也能解析到同一个 Bot，侧栏分组也靠它。
+     *
+     * 写的是**解析后**的 bot.id，不是 payload.botId：显式 id 失效时 resolveBot 已回落到
+     * 默认 Bot，再把那个无效 id 钉进 meta，后续每轮都会继续回落、侧栏也永远找不到它。
+     */
+    if (payload.bindSession !== false && this.sessionStore && sessionId) {
+      try {
+        const cur = await this.getSessionBotId(sessionId)
+        if (cur !== bot.id) await this.sessionStore.setMeta(sessionId, { botId: bot.id })
+      } catch { /* 元数据失败不阻断本轮 */ }
     }
     /*
      * 同事名单：只有真的能派活（有授权的其他人）才写进提示。
@@ -726,16 +765,21 @@ export class AgentCore {
     }
 
     // 注入 Skills（两层模型 or eager 兼容模式）
-    const disabledSkills: string[] = (this.settings as any).disabledSkills || []
+    // 全局禁用名单直读 settings.json：loadSettings() 的返回体不带这个字段，
+    // 之前用 `as any` 去读它，恒为 undefined —— 设置页关掉的技能照样能被加载。
+    const disabledSkills: string[] = getDisabledSkills()
     this.skillRegistry.discoverFromDirs(
       [this.sourceDir, join(homedir(), '.nerve'), join(homedir(), '.claude')],
       disabledSkills
     )
     this.skillRegistry.setSessionId(sessionId)
-    // 同一轮里 load_skill 也要守同一个白名单，否则模型能绕过索引直接加载
-    this.skillRegistry.setAllowedSkills(bot?.boundSkills ?? [])
+    /*
+     * 白名单不再写进 registry 实例：同一个 registry 服务所有 Bot，
+     * gateway 并发 3 个槽位时 A 的空数组（= 全部）会把 B 的白名单冲掉。
+     * 改成随工具一起传参（见 buildTools 的 runScope）。
+     */
 
-    const skillLoading = (this.settings as any).skillLoading || 'lazy'
+    const skillLoading = getSkillLoadingMode()
 
     if (skillLoading === 'eager') {
       // 兼容模式：全量注入（现有行为）
@@ -764,7 +808,7 @@ export class AgentCore {
     // 文稿、文章、草稿等阅读型内容默认直接输出正文，不写文件
     systemPrompt += '\n\n## File Writing Discipline\nUse the `Write` tool ONLY when the user explicitly asks to save, create, or modify a file (or when doing coding work on files in the project). For essays, drafts, articles, plans, letters, and other readable content, output the full text directly in your reply as the response — do NOT write it to a file unless the user asks. Temporary or one-off content lives in the conversation, not on disk. When unsure whether to save, just reply with the content; the user can ask you to save it afterwards.'
 
-    return { messages, systemPrompt, mcpTools, bot }
+    return { messages, systemPrompt, mcpTools, bot, scopeKey }
   }
 
   /**
@@ -832,7 +876,7 @@ export class AgentCore {
     botId: string,
     sessionId: string | undefined,
     cwd: string,
-    handoff: { depth: number; chain: string[] } | undefined
+    handoff: { depth: number; chain: string[]; threadId?: string } | undefined
   ): Promise<HandoffCtx | null> {
     // 没有 Bot 身份就没有「谁在问」，深度链也断了：这种情况不给工具。
     if (!botId) return null
@@ -868,6 +912,8 @@ export class AgentCore {
     return {
       fromBotId: botId,
       sessionId: sessionId ?? '',
+      // 起点会话从载荷带下来；第一跳时就是自己，多跳时仍是用户真正的那个会话。
+      threadId: handoff?.threadId ?? sessionId ?? '',
       cwd,
       // 深度来自载荷（递归交接时由派发方 +1），不是模型报的数。
       depth: handoff?.depth ?? 0,
@@ -916,9 +962,11 @@ export class AgentCore {
    *
    * 幂等键由「发起会话 + 双端 Bot + 任务三件套」算出：模型在一轮里重复调同一个工具是
    * 常见行为，而一跳就是完整的一轮 agent，重复执行真的花钱。同一次交接只入队一次，
-   * 第二次静默返回 —— 既不重复跑，也不骗模型说「又发了一次」。
+   * 第二次不再跑 —— 但**必须把 already 报上去**：工具那边要如实说「这条早就派过了，
+   * 不会再来一次」，否则用户在同一个会话里再说一次「让 B 做 X」会得到一句「已交给 B」，
+   * 然后什么都不会发生。
    */
-  private async enqueueHop(work: HandoffWork): Promise<void> {
+  private async enqueueHop(work: HandoffWork): Promise<'queued' | 'already'> {
     const queue = this.hopQueueFor()
     if (!queue) throw new Error('交接队列不可用')
 
@@ -944,6 +992,7 @@ export class AgentCore {
       // 别等那 2 秒：刚派出去的活，界面上要马上看见那个 Bot 动起来。
       this.sweepNow()
     }
+    return offered
   }
 
   /** sweep 的 runner 与定时器。分开存是为了「入队后立刻催一把」。 */
@@ -1000,6 +1049,8 @@ export class AgentCore {
               chain,
               // 沿用发起方会话的目录；老行没有这个字段就退回全局目录。
               cwd: work.cwd || this.projectDir,
+              // 再往下派时答复要回到起点会话，不是这一跳的一次性 scratch 会话。
+              threadId: work.threadId,
             })
           } finally {
             this.notifyBotActivity({
@@ -1232,6 +1283,8 @@ export class AgentCore {
     depth: number
     chain: string[]
     cwd: string
+    /** 这条链的起点会话：它再往下派时，答复要回到这里而不是会被删掉的 scratch 会话。 */
+    threadId: string
   }): Promise<string> {
     // 捕获通道：只收正文（thinking / 工具调用不进答复），sendError 记下来让这一跳变成失败。
     //
@@ -1269,8 +1322,9 @@ export class AgentCore {
           sessionId: scratchId,
           botId: input.botId,
           cwd: input.cwd,
-          // 深度一路带下去：目标 Bot 若继续交接，闸门接着数。
-          handoff: { depth: input.depth, chain: input.chain },
+          // 深度与起点会话一路带下去：目标 Bot 若继续交接，闸门接着数，
+          // 答复也仍然回到用户真正在看的那个会话。
+          handoff: { depth: input.depth, chain: input.chain, threadId: input.threadId },
         },
         captureChannel,
         ctx,
@@ -1357,6 +1411,9 @@ export class AgentCore {
     // 本轮所属 Bot。显式传参而不是读实例字段：同一进程里 routine 轮次与用户轮次
     // 可能交错，共享字段会让 A 轮的工具把 routine 写到 B 轮的 Bot 名下。
     botId: string,
+    // 这个 Bot 的绑定（技能白名单 / MCP server 白名单）。同样必须显式传：
+    // registry 和 MCP 池都是单例，装不下每 Bot 的授权。
+    botBindings: { botId: string; boundSkills: string[]; boundMcp: string[] },
     // Bot 交接链（只有被别的 Bot 派起来的一轮才带）。没给默认值：默认成 0 看起来方便，
     // 实际会让「忘了传」和「真的是根」长得一模一样，深度闸就永远关着了。
     handoff: { depth: number; chain: string[] } | undefined
@@ -1382,7 +1439,7 @@ export class AgentCore {
       onTodos: (todos) => {
         askChannel.sendFlowItem('todo', JSON.stringify(todos), { sessionId })
       },
-    } : undefined, this.jobs)
+    } : undefined, this.jobs, { allowedSkills: botBindings.boundSkills, sessionId })
     const routineCtx = this.routineToolCtx(botId, sessionId)
     if (routineCtx) Object.assign(builtinTools, buildRoutineTools(routineCtx))
 
@@ -1395,13 +1452,35 @@ export class AgentCore {
     // 模型被明确告知可以调，实际撞空。合并进 builtinTools 后，下面的
     // 冲突判定（拿 Object.keys(builtinTools) 做保留名）与 executor 注册会一并带上。
     if (this.memoryCore) {
-      Object.assign(builtinTools, createMemoryTools(this.memoryCore))
+      // scope：这个 Bot 能看见哪些记忆。visibleAgentIds = [自己, shared]。
+      // 不传就等于全库 —— 四个 Bot 互相翻对方的档案，正是这次要修的。
+      const memScope = visibleAgentIds(botBindings.botId)
+      Object.assign(
+        builtinTools,
+        createMemoryTools(this.memoryCore, memScope, buildScopeKey(botBindings.botId, sessionId)),
+      )
     }
 
+    /*
+     * MCP 按 Bot 过滤。
+     *
+     * 语义与 boundSkills 一致：空数组 = 不限制（全部 server 可见），非空 = 只看名单里的。
+     * 空数组解释成「一个都没有」会让所有老 Bot 升级后突然失去全部 MCP 工具。
+     *
+     * 过滤点必须在**构建工具时**，不是连接时：池是全局共享的，断开一个 Bot
+     * 用不到的 server 会连带影响别的 Bot。
+     */
+    const mcpAllow = botBindings.boundMcp ?? []
+    const visibleMcp = mcpAllow.length === 0
+      ? mcpTools
+      : mcpTools.filter((t) => mcpAllow.includes(t.serverName))
+
     // MCP 工具名冲突解决：与内置工具或其他 MCP 工具重名时加 serverName__ 前缀
-    const resolvedMcp = resolveMcpToolNames(mcpTools, new Set(Object.keys(builtinTools)))
+    const resolvedMcp = resolveMcpToolNames(visibleMcp, new Set(Object.keys(builtinTools)))
     const mcpExecByKey = new Map(
-      this.mcpPool.getDetailedExecutors().map((e) => [`${e.serverName}::${e.toolName}`, e.execute] as const)
+      this.mcpPool.getDetailedExecutors()
+        .filter((e) => mcpAllow.length === 0 || mcpAllow.includes(e.serverName))
+        .map((e) => [`${e.serverName}::${e.toolName}`, e.execute] as const)
     )
     // 子代理（Task）拿的就是这一份：条目必须带上 execute，
     // 否则 runSubagent 只注册 def 不注册 executor，子代理看得见调不动
@@ -1533,7 +1612,8 @@ export class AgentCore {
        * 然后放弃。实测表现是 echo p2…p38 空转。
        */
       drainJobs: () => {
-        const done = this.jobs.drainFinished()
+        // 只取本会话起的作业：注册表是进程级的，交接轮/并发会话不该看到别人的输出
+        const done = this.jobs.drainFinished(ctx.sessionId)
         if (done.length === 0) return ''
         const head = `\n\n[后台作业已完成 ${done.length} 个，以下是结果]`
         return head + '\n\n' + done.map((j) => formatJobResult(j)).join('\n\n---\n\n')
@@ -1618,7 +1698,14 @@ export class AgentCore {
     channel: OutputChannel,
     ctx: SessionContext,
     sentImages?: Set<string>,
-    cfg: ClaudeConfig = this.config
+    /**
+     * 记忆 scope key（`agent:<botId>:<sessionId>`）。
+     *
+     * 由 prepareMessages 造好传进来，而不是在这里重新拼：
+     * scope 的格式只有一个来源，两处各拼一次迟早会漂。
+     */
+    cfg: ClaudeConfig = this.config,
+    scopeKey?: string,
   ) {
     const store = await this.ensureSessionStore()
     const { usage, stopReason, textDeltas, fullThinkingParts, allToolCalls, allToolResults } = result
@@ -1689,7 +1776,7 @@ export class AgentCore {
           { role: 'user', content: payload.prompt },
           { role: 'assistant', content: fullText },
         ],
-        sessionKey: sessionId,
+        sessionKey: scopeKey ?? sessionId,
         sessionId,
       }).catch((err) => console.error('[TDAI] capture failed:', err))
     }

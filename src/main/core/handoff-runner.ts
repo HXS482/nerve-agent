@@ -97,9 +97,16 @@ export interface HandoffRunnerOptions {
   onSettled?: (work: HandoffWork) => void
   /** 重试退避基数，测试里可以调小。 */
   retryBaseMs?: number
+  /**
+   * 执行中续租的间隔。一跳是完整的一轮 agent（可能几分钟），而租约只有 120s ——
+   * 不续租的话行会在跑到一半时被别的 worker（重启后的队列 / 另一个 AgentCore）重新认领，
+   * 同一跳跑两遍、账单翻倍。必须小于租约。
+   */
+  renewEveryMs?: number
 }
 
 const DEFAULT_RETRY_BASE_MS = 5_000
+const DEFAULT_RENEW_EVERY_MS = 45_000
 
 export interface HandoffSweep {
   delivered: number
@@ -122,6 +129,7 @@ function parseWork(raw: string): HandoffWork | null {
 export function createHandoffRunner(options: HandoffRunnerOptions) {
   const { queue, delivery, owner, onSettled } = options
   const retryBaseMs = options.retryBaseMs ?? DEFAULT_RETRY_BASE_MS
+  const renewEveryMs = options.renewEveryMs ?? DEFAULT_RENEW_EVERY_MS
 
   /**
    * 把答复搬到位。
@@ -187,6 +195,26 @@ export function createHandoffRunner(options: HandoffRunnerOptions) {
     } satisfies HandoffWork)
   }
 
+  /**
+   * 跑一行期间周期性续租：租约只有 120s，而一跳可能跑几分钟。
+   * 不续租的话，别的 worker 会把这一行当成「上一个跑的人死了」重新认领。
+   */
+  async function withLease<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const timer = setInterval(() => {
+      try {
+        queue.renew(key, owner)
+      } catch (err) {
+        console.warn('[HandoffRunner] 续租失败:', err)
+      }
+    }, renewEveryMs)
+    timer.unref?.()
+    try {
+      return await fn()
+    } finally {
+      clearInterval(timer)
+    }
+  }
+
   async function runOne(row: HopRow): Promise<'delivered' | 'retried' | 'failed'> {
     const work = parseWork(row.payload)
     if (!work) {
@@ -203,9 +231,9 @@ export function createHandoffRunner(options: HandoffRunnerOptions) {
        * 要么（更糟）在 A 正在流式输出时把它整段重载、把临时文字冲掉。
        */
       let landedIn = work.threadId
-      if (work.kind === 'relay') landedIn = await deliverRelay(work)
-      else if (work.kind === 'notice') landedIn = await deliverNotice(work)
-      else await executeHop(row, work)
+      if (work.kind === 'relay') landedIn = await withLease(row.key, () => deliverRelay(work))
+      else if (work.kind === 'notice') landedIn = await withLease(row.key, () => deliverNotice(work))
+      else await withLease(row.key, () => executeHop(row, work))
 
       if (work.kind !== 'hop') {
         queue.finish(row.key)

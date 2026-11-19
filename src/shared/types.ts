@@ -242,12 +242,30 @@ export interface SendMessagePayload {
   /** 本轮所属 Bot。给了就把会话绑定到这个 Bot（侧栏按 Bot 组织会话）。 */
   botId?: string
   /**
+   * 本轮的 botId 是否要写成会话的归属。默认 true。
+   *
+   * routine 触发时必须传 false：它以创建者的 Bot 身份跑，但那不代表用户的会话
+   * 换了主人 —— 无条件写会把用户刚切到 B 的会话静默改回 A。
+   */
+  bindSession?: boolean
+  /**
    * Bot 交接（message_bot）的传递链，只有「被别的 Bot 派起来的一轮」才带。
    *
    * depth 由派发方 +1 后塞进来，chain 一路追加，所以 A→B→C→A 这种环会在深度闸处被拒。
    * 刻意放在载荷里而不是让模型自己报：模型能改的数字等于没有闸。
    */
-  handoff?: { depth: number; chain: string[] }
+  handoff?: {
+    depth: number
+    chain: string[]
+    /**
+     * 这条链的起点会话（用户真正在看的那个）。
+     *
+     * 被派起来的一轮跑在一次性 scratch 会话里，它若再往下派，用 scratch 会话当
+     * 投递目标的话，答复会落进一个马上被删掉的会话 —— 用户永远看不到。所以起点会话
+     * 必须跟着载荷一路传下去。
+     */
+    threadId?: string
+  }
 }
 
 /** 一轮 run 的结束原因：abort 收尾不能报成 complete，否则中断和跑完在 UI 上同形 */

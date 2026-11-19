@@ -121,12 +121,18 @@ export class MemoryTdaiCore {
     return this.core.handleTurnCommitted(turn)
   }
 
-  async searchMemories(query: string, limit?: number) {
-    return this.core.searchMemories({ query, limit })
+  /**
+   * 检索结构化记忆。
+   *
+   * `scope` 必传：不传就是全库，等于四个 Bot 互相翻对方的档案。
+   * 由调用方从当前 Bot 算出来（见 memory-tools.ts / AgentCore）。
+   */
+  async searchMemories(query: string, limit?: number, scope?: string[]) {
+    return this.core.searchMemories({ query, limit, scope })
   }
 
-  async searchConversations(query: string, limit?: number) {
-    return this.core.searchConversations({ query, limit })
+  async searchConversations(query: string, limit?: number, sessionKey?: string, scope?: string[]) {
+    return this.core.searchConversations({ query, limit, sessionKey, scope })
   }
 
   async destroy(): Promise<void> {

@@ -21,36 +21,35 @@ export class SkillRegistry {
   }
 
   get(name: string): Skill | undefined {
-    return this.skills.get(name)
+    return this.skills.get(name) ?? this.byName(name)
+  }
+
+  /** 系统提示里给模型看的是 frontmatter 的 name，load_skill 却按目录 id 查 —— 两者不同名时必然查不到。 */
+  private byName(name: string): Skill | undefined {
+    const lower = name.toLowerCase()
+    for (const skill of this.skills.values()) {
+      if (skill.name.toLowerCase() === lower) return skill
+    }
+    return undefined
   }
 
   /**
    * 取一个「真的能用」的技能：同时过全局 disabled 和 Bot 白名单。
    *
+   * 白名单**显式传参**，不再挂在实例上：同一个 registry 实例服务多个 Bot
+   * （会话切换、routine、交接并发），实例字段会被别的 Bot 的一轮覆盖掉。
+   * 空数组 = 不限制。
+   *
    * 为什么单独一个方法而不是改 get()：get() 是「有没有这个技能」，
    * 语义上不该掺权限。而 load_skill 工具问的是「这个 Bot 能不能用它」，
    * 两者混在一起会让调用方猜不透。
    */
-  getAvailable(name: string): Skill | undefined {
-    const skill = this.skills.get(name)
+  getAvailable(name: string, allowedSkills: string[] = []): Skill | undefined {
+    const skill = this.get(name)
     if (!skill) return undefined
     if (this.disabled.has(skill.id)) return undefined
-    const allow = this.allowedSkills
-    if (allow.length > 0 && !allow.includes(skill.id)) return undefined
+    if (allowedSkills.length > 0 && !allowedSkills.includes(skill.id)) return undefined
     return skill
-  }
-
-  /** 当前 Bot 的技能白名单；空数组 = 不限制（由调用方在每轮设置）。 */
-  private allowedSkills: string[] = []
-
-  /**
-   * 设置当前 Bot 的技能白名单。空数组 = 不限制。
-   *
-   * 由 AgentCore 在每轮 prepareMessages 时设置 —— 不能放在构造里，
-   * 因为同一个 registry 实例会服务多个 Bot（会话切换、routine、交接）。
-   */
-  setAllowedSkills(ids: string[]) {
-    this.allowedSkills = ids
   }
 
   getEnabled(): Skill[] {
@@ -59,10 +58,6 @@ export class SkillRegistry {
 
   listIndex(): SkillIndexEntry[] {
     return this.getEnabled().map(s => ({ name: s.name, description: s.description }))
-  }
-
-  listNames(): string[] {
-    return this.getEnabled().map(s => s.name)
   }
 
   update(skills: Skill[]) {

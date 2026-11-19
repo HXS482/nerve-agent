@@ -24,6 +24,7 @@ import Database from "better-sqlite3";
 import type { Database as DatabaseType, Statement as StatementType } from "better-sqlite3";
 import type { MemoryRecord } from "../record/l1-writer.js";
 import type { EmbeddingProviderInfo } from "./embedding.js";
+import { parseAgentId as agentIdOf, visibleAgentIds } from "../../utils/scope.js";
 import type {
   IMemoryStore,
   StoreCapabilities,
@@ -53,6 +54,7 @@ export interface VectorSearchResult {
   session_id: string;
   /** Raw metadata JSON string (e.g., contains activity_start_time / activity_end_time for episodic) */
   metadata_json: string;
+  agent_id: string;
 }
 
 /** L0 single-message vector search result. */
@@ -67,6 +69,7 @@ export interface L0VectorSearchResult {
   recorded_at: string;
   /** Original message timestamp (epoch ms) */
   timestamp: number;
+  agent_id: string;
 }
 
 /** Raw row returned by L1 record queries (column names match SQLite schema). */
@@ -312,6 +315,7 @@ export interface FtsSearchResult {
   session_key: string;
   session_id: string;
   metadata_json: string;
+  agent_id: string;
 }
 
 /** FTS5 search result for L0 records. */
@@ -325,6 +329,7 @@ export interface L0FtsSearchResult {
   score: number;
   recorded_at: string;
   timestamp: number;
+  agent_id: string;
 }
 
 // ============================
@@ -570,7 +575,9 @@ export class VectorStore implements IMemoryStore {
         timestamp_end TEXT DEFAULT '',
         created_time TEXT DEFAULT '',
         updated_time TEXT DEFAULT '',
-        metadata_json TEXT DEFAULT '{}'
+        metadata_json TEXT DEFAULT '{}',
+        -- 记忆属于谁/谁能看。空串=未知（升级前的数据），统一刷成 'shared'。
+        agent_id TEXT DEFAULT ''
       )
     `);
 
@@ -585,6 +592,37 @@ export class VectorStore implements IMemoryStore {
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_l1_session_updated ON l1_records(session_id, updated_time)");
     // Composite index: session_key exact match + updated_time range scan (for pipeline cursor queries)
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_l1_sessionkey_updated ON l1_records(session_key, updated_time)");
+    /*
+     * 老库补列。
+     *
+     * `CREATE TABLE IF NOT EXISTS` 对已存在的表什么都不做 —— 线上那份 vectors.db
+     * 是旧 schema 建的，光改建表语句不会补出 agent_id，紧接着建索引就会撞
+     * 「no such column: agent_id」并让整个 VectorStore 进入 degraded 模式
+     * （那就等于记忆全废，而且只在日志里有一行）。
+     */
+    try {
+      this.db.exec("ALTER TABLE l1_records ADD COLUMN agent_id TEXT DEFAULT ''");
+      this.logger?.info(`${TAG} Migrated l1_records: added agent_id column`);
+    } catch {
+      // 列已存在（新库建表时就带了）
+    }
+
+    // Bot 维度：召回与去重都按 `agent_id IN (本 Bot, 'shared')` 过滤
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_l1_agent ON l1_records(agent_id)");
+
+    /*
+     * 老数据迁移：升级前写入的记录没有 Bot 维度（agent_id 为空串）。
+     *
+     * 统一刷成 'shared' 而不是留空 —— 读路径虽然把空串也当 shared 处理，
+     * 但留空会让 FTS 的 MATCH 查询意外命中一批空串行，行为不可预期。
+     * 这也是回滚通道：把 agent_id 全刷成 shared 就等于「四个 Bot 共享一切」。
+     */
+    try {
+      const migrated = this.db.prepare("UPDATE l1_records SET agent_id = 'shared' WHERE agent_id = ''").run()
+      if (migrated.changes > 0) this.logger?.info(`${TAG} Migrated ${migrated.changes} L1 record(s) to agent_id='shared'`)
+    } catch (err) {
+      this.logger?.warn(`${TAG} agent_id migration failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`)
+    }
 
     // Vector virtual table (cosine distance) — only created when dimensions > 0.
     // When provider="none", dimensions=0 and vec0 tables are deferred until a
@@ -602,10 +640,10 @@ export class VectorStore implements IMemoryStore {
     // Prepare statements for reuse
     this.stmtUpsertMeta = this.db.prepare(`
       INSERT INTO l1_records (
-        record_id, content, type, priority, scene_name, session_key, session_id,
+        record_id, content, type, priority, scene_name, session_key, session_id, agent_id,
         timestamp_str, timestamp_start, timestamp_end,
         created_time, updated_time, metadata_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(record_id) DO UPDATE SET
         content=excluded.content,
         type=excluded.type,
@@ -615,7 +653,8 @@ export class VectorStore implements IMemoryStore {
         timestamp_start=excluded.timestamp_start,
         timestamp_end=excluded.timestamp_end,
         updated_time=excluded.updated_time,
-        metadata_json=excluded.metadata_json
+        metadata_json=excluded.metadata_json,
+        agent_id=excluded.agent_id
     `);
 
     if (this.dimensions > 0) {
@@ -625,7 +664,7 @@ export class VectorStore implements IMemoryStore {
     this.stmtDeleteMeta = this.db.prepare("DELETE FROM l1_records WHERE record_id = ?");
 
     this.stmtGetMeta = this.db.prepare(`
-      SELECT content, type, priority, scene_name, session_key, session_id,
+      SELECT content, type, priority, scene_name, session_key, session_id, agent_id,
              timestamp_str, timestamp_start, timestamp_end, metadata_json
       FROM l1_records WHERE record_id = ?
     `);
@@ -651,7 +690,8 @@ export class VectorStore implements IMemoryStore {
         role TEXT NOT NULL DEFAULT '',
         message_text TEXT NOT NULL,
         recorded_at TEXT DEFAULT '',
-        timestamp INTEGER DEFAULT 0
+        timestamp INTEGER DEFAULT 0,
+        agent_id TEXT DEFAULT ''
       )
     `);
 
@@ -661,6 +701,23 @@ export class VectorStore implements IMemoryStore {
       this.logger?.debug?.(`${TAG} Migrated l0_conversations: added timestamp column`);
     } catch {
       // Column already exists — expected on non-first run
+    }
+
+    // Migration: add agent_id column if missing（Bot 维度，见 utils/scope.ts）
+    try {
+      this.db.exec("ALTER TABLE l0_conversations ADD COLUMN agent_id TEXT DEFAULT ''");
+      this.logger?.debug?.(`${TAG} Migrated l0_conversations: added agent_id column`);
+    } catch {
+      // 已存在（新库建表时就带了），忽略
+    }
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_l0_agent ON l0_conversations(agent_id)");
+
+    // 老 L0 记录同理归 shared（否则会话搜索在 scope 过滤下会把它们全丢掉）
+    try {
+      const m = this.db.prepare("UPDATE l0_conversations SET agent_id = 'shared' WHERE agent_id = ''").run()
+      if (m.changes > 0) this.logger?.info(`${TAG} Migrated ${m.changes} L0 record(s) to agent_id='shared'`)
+    } catch (err) {
+      this.logger?.warn(`${TAG} L0 agent_id migration failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`)
     }
 
     // Indexes for L0 queries
@@ -683,12 +740,13 @@ export class VectorStore implements IMemoryStore {
     // L0 prepared statements
     this.stmtL0UpsertMeta = this.db.prepare(`
       INSERT INTO l0_conversations (
-        record_id, session_key, session_id, role, message_text, recorded_at, timestamp
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        record_id, session_key, session_id, role, message_text, recorded_at, timestamp, agent_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(record_id) DO UPDATE SET
         message_text=excluded.message_text,
         recorded_at=excluded.recorded_at,
-        timestamp=excluded.timestamp
+        timestamp=excluded.timestamp,
+        agent_id=excluded.agent_id
     `);
 
     if (this.dimensions > 0) {
@@ -698,7 +756,7 @@ export class VectorStore implements IMemoryStore {
     this.stmtL0DeleteMeta = this.db.prepare("DELETE FROM l0_conversations WHERE record_id = ?");
 
     this.stmtL0GetMeta = this.db.prepare(`
-      SELECT session_key, session_id, role, message_text, recorded_at, timestamp
+      SELECT session_key, session_id, role, message_text, recorded_at, timestamp, agent_id
       FROM l0_conversations WHERE record_id = ?
     `);
 
@@ -772,7 +830,8 @@ export class VectorStore implements IMemoryStore {
           timestamp_str UNINDEXED,
           timestamp_start UNINDEXED,
           timestamp_end UNINDEXED,
-          metadata_json UNINDEXED
+          metadata_json UNINDEXED,
+          agent_id UNINDEXED
         )
       `);
 
@@ -785,6 +844,7 @@ export class VectorStore implements IMemoryStore {
           session_key UNINDEXED,
           session_id UNINDEXED,
           role UNINDEXED,
+          agent_id UNINDEXED,
           recorded_at UNINDEXED,
           timestamp UNINDEXED
         )
@@ -793,8 +853,8 @@ export class VectorStore implements IMemoryStore {
       // L1 FTS prepared statements
       this.stmtL1FtsInsert = this.db.prepare(`
         INSERT INTO l1_fts (content, content_original, record_id, type, priority, scene_name,
-          session_key, session_id, timestamp_str, timestamp_start, timestamp_end, metadata_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          session_key, session_id, timestamp_str, timestamp_start, timestamp_end, metadata_json, agent_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       this.stmtL1FtsDelete = this.db.prepare("DELETE FROM l1_fts WHERE record_id = ?");
@@ -802,7 +862,7 @@ export class VectorStore implements IMemoryStore {
       this.stmtL1FtsSearch = this.db.prepare(`
         SELECT record_id, content_original AS content, type, priority, scene_name,
                session_key, session_id, timestamp_str, timestamp_start, timestamp_end,
-               metadata_json,
+               metadata_json, agent_id,
                bm25(l1_fts) AS rank
         FROM l1_fts
         WHERE l1_fts MATCH ?
@@ -812,14 +872,14 @@ export class VectorStore implements IMemoryStore {
 
       // L0 FTS prepared statements
       this.stmtL0FtsInsert = this.db.prepare(`
-        INSERT INTO l0_fts (message_text, message_text_original, record_id, session_key, session_id, role, recorded_at, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO l0_fts (message_text, message_text_original, record_id, session_key, session_id, role, recorded_at, timestamp, agent_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       this.stmtL0FtsDelete = this.db.prepare("DELETE FROM l0_fts WHERE record_id = ?");
 
       this.stmtL0FtsSearch = this.db.prepare(`
-        SELECT record_id, message_text_original AS message_text, session_key, session_id, role, recorded_at, timestamp,
+        SELECT record_id, message_text_original AS message_text, session_key, session_id, role, recorded_at, timestamp, agent_id,
                bm25(l0_fts) AS rank
         FROM l0_fts
         WHERE l0_fts MATCH ?
@@ -1075,6 +1135,7 @@ export class VectorStore implements IMemoryStore {
           record.scene_name,
           record.sessionKey,
           record.sessionId,
+          agentIdOf(record.sessionKey),
           tsStr,
           tsStart,
           tsEnd,
@@ -1110,6 +1171,7 @@ export class VectorStore implements IMemoryStore {
               tsStart,
               tsEnd,
               JSON.stringify(record.metadata),
+              agentIdOf(record.sessionKey),
             );
           } catch (ftsErr) {
             // FTS write failure is non-fatal — log and continue
@@ -1143,7 +1205,7 @@ export class VectorStore implements IMemoryStore {
    * **Fault-tolerant**: returns an empty array on any error (e.g. dimension
    * mismatch, corrupted DB) so callers can fall back to keyword search.
    */
-  searchL1Vector(queryEmbedding: Float32Array, topK = 5): VectorSearchResult[] {
+  searchL1Vector(queryEmbedding: Float32Array, topK = 5, _queryText?: string, scope?: string[]): VectorSearchResult[] {
     if (this.degraded || !this.vecTablesReady) {
       if (this.degraded) this.logger?.warn(`${TAG} [L1-search] SKIPPED (degraded mode)`);
       return [];
@@ -1197,14 +1259,18 @@ export class VectorStore implements IMemoryStore {
               timestamp_str: string;
               timestamp_start: string;
               timestamp_end: string;
+              agent_id: string;
               metadata_json: string;
             }
           | undefined;
-
         if (!meta) {
           this.logger?.warn(`${TAG} [L1-search] record_id=${record_id} has vector but NO metadata (orphan)`);
           continue;
         }
+
+        // scope 过滤：老数据（升级前）的 agent_id 是空串，统一当 shared 处理，
+        // 不能用 SQL 的 IN 兜 —— 空串会匹配到意料之外的行。
+        if (scope && scope.length > 0 && !scope.includes(meta.agent_id || 'shared')) continue;
 
         const score = 1.0 - distance;
         this.logger?.debug?.(
@@ -1225,6 +1291,7 @@ export class VectorStore implements IMemoryStore {
           session_key: meta.session_key,
           session_id: meta.session_id,
           metadata_json: meta.metadata_json,
+          agent_id: meta.agent_id ?? 'shared',
         });
       }
 
@@ -1475,6 +1542,7 @@ export class VectorStore implements IMemoryStore {
           record.messageText,
           record.recordedAt,
           record.timestamp,
+          agentIdOf(record.sessionKey),
         );
 
         if (!skipVec) {
@@ -1500,6 +1568,7 @@ export class VectorStore implements IMemoryStore {
               record.role,
               record.recordedAt,
               record.timestamp,
+              agentIdOf(record.sessionKey),
             );
           } catch (ftsErr) {
             // FTS write failure is non-fatal — log and continue
@@ -1577,7 +1646,7 @@ export class VectorStore implements IMemoryStore {
    *
    * **Fault-tolerant**: returns an empty array on any error.
    */
-  searchL0Vector(queryEmbedding: Float32Array, topK = 5): L0VectorSearchResult[] {
+  searchL0Vector(queryEmbedding: Float32Array, topK = 5, _queryText?: string, scope?: string[]): L0VectorSearchResult[] {
     if (this.degraded || !this.vecTablesReady) {
       if (this.degraded) this.logger?.warn(`${TAG} [L0-search] SKIPPED (degraded mode)`);
       return [];
@@ -1627,6 +1696,7 @@ export class VectorStore implements IMemoryStore {
               message_text: string;
               recorded_at: string;
               timestamp: number;
+              agent_id: string;
             }
           | undefined;
 
@@ -1634,6 +1704,9 @@ export class VectorStore implements IMemoryStore {
           this.logger?.warn(`${TAG} [L0-search] record_id=${record_id} has vector but NO metadata (orphan)`);
           continue;
         }
+
+        // scope 过滤：老数据的 agent_id 是空串，统一当 shared
+        if (scope && scope.length > 0 && !scope.includes(meta.agent_id || 'shared')) continue;
 
         const score = 1.0 - distance;
         this.logger?.debug?.(
@@ -1650,6 +1723,7 @@ export class VectorStore implements IMemoryStore {
           score,
           recorded_at: meta.recorded_at,
           timestamp: meta.timestamp ?? 0,
+          agent_id: meta.agent_id ?? 'shared',
         });
       }
 
@@ -2072,7 +2146,7 @@ export class VectorStore implements IMemoryStore {
    *
    * **Fault-tolerant**: returns an empty array on any error.
    */
-  searchL1Fts(ftsQuery: string, limit = 20): FtsSearchResult[] {
+  searchL1Fts(ftsQuery: string, limit = 20, scope?: string[]): FtsSearchResult[] {
     if (this.degraded || !this.ftsAvailable) return [];
     try {
       const rows = this.stmtL1FtsSearch.all(ftsQuery, limit) as Array<{
@@ -2087,10 +2161,14 @@ export class VectorStore implements IMemoryStore {
         timestamp_start: string;
         timestamp_end: string;
         metadata_json: string;
+        agent_id: string;
         rank: number;
       }>;
 
-      return rows.map((r) => ({
+      return rows
+        // scope 过滤放在 map 之前：过滤之后才 map，省掉无谓的对象构造
+        .filter((r) => !scope || scope.length === 0 || scope.includes(r.agent_id || 'shared'))
+        .map((r) => ({
         record_id: r.record_id,
         content: r.content,
         type: r.type,
@@ -2103,6 +2181,7 @@ export class VectorStore implements IMemoryStore {
         session_key: r.session_key,
         session_id: r.session_id,
         metadata_json: r.metadata_json,
+        agent_id: r.agent_id ?? 'shared',
       }));
     } catch (err) {
       this.logger?.warn(
@@ -2122,7 +2201,7 @@ export class VectorStore implements IMemoryStore {
    *
    * **Fault-tolerant**: returns an empty array on any error.
    */
-  searchRecentL1(limit = 5): FtsSearchResult[] {
+  searchRecentL1(limit = 5, scope?: string[]): FtsSearchResult[] {
     if (this.degraded) return [];
     try {
       const rows = this.db.prepare(`
@@ -2130,6 +2209,7 @@ export class VectorStore implements IMemoryStore {
                session_key, session_id, timestamp_str,
                COALESCE(timestamp_start, '') AS timestamp_start,
                COALESCE(timestamp_end, '') AS timestamp_end,
+               COALESCE(agent_id, 'shared') AS agent_id,
                COALESCE(metadata_json, '{}') AS metadata_json
         FROM l1_records
         ORDER BY COALESCE(NULLIF(l1_records.timestamp_start, ''),
@@ -2148,9 +2228,12 @@ export class VectorStore implements IMemoryStore {
         timestamp_start: string;
         timestamp_end: string;
         metadata_json: string;
+        agent_id: string;
       }>;
 
-      return rows.map((r) => ({
+      return rows
+        .filter((r) => !scope || scope.length === 0 || scope.includes(r.agent_id || 'shared'))
+        .map((r) => ({
         record_id: r.record_id,
         content: r.content,
         type: r.type,
@@ -2164,6 +2247,7 @@ export class VectorStore implements IMemoryStore {
         session_key: r.session_key,
         session_id: r.session_id,
         metadata_json: r.metadata_json,
+        agent_id: r.agent_id ?? 'shared',
       }));
     } catch (err) {
       this.logger?.warn(
@@ -2182,7 +2266,7 @@ export class VectorStore implements IMemoryStore {
    *
    * **Fault-tolerant**: returns an empty array on any error.
    */
-  searchL0Fts(ftsQuery: string, limit = VectorStore.FTS_DEFAULT_LIMIT): L0FtsSearchResult[] {
+  searchL0Fts(ftsQuery: string, limit = VectorStore.FTS_DEFAULT_LIMIT, scope?: string[]): L0FtsSearchResult[] {
     if (this.degraded || !this.ftsAvailable) return [];
     try {
       const rows = this.stmtL0FtsSearch.all(ftsQuery, limit) as Array<{
@@ -2192,11 +2276,14 @@ export class VectorStore implements IMemoryStore {
         session_id: string;
         role: string;
         recorded_at: string;
+        agent_id: string;
         timestamp: number;
         rank: number;
       }>;
 
-      return rows.map((r) => ({
+      return rows
+        .filter((r) => !scope || scope.length === 0 || scope.includes(r.agent_id || 'shared'))
+        .map((r) => ({
         record_id: r.record_id,
         session_key: r.session_key,
         session_id: r.session_id,
@@ -2205,6 +2292,7 @@ export class VectorStore implements IMemoryStore {
         score: bm25RankToScore(r.rank),
         recorded_at: r.recorded_at,
         timestamp: r.timestamp ?? 0,
+        agent_id: r.agent_id ?? 'shared',
       }));
     } catch (err) {
       this.logger?.warn(
@@ -2245,13 +2333,17 @@ export class VectorStore implements IMemoryStore {
         .prepare("SELECT name FROM pragma_table_info('l1_fts')")
         .all() as Array<{ name: string }>;
       const hasV2Col = cols.some((c) => c.name === "content_original");
+      // v3 = 带 agent_id（Bot 维度）。只查 l1_fts 就够 —— 两张表永远同版本。
+      const hasAgentCol = cols.some((c) => c.name === "agent_id");
 
-      if (hasV2Col) {
-        return false; // Already v2 — no migration needed
+      if (hasV2Col && hasAgentCol) {
+        return false; // 已是当前版本
       }
 
-      // v1 → v2: drop both FTS tables (data will be repopulated by rebuildFtsIndex)
-      this.logger?.info(`${TAG} Migrating FTS5 tables from v1 to v2 (jieba segmented)`);
+      // 任一缺失 → DROP + 重建 + 回填（rebuildFtsIndex 会带上 agent_id）
+      this.logger?.info(
+        `${TAG} Migrating FTS5 tables (v2=${hasV2Col}, agent=${hasAgentCol}) — dropping and rebuilding`,
+      );
       this.db.exec("DROP TABLE IF EXISTS l1_fts");
       this.db.exec("DROP TABLE IF EXISTS l0_fts");
       return true;
@@ -2320,6 +2412,7 @@ export class VectorStore implements IMemoryStore {
             r.timestamp_start,
             r.timestamp_end,
             r.metadata_json,
+            agentIdOf(r.session_key),
           );
           l1Count++;
         } catch (err) {
@@ -2359,6 +2452,7 @@ export class VectorStore implements IMemoryStore {
             r.role,
             r.recorded_at,
             r.timestamp,
+            agentIdOf(r.session_key),
           );
           l0Count++;
         } catch (err) {

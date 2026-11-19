@@ -193,8 +193,7 @@ describe('buildBotHandoffTools', () => {
     expect(out).toContain('Do not answer on its behalf');
   })
 
-  it('入队失败：给一句话而不是抛异常', async () => {
-    const tools = buildBotHandoffTools(
+  it('入队失败：给一句话而不是抛异常', async () => {    const tools = buildBotHandoffTools(
       ctxOf({
         enqueue: async () => {
           throw new Error('hops.db 打不开');
@@ -205,6 +204,33 @@ describe('buildBotHandoffTools', () => {
     expect(typeof out).toBe('string');
     expect(out).toContain('not sent');
     expect(out).toContain('hops.db');
+  })
+
+  it('入队返回 already：如实说「早就派过了」，不许再承诺一次', async () => {
+    const tools = buildBotHandoffTools(
+      ctxOf({
+        enqueue: async () => 'already',
+      }),
+    );
+    const out = await tools[HANDOFF_TOOL].execute({ bot: 'Knowledge', task: '数一下未合并的 PR' });
+    expect(typeof out).toBe('string');
+    expect(out).toContain('already sent');
+    expect(out).toContain('will not run again');
+    expect(out).not.toContain('has not replied yet');
+  })
+
+  it('多跳时 threadId 用链起点，而不是当前这一跳的 scratch 会话', async () => {
+    const seen: any[] = [];
+    const tools = buildBotHandoffTools(
+      ctxOf({
+        sessionId: 'handoff-scratch-1',
+        threadId: 'sess-user',
+        depth: 1,
+        enqueue: async (work) => { seen.push(work); },
+      }),
+    );
+    await tools[HANDOFF_TOOL].execute({ bot: 'Knowledge', task: 'x' });
+    expect(seen[0].threadId).toBe('sess-user');
   })
 
   it('问不存在的 Bot：给一句话，不抛异常，并说出能问谁', async () => {

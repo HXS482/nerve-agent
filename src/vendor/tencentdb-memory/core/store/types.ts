@@ -52,6 +52,8 @@ export interface L1SearchResult {
   session_key: string;
   session_id: string;
   metadata_json: string;
+  /** 记忆属于谁/谁能看。空串=升级前的老数据（按 shared 处理）。 */
+  agent_id: string;
 }
 
 /** Result from an L1 FTS keyword search. */
@@ -69,6 +71,8 @@ export interface L1FtsResult {
   session_key: string;
   session_id: string;
   metadata_json: string;
+  /** 记忆属于谁/谁能看。空串=升级前的老数据（按 shared 处理）。 */
+  agent_id: string;
 }
 
 /** Filter options for querying L1 records. */
@@ -123,6 +127,7 @@ export interface L0SearchResult {
   score: number;
   recorded_at: string;
   timestamp: number;
+  agent_id: string;
 }
 
 /** Result from an L0 FTS keyword search. */
@@ -136,6 +141,7 @@ export interface L0FtsResult {
   score: number;
   recorded_at: string;
   timestamp: number;
+  agent_id: string;
 }
 
 /** Raw L0 row returned by query methods (used by L1 runner). */
@@ -270,13 +276,13 @@ export interface IMemoryStore {
 
   // ── L1 Search ────────────────────────────────────────────
 
-  searchL1Vector(queryEmbedding: Float32Array, topK?: number, queryText?: string): MaybePromise<L1SearchResult[]>;
-  searchL1Fts(ftsQuery: string, limit?: number): MaybePromise<L1FtsResult[]>;
+  searchL1Vector(queryEmbedding: Float32Array, topK?: number, queryText?: string, scope?: string[]): MaybePromise<L1SearchResult[]>;
+  searchL1Fts(ftsQuery: string, limit?: number, scope?: string[]): MaybePromise<L1FtsResult[]>;
   /**
    * Most recent L1 memories, ignoring the query. Optional capability used as a
    * recall fallback when lexical matching returns nothing.
    */
-  searchRecentL1?(limit?: number): MaybePromise<L1FtsResult[]>;
+  searchRecentL1?(limit?: number, scope?: string[]): MaybePromise<L1FtsResult[]>;
   searchL1Hybrid?(params: {
     query?: string;
     queryEmbedding?: Float32Array;
@@ -301,8 +307,8 @@ export interface IMemoryStore {
 
   // ── L0 Search ────────────────────────────────────────────
 
-  searchL0Vector(queryEmbedding: Float32Array, topK?: number, queryText?: string): MaybePromise<L0SearchResult[]>;
-  searchL0Fts(ftsQuery: string, limit?: number): MaybePromise<L0FtsResult[]>;
+  searchL0Vector(queryEmbedding: Float32Array, topK?: number, queryText?: string, scope?: string[]): MaybePromise<L0SearchResult[]>;
+  searchL0Fts(ftsQuery: string, limit?: number, scope?: string[]): MaybePromise<L0FtsResult[]>;
 
   pullProfiles?(): Promise<ProfileRecord[]>;
   syncProfiles?(records: ProfileSyncRecord[]): Promise<void>;

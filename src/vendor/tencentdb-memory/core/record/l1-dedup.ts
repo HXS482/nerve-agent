@@ -68,6 +68,11 @@ export async function batchDedup(params: {
   conflictRecallTopK?: number;
   /** Override embedding timeout for capture-path calls (milliseconds) */
   embeddingTimeoutMs?: number;
+  /**
+   * 可见 scope。去重候选必须是同一个 Bot 能看见的记录 ——
+   * 否则一条新记忆会被合并进**别人**的记忆里（内容被改写，原 Bot 的记录消失）。
+   */
+  scope?: string[];
   /** Host-neutral LLM runner — when provided, used instead of CleanContextRunner. */
   llmRunner?: LLMRunner;
 }): Promise<DedupDecision[]> {
@@ -107,14 +112,14 @@ export async function batchDedup(params: {
     // === Tier 1: Vector recall mode ===
     logger?.debug?.(`${TAG} Using vector recall mode (topK=${topK})`);
     try {
-      matches = await findCandidatesByVector(memories, vectorStore!, embeddingService, topK, logger, params.embeddingTimeoutMs);
+      matches = await findCandidatesByVector(memories, vectorStore!, embeddingService, topK, logger, params.embeddingTimeoutMs, params.scope);
     } catch (err) {
       logger?.warn?.(
         `${TAG} Vector recall failed, falling back to FTS keyword: ${err instanceof Error ? err.message : String(err)}`,
       );
       // Degrade to FTS keyword recall
       if (hasFts) {
-        matches = await findCandidatesByFts(memories, vectorStore!, logger);
+        matches = await findCandidatesByFts(memories, vectorStore!, logger, params.scope);
       } else {
         logger?.debug?.(`${TAG} FTS not available either, skipping conflict detection`);
         return storeAll();
@@ -123,7 +128,7 @@ export async function batchDedup(params: {
   } else if (hasFts) {
     // === Tier 2: FTS keyword recall ===
     logger?.debug?.(`${TAG} Using FTS keyword recall mode (no embedding service or no vector data)`);
-    matches = await findCandidatesByFts(memories, vectorStore!, logger);
+    matches = await findCandidatesByFts(memories, vectorStore!, logger, params.scope);
   } else {
     // Shouldn't reach here given the fast-path check above, but be defensive
     logger?.debug?.(`${TAG} No usable recall path, skipping conflict detection`);
@@ -213,6 +218,7 @@ async function findCandidatesByVector(
   topK: number,
   logger?: Logger,
   embeddingTimeoutMs?: number,
+  scope?: string[],
 ): Promise<CandidateMatch[]> {
   const newRecordIds = new Set(memories.map((m) => m.record_id));
 
@@ -227,7 +233,7 @@ async function findCandidatesByVector(
     const queryVec = embeddings[i];
 
     // Vector search top-K (request extra to account for self-batch filtering)
-    const searchResults = await vectorStore.searchL1Vector(queryVec, topK + memories.length, mem.content);
+    const searchResults = await vectorStore.searchL1Vector(queryVec, topK + memories.length, mem.content, scope);
 
     // Exclude records from current batch, convert to MemoryRecord format
     const candidates: MemoryRecord[] = searchResults
@@ -267,6 +273,7 @@ async function findCandidatesByFts(
   memories: Array<ExtractedMemory & { record_id: string }>,
   vectorStore: IMemoryStore,
   _logger?: Logger,
+  scope?: string[],
 ): Promise<CandidateMatch[]> {
   const newRecordIds = new Set(memories.map((m) => m.record_id));
   const matches: CandidateMatch[] = [];
@@ -274,7 +281,7 @@ async function findCandidatesByFts(
   for (const mem of memories) {
     const ftsQuery = buildFtsQuery(mem.content);
     if (ftsQuery) {
-      const ftsResults = await vectorStore.searchL1Fts(ftsQuery, 10);
+      const ftsResults = await vectorStore.searchL1Fts(ftsQuery, 10, scope);
       // Filter out records from the current batch
       const candidates: MemoryRecord[] = ftsResults
         .filter((r) => !newRecordIds.has(r.record_id))

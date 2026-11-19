@@ -60,14 +60,15 @@ describe('Scheduler', () => {
     expect(store.listByBot(bot.id)[0].consecutiveFailures).toBe(1)
   })
 
-  it('Bot 已删除的 routine 跳过不计失败', async () => {
+  it('Bot 已删除的 routine 计入失败（否则它永远挂着一个到不了的下次触发时间）', async () => {
     const bot = await bots.create({ name: 'temp' })
     const r = store.create({ botId: bot.id, sessionId: 's1', instruction: 'x', schedule: 'interval:15m', createdBy: 'model' })
     store.advanceStamp(r.id, Date.now() - 17 * 60_000)
     await bots.remove(bot.id)
     const n = await mkSched().sweep()
-    expect(n).toBe(0)
-    expect(store.get(r.id)!.consecutiveFailures).toBe(0)
+    expect(n).toBe(1)
+    expect(store.get(r.id)!.consecutiveFailures).toBe(1)
+    expect(dispatched).toHaveLength(0)
   })
 
   it('成功清零失败计数', async () => {

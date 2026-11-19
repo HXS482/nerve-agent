@@ -55,20 +55,38 @@ export class BotRegistry {
     return join(this.baseDir, `${id}.json`)
   }
 
+  /**
+   * 字段归一化。read() 与 list() 共用同一份，别再各写一遍 ——
+   * 只改一处会让「自己眼里」和「同事眼里」的同一个 Bot 长得不一样。
+   *
+   * canAskBots 必须在这里收窄类型：文件是手改得动的，写成字符串时
+   * `grant.includes(id)` 会退化成子串匹配（能越权问到不该问的 Bot），
+   * 写成数字/对象则让整轮抛错。非法值一律当 null（= 老 Bot 的默认，全开）。
+   */
+  private normalize(raw: BotInfo): BotInfo {
+    const grant = raw.canAskBots
+    return {
+      ...raw,
+      group: raw.group ?? '',
+      emoji: raw.emoji ?? '',
+      avatarColor: raw.avatarColor ?? '',
+      avatarOrb: raw.avatarOrb ?? true,
+      canAskBots: Array.isArray(grant)
+        ? grant.filter((id): id is string => typeof id === 'string')
+        : null,
+      boundSkills: Array.isArray(raw.boundSkills)
+        ? raw.boundSkills.filter((id): id is string => typeof id === 'string')
+        : [],
+      boundMcp: Array.isArray(raw.boundMcp)
+        ? raw.boundMcp.filter((id): id is string => typeof id === 'string')
+        : [],
+    }
+  }
+
   private async read(id: string): Promise<BotInfo | null> {
     try {
       const raw = JSON.parse(await readFile(this.path(id), 'utf-8')) as BotInfo
-      // 兼容改造前落盘的 Bot 文件（没有 group / emoji 字段）
-      return {
-        ...raw,
-        group: raw.group ?? '',
-        emoji: raw.emoji ?? '',
-        avatarColor: raw.avatarColor ?? '',
-        avatarOrb: raw.avatarOrb ?? true,
-        canAskBots: raw.canAskBots ?? null,
-        boundSkills: raw.boundSkills ?? [],
-        boundMcp: raw.boundMcp ?? [],
-      }
+      return this.normalize(raw)
     } catch {
       return null // 不存在或损坏都当没有
     }
@@ -86,16 +104,7 @@ export class BotRegistry {
       if (!name.endsWith('.json')) continue
       try {
         const raw = JSON.parse(await readFile(join(this.baseDir, name), 'utf-8')) as BotInfo
-        bots.push({
-          ...raw,
-          group: raw.group ?? '',
-          emoji: raw.emoji ?? '',
-          avatarColor: raw.avatarColor ?? '',
-          avatarOrb: raw.avatarOrb ?? true,
-          canAskBots: raw.canAskBots ?? null,
-          boundSkills: raw.boundSkills ?? [],
-          boundMcp: raw.boundMcp ?? [],
-        })
+        bots.push(this.normalize(raw))
       } catch {
         // 损坏文件跳过，不炸整体
       }

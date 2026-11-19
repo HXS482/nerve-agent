@@ -92,6 +92,7 @@ export async function executeMemorySearch(params: {
   scene?: string;
   vectorStore?: IMemoryStore;
   embeddingService?: EmbeddingService;
+  scope?: string[];
   logger?: Logger;
 }): Promise<MemorySearchResult> {
   const {
@@ -101,6 +102,7 @@ export async function executeMemorySearch(params: {
     scene: sceneFilter,
     vectorStore,
     embeddingService,
+    scope,
     logger,
   } = params;
 
@@ -153,7 +155,7 @@ export async function executeMemorySearch(params: {
           return [];
         }
         logger?.debug?.(`${TAG} [hybrid-fts] FTS5 query: "${ftsQuery}"`);
-        const ftsResults = await vectorStore.searchL1Fts(ftsQuery, candidateK);
+        const ftsResults = await vectorStore.searchL1Fts(ftsQuery, candidateK, scope);
         logger?.debug?.(`${TAG} [hybrid-fts] FTS5 returned ${ftsResults.length} candidates`);
         return ftsResults.map((r) => ({
           id: r.record_id,
@@ -182,7 +184,7 @@ export async function executeMemorySearch(params: {
         logger?.debug?.(
           `${TAG} [hybrid-vec] Embedding OK, dims=${queryEmbedding.length}, searching top-${candidateK}...`,
         );
-        const vecResults: L1SearchResult[] = await vectorStore.searchL1Vector(queryEmbedding, candidateK, query);
+        const vecResults: L1SearchResult[] = await vectorStore.searchL1Vector(queryEmbedding, candidateK, query, scope);
         logger?.debug?.(`${TAG} [hybrid-vec] Vector search returned ${vecResults.length} candidates`);
         return vecResults.map((r) => ({
           id: r.record_id,

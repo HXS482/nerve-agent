@@ -77,7 +77,18 @@ export class Scheduler {
         this.deps.store.advanceStamp(r.id, now)
         const bot = await this.deps.bots.get(r.botId)
         if (!bot) {
-          console.warn(`[Scheduler] routine ${r.id} 的 Bot ${r.botId} 不存在，跳过`)
+          /*
+           * Bot 没了，这条 routine 也就永远投递不出去。以前是直接 continue：
+           * 不计失败、不停用，UI 上它只是挂着一个永远到不了的「下次触发时间」。
+           * 走失败计数，让疲劳规则在连续 10 次之后把它熄火 —— 至少界面上看得见。
+           */
+          console.warn(`[Scheduler] routine ${r.id} 的 Bot ${r.botId} 不存在，计一次失败`)
+          try {
+            this.deps.store.recordFailure(r.id)
+          } catch (err) {
+            console.error(`[Scheduler] 记录 routine ${r.id} 的执行结果失败:`, err)
+          }
+          fired++
           continue
         }
         try {

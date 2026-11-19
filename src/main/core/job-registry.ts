@@ -32,6 +32,8 @@ export interface JobResult {
   truncated: boolean
   startedAt: number
   endedAt: number
+  /** 起这条作业的会话。drainFinished 靠它只把本会话的作业交回本会话。 */
+  ownerSessionId?: string
 }
 
 interface Job {
@@ -44,6 +46,7 @@ interface Job {
   startedAt: number
   endedAt?: number
   exited: Promise<JobResult>
+  ownerSessionId?: string
 }
 
 /** 保留头尾、丢中间。一开始就超限的极端情况下只留尾部。 */
@@ -85,6 +88,8 @@ export class JobRegistry {
       cwd: string
       env?: NodeJS.ProcessEnv
       inlineWaitMs: number
+      /** 起这条命令的会话，用于把后台结果只交回给它。 */
+      sessionId?: string
     },
   ): Promise<{ kind: 'done'; result: JobResult } | { kind: 'background'; jobId: string }> {
     const spawned = this.spawnJob(command, opts)
@@ -102,16 +107,16 @@ export class JobRegistry {
   }
 
   /** 启动一个后台作业。立刻返回 jobId，不等它跑完。 */
-  start(command: string, opts: { shell?: string; args?: string[]; cwd: string; env?: NodeJS.ProcessEnv }): string {
+  start(command: string, opts: { shell?: string; args?: string[]; cwd: string; env?: NodeJS.ProcessEnv; sessionId?: string }): string {
     const shell = opts.shell ?? process.env.ComSpec ?? 'cmd.exe'
     const args = opts.args ?? ['/c', command]
-    return this.spawnJob(command, { shell, args, cwd: opts.cwd, env: opts.env }).id
+    return this.spawnJob(command, { shell, args, cwd: opts.cwd, env: opts.env, sessionId: opts.sessionId }).id
   }
 
   /** 真正的 spawn + 输出收集。start 和 waitOrAdopt 共用，保证只有一份实现。 */
   private spawnJob(
     command: string,
-    opts: { shell: string; args: string[]; cwd: string; env?: NodeJS.ProcessEnv },
+    opts: { shell: string; args: string[]; cwd: string; env?: NodeJS.ProcessEnv; sessionId?: string },
   ): { id: string; exited: Promise<JobResult> } {
     const id = randomUUID()
     const shell = opts.shell
@@ -132,6 +137,7 @@ export class JobRegistry {
       truncated: false,
       startedAt: Date.now(),
       exited: undefined as unknown as Promise<JobResult>,
+      ownerSessionId: opts.sessionId,
     }
 
     job.exited = new Promise<JobResult>((resolve) => {
@@ -188,6 +194,7 @@ export class JobRegistry {
       truncated: job.truncated,
       startedAt: job.startedAt,
       endedAt: job.endedAt ?? Date.now(),
+      ownerSessionId: job.ownerSessionId,
     }
   }
 
@@ -274,10 +281,18 @@ export class JobRegistry {
    *
    * 这是「不用轮询」的关键：作业在后面跑完，模型下一步就能看到结果，
    * 不必自己想起来去 visit_jobs（实测它想不起来，会宁可 echo 空转）。
+   *
+   * 给了 sessionId 就只交回这个会话起的作业：注册表是进程级的，
+   * 不加这个过滤，A 会话的后台输出会被 B 的交接轮截走（模型会以为是自己跑的）。
+   * 没给 sessionId 的作业（老调用点）仍然交给任何人 —— 宁可多给，不能丢。
    */
-  drainFinished(): JobResult[] {
-    const out = [...this.finished.values()]
-    this.finished.clear()
+  drainFinished(sessionId?: string): JobResult[] {
+    const out: JobResult[] = []
+    for (const [id, r] of this.finished) {
+      if (sessionId && r.ownerSessionId && r.ownerSessionId !== sessionId) continue
+      out.push(r)
+      this.finished.delete(id)
+    }
     return out
   }
 

@@ -31,8 +31,8 @@ describe('buildTools — 传给子代理的 MCP 工具条目', () => {
       [{ serverName: 'huggingface', toolName: 'hf_fs', tool: { description: 'd', parameters: { type: 'object' } } }],
       {}, new Map(),
       undefined, undefined, undefined, tmp,
+      'bot_x', { boundSkills: [], boundMcp: [] }, undefined,
     )
-
     // 主循环侧行为不变
     expect(allToolExecutors.get('hf_fs')).toBe(callTool)
 

@@ -150,6 +150,13 @@ export interface HandoffCtx {
   fromBotId: string
   /** 这一轮在哪个会话里跑 —— 解析不出来就没有地方让对方的答案落脚。 */
   sessionId: string
+  /**
+   * 答复最终该落回的会话（这条链的起点）。
+   *
+   * 第一跳时等于 sessionId；被派起来的一轮跑在一次性 scratch 会话里，此时必须用
+   * 起点会话，否则传给下一跳的 threadId 是个马上会被删掉的会话，答复就永久丢在那。
+   */
+  threadId?: string
   /** 这一轮的工作目录：派出去的活应该在同一片地方干。 */
   cwd: string
 
@@ -192,7 +199,7 @@ export interface HandoffCtx {
     chain: string[]
     /** 答复落在哪里，见 DeliverMode。缺省当作 'reply'。 */
     deliver?: DeliverMode
-  }) => Promise<void>
+  }) => Promise<'queued' | 'already' | void>
 }
 
 type ToolDef = {
@@ -468,13 +475,14 @@ export function buildBotHandoffTools(ctx: HandoffCtx): Record<string, ToolDef> {
           : inferDeliver(String(args?.task ?? ''))
       const from = await ctx.getBot(ctx.fromBotId)
 
+      let outcome: 'queued' | 'already' | void
       try {
-        await ctx.enqueue({
+        outcome = await ctx.enqueue({
           fromBotId: ctx.fromBotId,
           fromName: from?.name,
           toBotId: found.id,
           toName: found.name,
-          threadId: ctx.sessionId,
+          threadId: ctx.threadId ?? ctx.sessionId,
           cwd: ctx.cwd,
           envelope,
           deliver,
@@ -504,6 +512,20 @@ export function buildBotHandoffTools(ctx: HandoffCtx): Record<string, ToolDef> {
         deliver === 'message'
           ? "in " + found.name + "'s own conversation — the person will see it there, under its name"
           : 'in this conversation, under its own name'
+      if (outcome === 'already') {
+        /*
+         * 幂等键命中了同一份交接。以前这里是静默返回，工具照样回「已交给 B」——
+         * 用户在同一会话里再说一次「让 B 做 X」时，得到的是一个不会发生的承诺。
+         * 如实说出来，并允许模型自己决定要不要换个说法再派。
+         */
+        return (
+          'That exact handoff to ' +
+          found.name +
+          ' was already sent earlier and has not answered yet — it will not run again. ' +
+          'If the person wants something different, restate the task in different words ' +
+          'so it is a new handoff. Do not tell them it was sent again.'
+        )
+      }
       return (
         'Handed over to ' +
         found.name +

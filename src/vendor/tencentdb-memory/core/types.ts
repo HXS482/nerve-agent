@@ -231,6 +231,8 @@ export interface MemorySearchParams {
   limit?: number;
   type?: string;
   scene?: string;
+  /** 可见 scope（自己的 + shared）；不传 = 全库（只有老调用方会漏）。 */
+  scope?: string[];
 }
 
 /** Search parameters for L0 conversation search. */
@@ -238,4 +240,6 @@ export interface ConversationSearchParams {
   query: string;
   limit?: number;
   sessionKey?: string;
+  /** 可见 scope（自己的 + shared）；不传 = 全库（只有老调用方会漏）。 */
+  scope?: string[];
 }

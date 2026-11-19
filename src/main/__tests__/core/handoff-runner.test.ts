@@ -209,6 +209,30 @@ describe('handoff runner 的投递分支', () => {
     await runner.sweep()
     expect(queue.stats().done).toBe(1)
   })
+
+  it('跑这一行期间会周期性续租（租约 120s，一跳可能跑几分钟）', async () => {
+    const queue = fakeQueue()
+    const renewed: string[] = []
+    ;(queue as any).renew = (key: string) => { renewed.push(key); return true }
+    let finishHop!: () => void
+    const runner = createHandoffRunner({
+      queue,
+      owner: 'w1',
+      retryBaseMs: 0,
+      renewEveryMs: 5,
+      delivery: {
+        run: () => new Promise<string>((r) => { finishHop = () => r('done') }),
+        appendBotMessage: async () => {},
+        resolveBotSession: async (_b, f) => f,
+      },
+    })
+    queue.offer('k1', work())
+    const sweep = runner.sweep()
+    await new Promise((r) => setTimeout(r, 30))
+    finishHop()
+    await sweep
+    expect(renewed.filter((k) => k === 'k1').length).toBeGreaterThan(0)
+  })
 })
 
 /** better-sqlite3 是给 Electron ABI 编的，node 下 require 会失败 —— 那就跳过，而不是假绿。 */

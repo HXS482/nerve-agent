@@ -12,6 +12,7 @@
  */
 
 import type { MemoryRecord } from "../record/l1-writer.js";
+import { parseAgentId as agentIdOf } from "../../utils/scope.js";
 import type { EmbeddingProviderInfo } from "./embedding.js";
 import type {
   IMemoryStore,
@@ -584,6 +585,7 @@ export class TcvdbMemoryStore implements IMemoryStore {
         created_time: epochMsToIso(Number(doc.created_time_ms ?? 0)),
         updated_time: epochMsToIso(Number(doc.updated_time_ms ?? 0)),
         metadata_json: String(doc.metadata_json ?? "{}"),
+        agent_id: String(doc.agent_id ?? "") || agentIdOf(String(doc.session_key ?? "")),
       }));
     } catch (err) {
       this.logger?.warn(`${TAG} [L1-query] FAILED: ${err instanceof Error ? err.message : String(err)}`);
@@ -1155,6 +1157,7 @@ export class TcvdbMemoryStore implements IMemoryStore {
         session_key: String(doc.session_key ?? ""),
         session_id: String(doc.session_id ?? ""),
         metadata_json: String(doc.metadata_json ?? "{}"),
+        agent_id: String(doc.agent_id ?? "") || agentIdOf(String(doc.session_key ?? "")),
       });
     }
     return results;
@@ -1173,6 +1176,7 @@ export class TcvdbMemoryStore implements IMemoryStore {
         score: Number(doc.score ?? 0),
         recorded_at: epochMsToIso(Number(doc.recorded_at_ms ?? 0)),
         timestamp: Number(doc.timestamp ?? 0),
+        agent_id: String(doc.agent_id ?? "") || agentIdOf(String(doc.session_key ?? "")),
       });
     }
     return results;

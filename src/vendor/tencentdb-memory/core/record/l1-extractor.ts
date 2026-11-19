@@ -19,6 +19,7 @@ import { writeMemory, generateMemoryId } from "./l1-writer.js";
 import type { ExtractedMemory, MemoryRecord, MemoryType, DedupDecision } from "./l1-writer.js";
 import { CleanContextRunner } from "../../utils/clean-context-runner.js";
 import { sanitizeJsonForParse, shouldExtractL1 } from "../../utils/sanitize.js";
+import { parseAgentId as agentIdOf, visibleAgentIds } from "../../utils/scope.js";
 import type { IMemoryStore } from "../store/types.js";
 import type { EmbeddingService } from "../store/embedding.js";
 import { report } from "../report/reporter.js";
@@ -241,6 +242,7 @@ export async function extractL1Memories(params: {
         conflictRecallTopK: options.conflictRecallTopK,
         embeddingTimeoutMs: options.embeddingTimeoutMs,
         llmRunner: options.llmRunner,
+        scope: visibleAgentIds(agentIdOf(sessionKey)),
       });
 
       const applied = await applyDecisions({

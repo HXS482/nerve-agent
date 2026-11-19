@@ -90,6 +90,7 @@ export async function executeConversationSearch(params: {
   query: string;
   limit: number;
   sessionKey?: string;
+  scope?: string[];
   vectorStore?: IMemoryStore;
   embeddingService?: EmbeddingService;
   logger?: Logger;
@@ -98,6 +99,7 @@ export async function executeConversationSearch(params: {
     query,
     limit,
     sessionKey: sessionFilter,
+    scope,
     vectorStore,
     embeddingService,
     logger,
@@ -152,7 +154,7 @@ export async function executeConversationSearch(params: {
           return [];
         }
         logger?.debug?.(`${TAG} [hybrid-fts] FTS5 query: "${ftsQuery}"`);
-        const ftsResults = await vectorStore.searchL0Fts(ftsQuery, candidateK);
+        const ftsResults = await vectorStore.searchL0Fts(ftsQuery, candidateK, scope);
         logger?.debug?.(`${TAG} [hybrid-fts] FTS5 returned ${ftsResults.length} candidates`);
         return ftsResults.map((r) => ({
           id: r.record_id,
@@ -179,7 +181,7 @@ export async function executeConversationSearch(params: {
         logger?.debug?.(
           `${TAG} [hybrid-vec] Embedding OK, dims=${queryEmbedding.length}, searching top-${candidateK}...`,
         );
-        const vecResults: L0SearchResult[] = await vectorStore.searchL0Vector(queryEmbedding, candidateK, query);
+        const vecResults: L0SearchResult[] = await vectorStore.searchL0Vector(queryEmbedding, candidateK, query, scope);
         logger?.debug?.(`${TAG} [hybrid-vec] Vector search returned ${vecResults.length} candidates`);
         return vecResults.map((r) => ({
           id: r.record_id,
