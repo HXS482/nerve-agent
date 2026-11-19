@@ -24,7 +24,7 @@ import Database from "better-sqlite3";
 import type { Database as DatabaseType, Statement as StatementType } from "better-sqlite3";
 import type { MemoryRecord } from "../record/l1-writer.js";
 import type { EmbeddingProviderInfo } from "./embedding.js";
-import { parseAgentId as agentIdOf, visibleAgentIds } from "../../utils/scope.js";
+import { parseAgentId as agentIdOf, visibleAgentIds, agentIdForType } from "../../utils/scope.js";
 import type {
   IMemoryStore,
   StoreCapabilities,
@@ -1135,7 +1135,7 @@ export class VectorStore implements IMemoryStore {
           record.scene_name,
           record.sessionKey,
           record.sessionId,
-          agentIdOf(record.sessionKey),
+          agentIdForType(record.type, record.sessionKey),
           tsStr,
           tsStart,
           tsEnd,
@@ -1171,7 +1171,7 @@ export class VectorStore implements IMemoryStore {
               tsStart,
               tsEnd,
               JSON.stringify(record.metadata),
-              agentIdOf(record.sessionKey),
+          agentIdForType(record.type, record.sessionKey),
             );
           } catch (ftsErr) {
             // FTS write failure is non-fatal — log and continue

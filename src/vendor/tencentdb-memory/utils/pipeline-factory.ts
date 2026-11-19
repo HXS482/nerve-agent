@@ -32,6 +32,7 @@ import {
   diffStoreBinding,
   type Manifest,
 } from "./manifest.js";
+import { isUserTrackType } from "./scope.js";
 import { SceneExtractor } from "../core/scene/scene-extractor.js";
 import { PersonaTrigger } from "../core/persona/persona-trigger.js";
 import { PersonaGenerator } from "../core/persona/persona-generator.js";
@@ -497,7 +498,19 @@ export function createL2Runner(opts: {
         `${TAG} [L2] Incremental query returned ${memRecords.length} record(s) (session=${sessionKey})`,
       );
 
-      records = memRecords.map((r) => ({
+      /*
+       * 只把**用户档**喂给 L2 场景提取。
+       *
+       * scene_blocks 是全局共享的：所有 Bot 的系统提示里都会带上场景导航。
+       * 如果 agent_skill / agent_pitfall 也进去，等于把某个 Bot 的私有经验
+       * 蒸馏成所有人都能读到的场景 —— P0 按 agent_id 做的隔离就白做了。
+       */
+      const userTrackRecords = memRecords.filter((r) => isUserTrackType(r.type))
+      logger.debug?.(
+        `${TAG} [L2] User-track filter: ${userTrackRecords.length}/${memRecords.length} record(s) eligible for scene extraction`,
+      )
+
+      records = userTrackRecords.map((r) => ({
         content: r.content,
         created_at: r.createdAt,
         id: r.id,

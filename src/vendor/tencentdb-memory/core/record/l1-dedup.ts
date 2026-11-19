@@ -314,7 +314,13 @@ async function findCandidatesByFts(
 // Result parsing
 // ============================
 
-const VALID_TYPES: MemoryType[] = ["persona", "episodic", "instruction"];
+const VALID_TYPES: MemoryType[] = [
+  "persona",
+  "episodic",
+  "instruction",
+  "agent_skill",
+  "agent_pitfall",
+];
 
 /**
  * Parse the LLM's batch conflict detection JSON response.

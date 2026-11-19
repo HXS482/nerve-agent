@@ -87,3 +87,38 @@ export function visibleAgentIds(botId: string | null | undefined): string[] {
   const bot = (botId ?? "").trim() || SHARED_SCOPE;
   return bot === SHARED_SCOPE ? [SHARED_SCOPE] : [bot, SHARED_SCOPE];
 }
+
+/**
+ * 用户档的类型。这三个进 `shared`，所有 Bot 看同一份。
+ *
+ * 判断依据是**这条记忆描述的是谁**：描述用户 → 共享；描述我自己怎么干活 → 私有。
+ * 「用户要求 AI 以后别附带引用标记」是 instruction 但描述的是用户对 AI 的期望，
+ * 属于用户档 —— 它对所有 Bot 都成立。
+ */
+const USER_TRACK_TYPES = new Set(["persona", "episodic", "instruction"]);
+
+/**
+ * 这条记忆落在哪个档。写入时由 type 决定，不跟着 session 走。
+ *
+ * 为什么不是「全跟着 session 的 Bot 走」：那样子类记忆（用户是谁）会被
+ * 每个 Bot 各存一份，四份档案迟早互相矛盾。而 Bot 档的记忆存进 shared
+ * 更糟 —— nerve 那句「visit_jobs 的 command 必须可选」会污染 redbook 的上下文。
+ *
+ * @param type      记忆类型
+ * @param sessionKey 当前会话的 scope key（`agent:<botId>:<sessionId>`）
+ */
+export function agentIdForType(
+  type: string | null | undefined,
+  sessionKey: string | null | undefined,
+): string {
+  const t = (type ?? "").trim();
+  if (USER_TRACK_TYPES.has(t)) return SHARED_SCOPE;
+  // Bot 档：跟着会话所属的 Bot。解析出 shared 说明没有 Bot 维度（老数据 / 种子），
+  // 那就只能落 shared —— 总比丢掉强。
+  return parseAgentId(sessionKey);
+}
+
+/** 便捷判断：这个类型是不是用户档（共享）。 */
+export function isUserTrackType(type: string | null | undefined): boolean {
+  return USER_TRACK_TYPES.has((type ?? "").trim());
+}

@@ -26,8 +26,21 @@ import type { EmbeddingService } from "../store/embedding.js";
 // Types
 // ============================
 
-/** v3: 3 memory types aligned with Kenty's extraction prompt */
-export type MemoryType = "persona" | "episodic" | "instruction";
+/**
+ * 记忆类型。前三个是**用户档**（全局唯一，所有 Bot 读同一份），
+ * 后两个是**Bot 档**（只有这个 Bot 自己看得见）。
+ *
+ * 分开的理由：四个 Bot 各记一份「老板是谁」认知必然漂移；
+ * 而「我怎么修的这个 bug」对别的 Bot 是噪音。
+ */
+export type MemoryType =
+  // ── 用户档：共享 ──
+  | "persona"       // 用户是谁、偏好、技能、价值观
+  | "episodic"      // 客观发生的事件、决定、结果
+  | "instruction"   // 用户对 AI 的长期行为规则
+  // ── Bot 档：私有 ──
+  | "agent_skill"   // 我（这个 Bot）验证过有效的做法
+  | "agent_pitfall" // 我踩过的坑、以及它为什么是坑
 
 /** Metadata for episodic memories (activity time range) */
 export interface EpisodicMetadata {

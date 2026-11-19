@@ -39,6 +39,7 @@ const MEMORY_TOOLS_GUIDE = `<memory-tools-guide>
 
 ### ⚠️ 调用次数限制
 每轮对话中，tdai_memory_search 和 tdai_conversation_search **合计最多调用 3 次**。
+- 两个工具都只看得到**你自己**的记忆和**共享**的用户档；同事的私有经验你搜不到，这是设计如此，不是故障。
 - 首次搜索无结果时，可换关键词或换工具重试，但总调用次数不要超过 3 次。
 - 若 3 次搜索后仍无结果，说明该信息不在记忆中，请直接根据已有信息回复用户，不要继续搜索。
 </memory-tools-guide>`
@@ -207,8 +208,19 @@ async function performAutoRecallInner(params: {
   // Dynamic part: L1 relevant memories (changes every turn) → prependContext (user prompt)
   let prependContext: string | undefined;
   if (memoryLines.length > 0) {
-    prependContext =
-      `<relevant-memories>\n以下是当前对话召回的相关记忆，不代表当前任务进程，仅作为参考：\n\n${memoryLines.join("\n")}\n</relevant-memories>`;
+    const { user: userLines, agent: agentLines } = partitionMemoryLines(memoryLines);
+    const parts: string[] = [];
+    if (userLines.length > 0) {
+      parts.push(
+        `<relevant-memories>\n以下是当前对话召回的相关记忆，不代表当前任务进程，仅作为参考：\n\n${userLines.join("\n")}\n</relevant-memories>`,
+      );
+    }
+    if (agentLines.length > 0) {
+      parts.push(
+        `<my-experience>\n以下是**你自己**（当前这个 Bot）过去的经验，只有你记得。参考它们可以少走弯路，但不要当成对用户的了解：\n\n${agentLines.join("\n")}\n</my-experience>`,
+      );
+    }
+    prependContext = parts.join("\n\n");
   }
 
   // Append memory tools usage guide to the stable part so the agent knows
@@ -698,6 +710,33 @@ interface FormatableMemory {
   activity_end_time?: string;
   /** Activity point-in-time (点时间: when it happened), may be empty */
   timestamp?: string;
+}
+
+/*
+ * 记忆分两档，注入时也分两块。
+ *
+ * 为什么不混在一起：用户档说的是「老板是谁」，Bot 档说的是「我怎么干活」。
+ * 混成一段时模型分不清哪条是事实、哪条是自己的旧经验，于是会拿自己的工作记忆
+ * 去回答关于用户的问题 —— 这种错很难从输出里看出来。
+ */
+const AGENT_TRACK_TYPES = new Set(["agent_skill", "agent_pitfall"]);
+
+/**
+ * 按档拆开已格式化的记忆行。
+ *
+ * 行格式是 `- [type|scene] content`，type 后面可能跟 `|scene`。
+ * 解析不出类型的行一律当用户档 —— 宁可多给事实，也不要把自己的经验当事实喂回去。
+ */
+function partitionMemoryLines(memoryLines: string[]): { user: string[]; agent: string[] } {
+  const user: string[] = [];
+  const agent: string[] = [];
+  for (const line of memoryLines) {
+    const m = line.match(/^-+\s*\[([^\]|]+)/);
+    const type = (m?.[1] ?? "").trim();
+    if (AGENT_TRACK_TYPES.has(type)) agent.push(line);
+    else user.push(line);
+  }
+  return { user, agent };
 }
 
 function formatMemoryLine(m: FormatableMemory): string {

@@ -19,7 +19,7 @@ import { writeMemory, generateMemoryId } from "./l1-writer.js";
 import type { ExtractedMemory, MemoryRecord, MemoryType, DedupDecision } from "./l1-writer.js";
 import { CleanContextRunner } from "../../utils/clean-context-runner.js";
 import { sanitizeJsonForParse, shouldExtractL1 } from "../../utils/sanitize.js";
-import { parseAgentId as agentIdOf, visibleAgentIds } from "../../utils/scope.js";
+import { parseAgentId as agentIdOf, visibleAgentIds, isUserTrackType, SHARED_SCOPE } from "../../utils/scope.js";
 import type { IMemoryStore } from "../store/types.js";
 import type { EmbeddingService } from "../store/embedding.js";
 import { report } from "../report/reporter.js";
@@ -231,37 +231,57 @@ export async function extractL1Memories(params: {
   let writeFailures = 0;
 
   if (enableDedup) {
-    try {
-      const decisions = await batchDedup({
-        memories: memoriesWithIds,
-        config,
-        logger,
-        model: options.model,
-        vectorStore: options.vectorStore,
-        embeddingService: options.embeddingService,
-        conflictRecallTopK: options.conflictRecallTopK,
-        embeddingTimeoutMs: options.embeddingTimeoutMs,
-        llmRunner: options.llmRunner,
-        scope: visibleAgentIds(agentIdOf(sessionKey)),
-      });
+    /*
+     * 两档分开去重。
+     *
+     * 不能合批：去重会把新记忆合并进**候选记录**里（内容被改写、旧记录被删）。
+     * 如果一批里混着用户档和 Bot 档，nerve 的 agent_skill 就可能被并进一条
+     * 所有 Bot 都看得见的 shared 记录 —— 那等于把自己的工作记忆广播出去。
+     * 反过来，用户档被并进 Bot 私有记录也一样糟：老板的偏好从此只有一个 Bot 记得。
+     *
+     * 所以：用户档只跟 shared 比，Bot 档只跟自己比。
+     */
+    const botId = agentIdOf(sessionKey);
+    const tracks: Array<{ scope: string[]; memories: typeof memoriesWithIds }> = [
+      { scope: [SHARED_SCOPE], memories: memoriesWithIds.filter((m) => isUserTrackType(m.type)) },
+      { scope: botId === SHARED_SCOPE ? [SHARED_SCOPE] : [botId], memories: memoriesWithIds.filter((m) => !isUserTrackType(m.type)) },
+    ];
 
-      const applied = await applyDecisions({
-        memoriesWithIds,
-        decisions,
-        baseDir,
-        sessionKey,
-        sessionId,
-        logger,
-        vectorStore: options.vectorStore,
-        embeddingService: options.embeddingService,
-      });
-      storedRecords = applied.records;
-      writeFailures = applied.failures;
-    } catch (err) {
-      logger?.warn?.(`${TAG} Batch dedup failed, storing all as new: ${err instanceof Error ? err.message : String(err)}`);
-      const applied = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
-      storedRecords = applied.records;
-      writeFailures = applied.failures;
+    storedRecords = [];
+    for (const track of tracks) {
+      if (track.memories.length === 0) continue;
+      try {
+        const decisions = await batchDedup({
+          memories: track.memories,
+          config,
+          logger,
+          model: options.model,
+          vectorStore: options.vectorStore,
+          embeddingService: options.embeddingService,
+          conflictRecallTopK: options.conflictRecallTopK,
+          embeddingTimeoutMs: options.embeddingTimeoutMs,
+          llmRunner: options.llmRunner,
+          scope: track.scope,
+        });
+
+        const applied = await applyDecisions({
+          memoriesWithIds: track.memories,
+          decisions,
+          baseDir,
+          sessionKey,
+          sessionId,
+          logger,
+          vectorStore: options.vectorStore,
+          embeddingService: options.embeddingService,
+        });
+        storedRecords.push(...applied.records);
+        writeFailures += applied.failures;
+      } catch (err) {
+        logger?.warn?.(`${TAG} Batch dedup failed, storing all as new: ${err instanceof Error ? err.message : String(err)}`);
+        const applied = await storeAllDirectly(track.memories, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
+        storedRecords.push(...applied.records);
+        writeFailures += applied.failures;
+      }
     }
   } else {
     const applied = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, logger, options.vectorStore, options.embeddingService);
@@ -554,7 +574,13 @@ async function storeAllDirectly(
 // Helpers
 // ============================
 
-const VALID_TYPES: MemoryType[] = ["persona", "episodic", "instruction"];
+const VALID_TYPES: MemoryType[] = [
+  "persona",
+  "episodic",
+  "instruction",
+  "agent_skill",
+  "agent_pitfall",
+];
 
 function normalizeType(raw: string): MemoryType | null {
   const lower = raw.toLowerCase().trim();
