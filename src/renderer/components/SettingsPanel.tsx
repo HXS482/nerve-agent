@@ -431,14 +431,14 @@ export function SettingsPanel({ config, onUpdateConfig, onOpenProjectPicker, onC
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 animate-fade-in"
+        className="fixed inset-0 z-[var(--z-overlay)] animate-fade-in"
         style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
         onClick={onClose}
       />
 
       {/* Modal */}
       <div
-        className="fixed z-50 animate-modal-in"
+        className="fixed z-[var(--z-modal)] animate-modal-in"
         onClick={(e) => e.stopPropagation()}
         style={{
           top: '50%',

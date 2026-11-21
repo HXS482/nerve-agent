@@ -92,7 +92,7 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
 
   return (
     <aside
-      className="fixed left-0 top-0 bottom-0 flex flex-col z-50 transition-[width] duration-300"
+      className="fixed left-0 top-0 bottom-0 flex flex-col z-[var(--z-panel)] transition-[width] duration-300"
       style={{ width: sidebarWidth, background: 'transparent' }}
     >
       {/* Window Controls / Header */}
@@ -318,12 +318,12 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
       {customizeOpen && (
         <>
           <div
-            className="fixed inset-0 z-40 animate-fade-in"
+            className="fixed inset-0 z-[var(--z-overlay)] animate-fade-in"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
             onClick={() => setCustomizeOpen(false)}
           />
           <div
-            className="fixed z-50 animate-modal-in"
+            className="fixed z-[var(--z-modal)] animate-modal-in"
             style={{
               top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
               width: 240,

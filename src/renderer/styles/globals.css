@@ -22,6 +22,13 @@
   --bg-surface-container-highest: #353534;
   --bg-surface-variant: #353534;
 
+  /* 聊天区与消息卡片：这两个必须成对翻转 ——
+     暗色下卡片比页面亮，浅色下卡片也比页面亮，同一条视觉逻辑。
+     之前直接拿 --bg-surface / --bg-surface-container 当代替品：暗色是对的，
+     浅色正好相反（页面纯白 255、卡片 238），卡片看起来像一块脏灰底、凹进去。 */
+  --bg-chat-surface: #0D0D0D;
+  --bg-message-card: #201f1f;
+
   --text-on-surface: #e5e2e1;
   --text-on-surface-variant: #c2c6d6;
   --text-on-background: #e5e2e1;
@@ -99,6 +106,10 @@
   --bg-surface-container-highest: #e0e0e0;
   --bg-surface-variant: #e0e0e0;
 
+  /* 见暗色主题同名注释：浅色下页面用柔灰、卡片用纯白，卡片才是「浮起来」的 */
+  --bg-chat-surface: #f8f9fa;
+  --bg-message-card: #ffffff;
+
   --text-on-surface: #1a1a1a;
   --text-on-surface-variant: #49454f;
   --text-on-background: #1a1a1a;
@@ -171,6 +182,30 @@
   --radius-full: 9999px;
   --app-window-radius: 17px;
   --app-shell-radius: 16px;
+
+  /*
+   * ===== 层级（z-index）=====
+   *
+   * 之前各组件自己写魔法数字：右侧栏 40、设置遮罩 40、设置面板 50。
+   * 遮罩和右侧栏同级，而右侧栏在 DOM 里排在设置面板之后 ——
+   * 于是打开设置时右侧栏既没被压暗，还盖在遮罩上面。
+   *
+   * 现在按「层」分配，不再按数字：
+   *   topbar       → 顶栏浮动控件
+   *   panel        → 浮动侧栏本体（左右）
+   *   panel-inner  → 侧栏内部要盖住内容的浮层（拖拽条、侧栏顶部 dock、用量弹层）
+   *   overlay      → 模态遮罩
+   *   modal        → 模态面
+   *   nested       → 模态之上的再一层（Gallery 大图预览）
+   *   resize       → 窗口拖拽边框，永远最高
+   */
+  --z-topbar: 30;
+  --z-panel: 40;
+  --z-panel-inner: 50;
+  --z-overlay: 300;
+  --z-modal: 310;
+  --z-nested: 320;
+  --z-resize: 9999;
 
   /* Fluid typography — scales with viewport width (min 600px, max 1400px) */
   --fs-xs: clamp(10px, calc(10px + 0.1vw), 12px);
@@ -2025,7 +2060,7 @@ button, a, input, textarea, select {
 .project-palette-mask {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--z-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2711,21 +2746,32 @@ button.tool-spot-all:hover {
 .tool-spot-all[data-status="running"] svg {
   animation: thinking-pulse 1.4s ease-in-out infinite;
 }
-/* 面板内的 subagent 任务行：颜色走状态语义（对齐 dock/timeline 色板） */
+/* 面板内的 subagent 任务行：颜色走状态语义 */
 .toolflow-subtask {
   display: flex;
-  gap: 8px;
   align-items: baseline;
+  gap: 8px;
   padding: 2px 0;
+  font-size: 10.5px;
+  line-height: 1.6;
 }
 .toolflow-subtask-dot {
-  color: var(--tool-spot-running, #60a5fa);
+  flex: 0 0 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+  background: var(--accent-primary);
 }
-.toolflow-subtask[data-status="completed"] .toolflow-subtask-dot {
-  color: #8db88d;
+.toolflow-subtask-dot[data-status="completed"] {
+  background: var(--text-success);
 }
-.toolflow-subtask[data-status="error"] .toolflow-subtask-dot {
-  color: var(--error);
+.toolflow-subtask-dot[data-status="error"] {
+  background: var(--text-danger);
+}
+.toolflow-subtask-text {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ===== Chat scroll: 顶部渐隐（多段缓动，避免线性渐变的生硬感） ===== */
@@ -2763,7 +2809,7 @@ button.tool-spot-all:hover {
 }
 
 /* ===== Markdown prose ===== */.prose {
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .prose pre {
@@ -2774,7 +2820,7 @@ button.tool-spot-all:hover {
 .prose pre code {
   background: transparent;
   padding: 12px 16px;
-  font-size: 12.5px;
+  font-size: 11.5px;
   line-height: 1.65;
 }
 
@@ -3256,7 +3302,7 @@ pre.hljs {
   scrollbar-width: none;
 }
 
-/* Reused by .toolflow-pill[data-status="active"] .toolflow-pill-dot */
+/* 状态圆点呼吸（.toolflow-row[data-status="running"] .toolflow-dot） */
 @keyframes thinking-pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1.1); }
@@ -3344,84 +3390,205 @@ pre.hljs {
   background: rgba(0, 0, 0, 0.03);
 }
 
-/* ===== Toolflow Unit ===== */
-.toolflow-row {
-  position: relative;
+/* ===== Assistant 正文列 =====
+ *
+ * 文字直接铺在对话列里，不套卡片。参考的形态是「一列正文」：
+ * 左边缘对齐到同一条轴，行宽吃满整个列宽。
+ *
+ * 之前是 inline-block 卡片，两个副作用都很明显：
+ *   1. 短消息缩成一小块，右侧留大片空白 —— 看起来「稀」而不是「饱满」；
+ *   2. 左右各 12px 内边距，等于把可用行宽削掉 24px，长段落更早换行。
+ *
+ * 身份识别交给 SpeakerLine（头像 + 名字），不需要靠盒子兜住一段话。
+ */
+/*
+ * 正文卡片。
+ *
+ * 工具链裸排在背景上（过程，扫一眼就走），正文装在这一层里（结论，要读）。
+ * 两层容器的差别就是「这段该不该被框住」这一件事带来的层次感 ——
+ * 全部裸排会散，全部框住会闷。
+ *
+ * 边框用 --border-subtle 而不是 --border-default：这是内容容器，不是控件，
+ * 描边只负责在深底上勾出一道极淡的边界，不该抢眼。
+ */
+.assistant-card {
+  margin: 6px 0 8px;
+  /* 与用户气泡（MessageBubble 的 5px 9px）一比一对齐的内边距。
+     无描边：卡片边界只靠 --bg-message-card 和页面的明度差，不用线条去勾。 */
+  padding: 5px 9px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-message-card);
+  max-width: 100%;
+}
+
+/* 卡片里和卡片外的段落节奏要一致 —— 卡片有 padding，内层不再加首尾外边距 */
+.assistant-card > *:first-child { margin-top: 0; }
+.assistant-card > *:last-child { margin-bottom: 0; }
+
+.toolflow-body {
   display: flex;
+  flex-direction: column;
+  /*
+   * align-items: stretch（默认）会让每张卡片撑满整列 —— 于是「好嘞」这种三个字的
+   * 回复也占满一行，右边拖出一大片空白。短回答应该缩成一小块，长回答才铺满。
+   *
+   * flex-start + max-width:100% 就是这个语义：宽度跟着内容走，但不超过列宽。
+   */
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* 段落之间给一点呼吸，但不要库默认的 1em —— 那是给长文的，
+   聊天流里每条之间还有 marginBottom，叠加起来会松。 */
+.toolflow-body .prose > * + * {
+  margin-top: 0.62em;
+}
+
+/* 列表和引用块额外留一点，否则和上一段挤在一起 */
+.toolflow-body .prose > ul + *,
+.toolflow-body .prose > ol + *,
+.toolflow-body .prose > * + ul,
+.toolflow-body .prose > * + ol {
+  margin-top: 0.78em;
+}
+
+/* 标题不要上面那 1.5em 的大空档 —— 聊天里的 h3 是分段标签，不是章节 */
+.toolflow-body .prose > h1,
+.toolflow-body .prose > h2,
+.toolflow-body .prose > h3 {
+  margin-top: 0.9em;
+}
+
+/* ===== Toolflow Unit =====
+ *
+ * 一条工具调用 = 一行，一行只有一个状态信号：左侧 4px 圆点。
+ *
+ * 这里曾经同时叠了三层状态信号（左侧竖线、14px 状态图标、胶囊里的圆点），
+ * 三层说的是同一件事；配色是六个硬编码暖色（#dfa88f/#e0c878/#8db88d/#cf2d56/
+ * #4880ff/#d48898），和 Material 3 的冷色主题不属于同一个色系，浅色主题下
+ * #8db88d 的对比度只有 2.1:1。现在全部收敛到主题已有的四个 token。
+ *
+ * 竖线也改了：以前是每行各自一小截（position:absolute + top:50% + height:14px），
+ * 展开后是一排高低不齐带缝的短线；现在由容器画一条贯穿的线（见
+ * .toolflow-tool-list::before），圆点压在上面，才像一条真正的时间轴。
+ */
+
+/* 摘要行（收起态）：没有胶囊、没有背景、没有边框。
+   展开后本来就看得见每一行，再套一层玻璃胶囊只是同一份信息上的第二个容器。 */
+.toolflow-unit {
+  margin: 6px 0 2px;
+}
+.toolflow-summary-line {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px 5px 14px;
-  font-family: var(--font-mono);
+  gap: 5px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-outline);
+  transition: color 0.15s;
+}
+.toolflow-summary-line:hover {
+  color: var(--text-on-surface-variant);
+}
+.toolflow-summary-line[data-status="active"] {
+  color: var(--text-on-surface-variant);
+}
+.toolflow-summary-line[data-status="error"] {
+  color: var(--text-danger);
+}
+.toolflow-summary-chevron {
+  font-size: 9px;
+  opacity: 0.5;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.toolflow-summary-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+/* 单行：字体分工 —— 工具名是界面元素用 sans，参数是可复制的内容用 mono。
+   以前整行 mono，导致每行字符宽度不一致、右端参差。 */
+.toolflow-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  padding: 2px 0;
+  font-family: var(--font-sans);
   font-size: 11.5px;
-  line-height: 1.8;
+  line-height: 1.65;
   color: var(--text-outline);
   cursor: default;
-  border-radius: var(--radius-sm);
-  transition: background 0.15s;
-  animation: toolflow-row-in 0.25s cubic-bezier(0.23, 1, 0.32, 1) both;
+  border-radius: 4px;
+  animation: toolflow-row-in 0.22s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 @keyframes toolflow-row-in {
-  from { opacity: 0; transform: translateY(3px); }
+  from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .toolflow-row[data-clickable="true"] {
   cursor: pointer;
 }
-.toolflow-row[data-clickable="true"]:hover {
-  background: var(--bg-surface-container);
+.toolflow-row[data-clickable="true"]:hover .toolflow-name {
+  color: var(--text-on-surface);
 }
-/* 行首状态竖线 */
-.toolflow-rail {
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 14px;
-  border-radius: 2px;
-  background: var(--border-default);
+
+/* 状态圆点：唯一的信号源。
+   z-index 让它压在容器的贯穿竖线上，圆点本身不再需要描边光环 ——
+   竖线在圆点上下自然延续，就是时间轴该有的样子。 */
+.toolflow-dot {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  margin-right: 12px;
+  transform: translateY(-1px);
+  background: var(--text-success);
 }
-.toolflow-row[data-status="running"] .toolflow-rail { background: var(--accent-thinking, #dfa88f); animation: toolflow-rail-pulse 1.4s ease-in-out infinite; }
-.toolflow-row[data-status="pending"] .toolflow-rail { background: #e0c878; }
-.toolflow-row[data-status="done"] .toolflow-rail { background: rgba(141, 184, 141, 0.55); }
-.toolflow-row[data-status="error"] .toolflow-rail { background: var(--accent-error, #cf2d56); }
-@keyframes toolflow-rail-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+.toolflow-row[data-status="running"] .toolflow-dot {
+  background: var(--accent-primary);
+  animation: thinking-pulse 1.6s ease-in-out infinite;
 }
-/* 状态图标 */
-.toolflow-ic { width: 14px; height: 14px; flex-shrink: 0; }
-.toolflow-row[data-status="running"] .toolflow-ic { color: var(--accent-thinking, #dfa88f); }
-.toolflow-row[data-status="pending"] .toolflow-ic { color: #e0c878; }
-.toolflow-row[data-status="done"] .toolflow-ic { color: #8db88d; }
-.toolflow-row[data-status="error"] .toolflow-ic { color: var(--accent-error, #cf2d56); }
-.toolflow-ic.is-spin { animation: toolflow-spin 0.9s linear infinite; }
-@keyframes toolflow-spin { to { transform: rotate(360deg); } }
-/* running 行微光扫过（中性灰，明暗主题通用） */
-.toolflow-row[data-status="running"] {
-  background-image: linear-gradient(100deg, transparent 35%, rgba(128, 128, 128, 0.07) 50%, transparent 65%);
-  background-size: 220% 100%;
-  animation: toolflow-row-in 0.25s cubic-bezier(0.23, 1, 0.32, 1) both, toolflow-shimmer 2.4s linear infinite;
+.toolflow-row[data-status="pending"] .toolflow-dot {
+  background: var(--text-warning);
 }
-@keyframes toolflow-shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -120% 0; }
+.toolflow-row[data-status="done"] .toolflow-dot {
+  background: var(--text-success);
 }
+.toolflow-row[data-status="error"] .toolflow-dot {
+  background: var(--text-danger);
+}
+
 .toolflow-row .toolflow-name {
-  color: var(--text-on-surface-variant);
-  font-weight: 600;
   flex-shrink: 0;
+  font-weight: 550;
+  color: var(--text-on-surface-variant);
+  transition: color 0.15s;
+}
+.toolflow-sep {
+  flex-shrink: 0;
+  margin: 0 6px;
+  color: var(--text-outline-variant);
 }
 .toolflow-row .toolflow-summary {
-  color: var(--text-outline);
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-outline);
 }
 .toolflow-chevron {
   margin-left: auto;
+  padding-left: 8px;
   flex-shrink: 0;
   font-size: 9px;
   opacity: 0.45;
@@ -3429,7 +3596,7 @@ pre.hljs {
 }
 .toolflow-chevron[data-open="true"] { transform: rotate(90deg); }
 
-/* 详情：grid rows 平滑展开（行内容常驻挂载，收起时 0fr 裁掉） */
+/* 详情：grid rows 平滑展开（内容常驻挂载，收起时 0fr 裁掉） */
 .toolflow-detail-wrap {
   display: grid;
   grid-template-rows: 0fr;
@@ -3437,16 +3604,16 @@ pre.hljs {
 }
 .toolflow-detail-wrap[data-open="true"] { grid-template-rows: 1fr; }
 .toolflow-detail-clip { overflow: hidden; min-height: 0; }
+/* 缩进到文字轴（16px = 圆点 4 + 间距 12），不再用左侧粗边 ——
+   那条 2px 竖边是引用块的语法，借到工具输出上只会显得廉价。 */
 .toolflow-detail {
-  margin: 2px 0 4px 22px;
-  padding: 8px 10px 8px 12px;
-  background: var(--bg-surface-container-lowest);
-  border: 1px solid var(--border-subtle);
-  border-left: 2px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  margin: 4px 0 6px 16px;
+  padding: 8px 10px;
+  background: var(--bg-surface-container-low);
+  border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.6;
+  font-size: 10px;
+  line-height: 1.7;
   max-height: 400px;
   overflow-y: auto;
   color: var(--text-on-surface-variant);
@@ -3455,60 +3622,6 @@ pre.hljs {
 }
 .toolflow-detail::-webkit-scrollbar { width: 3px; }
 .toolflow-detail::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
-
-/* 收起态胶囊：玻璃质感 */
-.toolflow-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  background: var(--bg-surface-container);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  font-size: 11.5px;
-  color: var(--text-on-surface-variant);
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  margin: 6px 0;
-}
-.toolflow-pill:hover {
-  background: var(--bg-surface-container-high);
-  border-color: var(--border-default);
-}
-.toolflow-pill[data-status="active"] {
-  color: var(--text-on-surface);
-  border-color: color-mix(in srgb, var(--accent-thinking, #dfa88f) 35%, transparent);
-}
-.toolflow-pill[data-status="error"] {
-  background: color-mix(in srgb, var(--accent-error, #cf2d56) 8%, transparent);
-  border-color: color-mix(in srgb, var(--accent-error, #cf2d56) 25%, transparent);
-  color: #d48898;
-}
-.toolflow-pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #8db88d;
-}
-.toolflow-pill[data-status="active"] .toolflow-pill-dot {
-  background: var(--accent-thinking, #dfa88f);
-  animation: thinking-pulse 1.4s ease-in-out infinite;
-}
-.toolflow-pill[data-status="error"] .toolflow-pill-dot {
-  background: var(--accent-error, #cf2d56);
-}
-.toolflow-pill-chevron {
-  opacity: 0.6;
-  font-size: 10px;
-  transition: transform 0.2s cubic-bezier(0.4,0,0.2,1);
-}
-.toolflow-pill-chevron[data-expanded="true"] {
-  transform: rotate(90deg);
-}
 
 /* 思考块（chat 模式）：纯 SVG 图标，无胶囊 */
 .think-toggle {
@@ -3687,15 +3800,6 @@ pre.hljs {
   font-size: 2.6px;
 }
 
-/* 展开态容器 */
-.toolflow-expanded {
-  margin: 4px 0 8px;
-  padding: 8px 10px;
-  background: var(--bg-surface-container-lowest);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-}
-/* 展开/收起的 grid rows 过渡容器（盒子样式留在 .toolflow-expanded 上，0fr 时整体裁掉） */
 .toolflow-expand-grid {
   display: grid;
   grid-template-rows: 0fr;
@@ -3716,11 +3820,26 @@ pre.hljs {
   margin-top: 0;
 }
 
-/* 展开态：工具列表区 */
+/* 展开态：工具列表 = 一条时间轴。
+   贯穿的竖线画在容器上，不是每行各画一小截 —— 后者在展开后是一排带缝的短线，
+   而且行数一变竖线就跟着重新排，视觉上像拼凑的。 */
 .toolflow-tool-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0;
+  margin: 4px 0 2px;
+  padding-left: 0;
+}
+.toolflow-tool-list::before {
+  content: "";
+  position: absolute;
+  left: 1.5px;
+  top: 10px;
+  bottom: 10px;
+  width: 1px;
+  background: var(--border-default);
+  pointer-events: none;
 }
 
 /* ── 账号面板（Stage 头像菜单「账号」入口）：独立高斯模糊浮层 ──

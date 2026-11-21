@@ -42,27 +42,6 @@ function useAutoExpanded(active: boolean) {
   return { expanded, toggle }
 }
 
-function Pill({ kind, status, label, expanded, onClick }: {
-  kind: 'think' | 'tools'
-  status: UnitStatus
-  label: string
-  expanded: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      className="toolflow-pill"
-      data-kind={kind}
-      data-status={status}
-      onClick={onClick}
-    >
-      <span className="toolflow-pill-dot" />
-      <span>{label}</span>
-      <span className="toolflow-pill-chevron" data-expanded={expanded}>▸</span>
-    </button>
-  )
-}
-
 function ThinkUnit({ text, status }: { text: string; status: UnitStatus }) {
   const { expanded, toggle } = useAutoExpanded(status === 'active')
   return (
@@ -103,6 +82,13 @@ function ThinkBody({ text, working, open }: { text: string; working: boolean; op
   )
 }
 
+/**
+ * 一串工具调用。
+ *
+ * 收起态只有一行极简摘要（「3 个工具 · 2 失败」），没有胶囊、没有背景、没有边框：
+ * 展开后本来就看得见每一行，再套一个玻璃胶囊只是在同一个信息上加第二层容器。
+ * 那个胶囊曾经是这套 UI 里最显「手搓」的一处。
+ */
 function ToolsUnit({ tools, status }: { tools: ToolPair[]; status: UnitStatus }) {
   const pendingApprovals = useChatStore((s) => s.pendingApprovals)
   const { expanded, toggle } = useAutoExpanded(status === 'active')
@@ -112,53 +98,61 @@ function ToolsUnit({ tools, status }: { tools: ToolPair[]; status: UnitStatus })
   ).length
 
   const label = (() => {
-    if (status === 'active') return `运行了 ${tools.length} 个工具`
-    if (status === 'error') return `${tools.length} 个工具（${errorCount} 失败）`
+    if (status === 'active') return `运行中 · ${tools.length} 个工具`
+    if (status === 'error') return `${tools.length} 个工具 · ${errorCount} 个失败`
     return `${tools.length} 个工具`
   })()
 
   return (
-    <div>
-      <Pill kind="tools" status={status} label={label} expanded={expanded} onClick={toggle} />
+    <div className="toolflow-unit">
+      <button
+        type="button"
+        className="toolflow-summary-line"
+        data-status={status}
+        data-expanded={expanded}
+        onClick={toggle}
+        aria-expanded={expanded}
+      >
+        <span className="toolflow-summary-text">{label}</span>
+        <span className="toolflow-summary-chevron" data-expanded={expanded}>▸</span>
+      </button>
       <div className="toolflow-expand-grid" data-open={expanded}>
         <div className="toolflow-expand-clip">
-          <div className="toolflow-expanded" data-kind="tools">
-            <div className="toolflow-tool-list">
-              {tools.map((pair, i) => {
-                const toolName = pair.use.type === 'tool_use' ? pair.use.name : ''
-                const input = pair.use.type === 'tool_use' ? pair.use.input : undefined
-                const useId = pair.use.type === 'tool_use' ? pair.use.id : undefined
-                // 按 toolCallId 精确匹配审批；无 id 时退回名字匹配（且已有结果优先于 pending）
-                const isPending =
-                  !pair.result &&
-                  !!toolName &&
-                  pendingApprovals.some((a) =>
-                    a.toolCallId ? a.toolCallId === useId : a.toolName === toolName,
-                  )
-                const isSubagent =
-                  pair.use.type === 'tool_use' &&
-                  (pair.use.name === 'spawn_subagent' ||
-                    pair.use.name === 'parallel_subagents' ||
-                    pair.use.name === 'chain_subagents')
-                const toolCallId = isSubagent && pair.use.type === 'tool_use' ? pair.use.id : undefined
-                let status: RowStatus
-                if (pair.result) status = pair.result.is_error ? 'error' : 'done'
-                else if (isPending) status = 'pending'
-                else status = 'running'
-                const summary = toolName ? getToolSummary(toolName, input) : ''
-                const detail = toolName ? getToolDetail(toolName, input, pair.result) : ''
-                return (
-                  <ToolflowRow
-                    key={pair.use.id ?? (pair.use as any).toolCallId ?? i}
-                    toolName={toolName || ''}
-                    summary={summary}
-                    detail={detail}
-                    status={status}
-                    toolCallId={toolCallId}
-                  />
+          <div className="toolflow-tool-list">
+            {tools.map((pair, i) => {
+              const toolName = pair.use.type === 'tool_use' ? pair.use.name : ''
+              const input = pair.use.type === 'tool_use' ? pair.use.input : undefined
+              const useId = pair.use.type === 'tool_use' ? pair.use.id : undefined
+              // 按 toolCallId 精确匹配审批；无 id 时退回名字匹配（且已有结果优先于 pending）
+              const isPending =
+                !pair.result &&
+                !!toolName &&
+                pendingApprovals.some((a) =>
+                  a.toolCallId ? a.toolCallId === useId : a.toolName === toolName,
                 )
-              })}
-            </div>
+              const isSubagent =
+                pair.use.type === 'tool_use' &&
+                (pair.use.name === 'spawn_subagent' ||
+                  pair.use.name === 'parallel_subagents' ||
+                  pair.use.name === 'chain_subagents')
+              const toolCallId = isSubagent && pair.use.type === 'tool_use' ? pair.use.id : undefined
+              let status: RowStatus
+              if (pair.result) status = pair.result.is_error ? 'error' : 'done'
+              else if (isPending) status = 'pending'
+              else status = 'running'
+              const summary = toolName ? getToolSummary(toolName, input) : ''
+              const detail = toolName ? getToolDetail(toolName, input, pair.result) : ''
+              return (
+                <ToolflowRow
+                  key={pair.use.id ?? (pair.use as any).toolCallId ?? i}
+                  toolName={toolName || ''}
+                  summary={summary}
+                  detail={detail}
+                  status={status}
+                  toolCallId={toolCallId}
+                />
+              )
+            })}
           </div>
         </div>
       </div>

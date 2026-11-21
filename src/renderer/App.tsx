@@ -147,7 +147,7 @@ export default function App() {
           margin: '2px',
           marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '2px',
           marginRight: rightSidebarOpen ? `${rightSidebarWidth + 4}px` : '2px',
-          background: 'var(--bg-surface)',
+          background: 'var(--bg-chat-surface)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--app-shell-radius)',
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
@@ -173,7 +173,7 @@ export default function App() {
         </div>
         {/* Floating header — drag region + controls */}
         <div
-          className="absolute top-0 left-0 right-0 z-30 flex items-center no-select"
+          className="absolute top-0 left-0 right-0 z-[var(--z-topbar)] flex items-center no-select"
           style={{ padding: '6px 7px', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* Left: model island (with sidebar toggle when collapsed) */}
@@ -194,7 +194,7 @@ export default function App() {
 
           {/* Right: toggle sidebar + settings + cmd */}
           <div
-            className="flex items-center gap-1.5 shrink-0 bg-[var(--bg-surface-container)] border border-[var(--border-default)]"
+            className="flex items-center gap-1.5 shrink-0 glass-dock"
             style={{
               padding: '3px 8px',
               borderRadius: 9,
@@ -209,7 +209,7 @@ export default function App() {
             >
               <SidebarToggleIcon />
             </button>
-            <div className="w-px h-4" style={{ background: 'var(--border-default)' }} />
+            <div className="w-px h-3" style={{ background: 'var(--border-default)' }} />
             <button
               onClick={() => setSettingsOpen(true)}
               className="p-1.5 rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"

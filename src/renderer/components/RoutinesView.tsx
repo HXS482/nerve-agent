@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import { useRoutineStore, type Routine } from '../stores/routineStore'
+import { useRoutineStore } from '../stores/routineStore'
 import { UpcomingRuns } from './UpcomingRuns'
 import { BotAvatar, AVATAR_PALETTE } from './BotList'
 
@@ -86,53 +86,90 @@ const BOT_TEMPLATES: Array<{ id: string; label: string; emoji: string; instructi
 
 /* ------------------------------------------------------------------ 表单积木 */
 
-/**
- * 输入框统一样式。
+/*
+ * 单色（mono）体系：整套面板只用「墨 → 纸」之间的灰阶，不出现任何色相。
  *
- * 改之前每个框各写各的 bg-white/5 和不同的 padding —— 「同一个面板里的框长得不一样」
- * 是那种说不出哪里难受、但一眼就觉得乱的主要来源。收到一处，改一次全变。
+ * 彩色在这里没有信息量 —— 蓝色主按钮、紫色时间线点、绿色心跳，它们表达的不是
+ * 「不同的状态」，只是不同位置的装饰。去掉之后层级只能靠**明度**和**字重**来
+ * 区分，这正是这套 UI 看起来「贵」而不是「花」的原因。
+ *
+ * 三个 token 撑起全部层级：
+ *   --text-on-surface          墨（主文字 / 主按钮填充）
+ *   --text-on-surface-variant  中灰（次文字 / 控件描边）
+ *   --text-outline             淡灰（说明 / 占位）
+ * 底色用 --bg-background（凹）与 --bg-surface-container（平）两级。
+ *
+ * 唯一保留 --error：错误必须一眼看见，它承载信息，不是装饰。
  */
+
 const BOX: CSSProperties = {
   width: '100%',
-  fontSize: 11,
+  fontSize: 10.5,
   lineHeight: 1.5,
   padding: '6px 8px',
-  borderRadius: 7,
-  background: 'var(--bg-surface-container)',
-  border: '1px solid var(--border-subtle)',
+  borderRadius: 'var(--radius-md)',
+  background: 'var(--bg-background)',
+  border: '1px solid var(--border-default)',
   color: 'var(--text-on-surface)',
   outline: 'none',
   boxSizing: 'border-box',
 }
 
+/*
+ * 主按钮：实心墨底 + 纸色字。
+ *
+ * 单色设计里的主按钮不靠色相吸引注意力，靠**最高的明度反差**。
+ * 暗色下墨 #e5e2e1 / 纸 #111111 ≈ 14.6:1；亮色下正好反过来。
+ * 两个主题自动成立，因为用的是同一对相对语义的 token。
+ */
 const PRIMARY_BTN: CSSProperties = {
-  fontSize: 11,
+  fontSize: 10.5,
   fontWeight: 600,
   padding: '6px 12px',
-  borderRadius: 7,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
-  background: 'var(--accent-primary-container)',
-  border: '1px solid var(--accent-primary)',
-  color: 'var(--text-on-surface)',
+  background: 'var(--text-on-surface)',
+  border: '1px solid var(--text-on-surface)',
+  color: 'var(--bg-background)',
+  letterSpacing: '0.01em',
 }
 
+/*
+ * 次按钮：只有描边。
+ *
+ * 描边用 border-default 而不是 border-subtle —— 后者是 rgba(255,255,255,0.06)，
+ * 在面板底上几乎不可见，一整排按钮看起来像几段浮空的文字。
+ */
 const GHOST_BTN: CSSProperties = {
-  fontSize: 10,
+  fontSize: 9.5,
   padding: '5px 9px',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   background: 'transparent',
-  border: '1px solid var(--border-subtle)',
+  border: '1px solid var(--border-default)',
+  color: 'var(--text-on-surface-variant)',
+}
+
+/*
+ * 说明文字。9px + --text-outline-variant 是这套 UI 里最糟的一处组合：
+ * 暗色 #424754 on #201f1f = 1.77:1，等于看不见；亮色 1.47:1 更糟。
+ * 提到 10px + --text-outline（暗 5.17 / 亮 3.92）。
+ */
+const HINT: CSSProperties = {
+  fontSize: 9.5,
+  lineHeight: 1.55,
   color: 'var(--text-outline)',
 }
 
 /** 一行表单：小标题 + 控件 +（可选）说明。 */
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-on-surface-variant)' }}>{label}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-on-surface-variant)', letterSpacing: '0.01em' }}>
+        {label}
+      </span>
       {children}
-      {hint ? <span style={{ fontSize: 9, lineHeight: 1.5, color: 'var(--text-outline-variant)' }}>{hint}</span> : null}
+      {hint ? <span style={HINT}>{hint}</span> : null}
     </div>
   )
 }
@@ -140,18 +177,13 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 /** 分区：上分隔线 + 极小的大写标题，把长表单切成能扫读的几块。 */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-      <span
-        style={{
-          fontSize: 9,
-          fontWeight: 700,
-          letterSpacing: '0.14em',
-          textTransform: 'uppercase',
-          color: 'var(--text-outline-variant)',
-        }}
-      >
-        {title}
-      </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 11, paddingTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 650, color: 'var(--text-on-surface)', flexShrink: 0 }}>
+          {title}
+        </span>
+        <span style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+      </div>
       {children}
     </div>
   )
@@ -177,9 +209,9 @@ function Segmented<T extends string>({
         display: 'flex',
         gap: 2,
         padding: 2,
-        borderRadius: 8,
-        background: 'var(--bg-surface-container)',
-        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-md)',
+        background: 'var(--bg-background)',
+        border: '1px solid var(--border-default)',
       }}
     >
       {options.map((o) => {
@@ -190,15 +222,16 @@ function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             style={{
               flex: 1,
-              padding: '4px 6px',
-              borderRadius: 6,
               fontSize: 10,
+              padding: '4px 6px',
+              borderRadius: 5,
               whiteSpace: 'nowrap',
-              fontWeight: on ? 600 : 400,
+              fontWeight: on ? 600 : 500,
               cursor: 'pointer',
-              background: on ? 'var(--accent-primary-container)' : 'transparent',
-              border: '1px solid ' + (on ? 'var(--accent-primary)' : 'transparent'),
-              color: on ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+              background: on ? 'var(--text-on-surface)' : 'transparent',
+              border: 'none',
+              color: on ? 'var(--bg-background)' : 'var(--text-outline)',
+              transition: 'background 0.14s, color 0.14s',
             }}
           >
             {o.label}
@@ -247,46 +280,9 @@ function ColorRow({ value, onChange }: { value: string; onChange: (c: string) =>
           borderRadius: '50%',
           cursor: 'pointer',
           background: 'transparent',
-          border: '1px dashed ' + (value ? 'var(--border-default)' : 'var(--accent-primary)'),
+          border: '1px dashed ' + (value ? 'var(--border-default)' : 'var(--text-on-surface-variant)'),
         }}
       />
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ 任务行 */
-
-function RoutineRow({ r }: { r: Routine }) {
-  const setEnabled = useRoutineStore((s) => s.setEnabled)
-  const remove = useRoutineStore((s) => s.remove)
-  return (
-    <div
-      className="hover:bg-white/5 transition-colors"
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '7px 8px', borderRadius: 7 }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="truncate" style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--text-on-surface)' }} title={r.instruction}>
-          {r.instruction}
-        </div>
-        <div className="truncate" style={{ fontSize: 9, marginTop: 2, color: 'var(--text-outline-variant)' }}>
-          {r.schedule} · {r.enabled ? '下次 ' + fmtTime(r.nextRunAt) + '（' + relative(r.nextRunAt) + '）' : '已停用'}
-          {r.consecutiveFailures > 0 ? <span style={{ color: 'var(--error)' }}> · 连续失败 {r.consecutiveFailures}</span> : null}
-        </div>
-      </div>
-      <button
-        onClick={() => setEnabled(r.id, !r.enabled)}
-        style={{ ...GHOST_BTN, padding: '3px 6px', flexShrink: 0 }}
-        title={r.enabled ? '停用' : '启用'}
-      >
-        {r.enabled ? '停用' : '启用'}
-      </button>
-      <button
-        onClick={() => remove(r.id)}
-        style={{ ...GHOST_BTN, padding: '3px 6px', flexShrink: 0 }}
-        title="删除"
-      >
-        删
-      </button>
     </div>
   )
 }
@@ -451,21 +447,22 @@ export function RoutinesView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* ── 头部：标题 + Bot 选择 + 调度器心跳 ── */}
-      <div style={{ padding: '10px 10px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ padding: '10px 10px 8px', borderBottom: '1px solid var(--border-default)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--text-on-surface)', flex: 1 }}>Routines</span>
+          <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--text-on-surface)', flex: 1, letterSpacing: '-0.01em' }}>Routines</span>
           <select
             value={activeBotId ?? ''}
             onChange={(e) => selectBot(e.target.value)}
             style={{
               fontSize: 10,
-              maxWidth: 96,
-              padding: '3px 4px',
-              borderRadius: 6,
-              background: 'var(--bg-surface-container)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-on-surface)',
+              maxWidth: 100,
+              padding: '3px 5px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-background)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-on-surface-variant)',
               outline: 'none',
+              cursor: 'pointer',
             }}
           >
             {bots.map((b) => (
@@ -478,16 +475,17 @@ export function RoutinesView() {
             onClick={() => setAdding((v) => !v)}
             title="新建 Bot"
             style={{
-              width: 20,
-              height: 20,
+              width: 21,
+              height: 21,
               padding: 0,
-              borderRadius: 6,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
-              fontSize: 13,
+              fontSize: 12,
               lineHeight: 1,
-              background: adding ? 'var(--accent-primary-container)' : 'transparent',
-              border: '1px solid ' + (adding ? 'var(--accent-primary)' : 'var(--border-subtle)'),
-              color: adding ? 'var(--text-on-surface)' : 'var(--text-outline)',
+              background: adding ? 'var(--text-on-surface)' : 'transparent',
+              border: '1px solid ' + (adding ? 'var(--text-on-surface)' : 'var(--border-default)'),
+              color: adding ? 'var(--bg-background)' : 'var(--text-outline)',
+              transition: 'background 0.14s, color 0.14s, border-color 0.14s',
             }}
           >
             +
@@ -519,13 +517,14 @@ export function RoutinesView() {
                     key={t.id}
                     onClick={() => setNewBotTemplate(t.id)}
                     style={{
-                      fontSize: 10,
-                      padding: '3px 8px',
-                      borderRadius: 999,
+                      fontSize: 9.5,
+                      padding: '3px 9px',
+                      borderRadius: 'var(--radius-full)',
                       cursor: 'pointer',
-                      background: on ? 'var(--accent-primary-container)' : 'transparent',
-                      border: '1px solid ' + (on ? 'var(--accent-primary)' : 'var(--border-subtle)'),
-                      color: on ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+                      background: on ? 'var(--text-on-surface)' : 'transparent',
+                      border: '1px solid ' + (on ? 'var(--text-on-surface)' : 'var(--border-default)'),
+                      color: on ? 'var(--bg-background)' : 'var(--text-outline)',
+                      transition: 'background 0.14s, color 0.14s, border-color 0.14s',
                     }}
                   >
                     {t.emoji} {t.label}
@@ -549,17 +548,17 @@ export function RoutinesView() {
             alignItems: 'center',
             gap: 5,
             marginTop: 7,
-            fontSize: 9,
-            color: sweep.healthy ? 'var(--text-outline-variant)' : 'var(--error)',
+            fontSize: 10,
+            color: sweep.healthy ? 'var(--text-outline)' : 'var(--error)',
           }}
         >
           <span
             style={{
-              width: 5,
-              height: 5,
+              width: 4,
+              height: 4,
               borderRadius: '50%',
               flexShrink: 0,
-              background: sweep.healthy ? 'var(--text-success, #2DBE8A)' : 'var(--error)',
+              background: sweep.healthy ? 'var(--text-on-surface)' : 'var(--error)',
             }}
           />
           <span className="truncate">
@@ -581,11 +580,11 @@ export function RoutinesView() {
       </div>
 
       {error && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 10px 0', fontSize: 9, color: 'var(--error)' }}>
+        <div style={{ display: 'flex', gap: 6, padding: '8px 10px 0', fontSize: 10, color: 'var(--error)' }}>
           <span style={{ flex: 1 }}>{error}</span>
           <button
             onClick={clearError}
-            style={{ background: 'transparent', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 0 }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 }}
           >
             ×
           </button>
@@ -598,7 +597,7 @@ export function RoutinesView() {
           {/* UpcomingRuns 自己带 10px 水平 margin，这里不能再给 padding，否则双重缩进 */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 0' }}>
             {loading && routines.length === 0 ? (
-              <div style={{ padding: '10px 2px', fontSize: 10, color: 'var(--text-outline-variant)' }}>加载中…</div>
+              <div style={{ padding: '12px 2px', fontSize: 10, color: 'var(--text-outline)' }}>加载中…</div>
             ) : (
               <UpcomingRuns routines={routines} botId={activeBotId || ''} />
             )}
@@ -606,7 +605,7 @@ export function RoutinesView() {
 
           <div
             style={{
-              borderTop: '1px solid var(--border-subtle)',
+              borderTop: '1px solid var(--border-default)',
               padding: 10,
               display: 'flex',
               flexDirection: 'column',
@@ -660,7 +659,7 @@ export function RoutinesView() {
       {tab === 'look' && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 10px 22px' }}>
           {!activeBot ? (
-            <div style={{ fontSize: 10, color: 'var(--text-outline-variant)' }}>先选一个 Bot</div>
+            <div style={{ fontSize: 10, color: 'var(--text-outline)' }}>先选一个 Bot</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/*
@@ -674,9 +673,9 @@ export function RoutinesView() {
                   alignItems: 'center',
                   gap: 10,
                   padding: 10,
-                  borderRadius: 9,
-                  background: 'var(--bg-surface-container)',
-                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--bg-background)',
+                  border: '1px solid var(--border-default)',
                 }}
               >
                 <BotAvatar
@@ -689,13 +688,13 @@ export function RoutinesView() {
                   }}
                   size={38}
                   animate
-                  paper="var(--bg-surface-container)"
+                  paper="var(--bg-background)"
                 />
                 <div style={{ minWidth: 0 }}>
-                  <div className="truncate" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-on-surface)' }}>
+                  <div className="truncate" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-on-surface)' }}>
                     {botName || activeBot.name}
                   </div>
-                  <div className="truncate" style={{ fontSize: 9, color: 'var(--text-outline-variant)' }}>
+                  <div className="truncate" style={{ fontSize: 10, color: 'var(--text-outline)', marginTop: 2 }}>
                     {botGroup || '未分组'}
                     {activeBot.isDefault ? ' · 默认 Bot' : ''}
                   </div>
@@ -723,7 +722,7 @@ export function RoutinesView() {
                         value={botEmoji}
                         onChange={(e) => touch(setBotEmoji)(e.target.value.slice(0, 2))}
                         placeholder="🙂"
-                        style={{ ...BOX, textAlign: 'center', fontSize: 12 }}
+                        style={{ ...BOX, textAlign: 'center', fontSize: 11 }}
                       />
                     </Field>
                   </div>
@@ -763,7 +762,7 @@ export function RoutinesView() {
                  * 空数组的语义是「不过滤」，不是「什么都没有」—— 用户很容易理解反。
                  */}
                 {allSkills.length === 0 ? (
-                  <div style={{ fontSize: 9, lineHeight: 1.6, color: 'var(--text-outline-variant)' }}>
+                  <div style={HINT}>
                     还没有技能。放到 &lt;项目&gt;/.agents/skills/ 或 ~/.nerve/.agents/skills/ 下即可被发现。
                   </div>
                 ) : (
@@ -778,11 +777,12 @@ export function RoutinesView() {
                               display: 'flex',
                               alignItems: 'flex-start',
                               gap: 7,
-                              padding: '5px 7px',
-                              borderRadius: 7,
+                              padding: '6px 8px',
+                              borderRadius: 'var(--radius-md)',
                               cursor: 'pointer',
-                              background: on ? 'var(--accent-primary-container)' : 'transparent',
-                              border: '1px solid ' + (on ? 'var(--accent-primary)' : 'var(--border-subtle)'),
+                              background: on ? 'var(--bg-surface-container-high)' : 'transparent',
+                              border: '1px solid ' + (on ? 'var(--text-on-surface-variant)' : 'var(--border-default)'),
+                              transition: 'background 0.14s, border-color 0.14s',
                             }}
                           >
                             <input
@@ -806,9 +806,9 @@ export function RoutinesView() {
                                 <span
                                   style={{
                                     display: 'block',
-                                    fontSize: 9,
-                                    lineHeight: 1.5,
-                                    color: 'var(--text-outline-variant)',
+                                    fontSize: 9.5,
+                                    lineHeight: 1.55,
+                                    color: 'var(--text-outline)',
                                   }}
                                 >
                                   {sk.description.length > 60 ? sk.description.slice(0, 60) + '…' : sk.description}
@@ -819,7 +819,7 @@ export function RoutinesView() {
                         )
                       })}
                     </div>
-                    <div style={{ fontSize: 9, lineHeight: 1.55, color: 'var(--text-outline-variant)' }}>
+                    <div style={HINT}>
                       一个都不勾 = 全部可见。技能只是「怎么用工具」的说明书，
                       能不能真的执行取决于这个 Bot 有哪些工具。
                     </div>
@@ -866,13 +866,13 @@ export function RoutinesView() {
                               )
                             }
                             style={{
-                              fontSize: 10,
+                              fontSize: 9.5,
                               padding: '3px 8px',
-                              borderRadius: 999,
+                              borderRadius: 'var(--radius-full)',
                               cursor: 'pointer',
-                              background: on ? 'var(--accent-primary-container)' : 'transparent',
-                              border: '1px solid ' + (on ? 'var(--accent-primary)' : 'var(--border-subtle)'),
-                              color: on ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+                              background: on ? 'var(--text-on-surface)' : 'transparent',
+                              border: '1px solid ' + (on ? 'var(--text-on-surface)' : 'var(--border-default)'),
+                              color: on ? 'var(--bg-background)' : 'var(--text-outline)',
                             }}
                           >
                             {b.name}
@@ -890,7 +890,7 @@ export function RoutinesView() {
                   alignItems: 'center',
                   gap: 6,
                   paddingTop: 12,
-                  borderTop: '1px solid var(--border-subtle)',
+                  borderTop: '1px solid var(--border-default)',
                 }}
               >
                 <button
@@ -915,7 +915,7 @@ export function RoutinesView() {
                   还原
                 </button>
                 {dirty && (
-                  <span style={{ fontSize: 9, marginLeft: 'auto', color: 'var(--text-outline-variant)' }}>未保存</span>
+                  <span style={{ fontSize: 9.5, marginLeft: 'auto', color: 'var(--text-on-surface-variant)' }}>未保存</span>
                 )}
               </div>
             </div>

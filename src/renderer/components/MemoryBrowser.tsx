@@ -36,14 +36,14 @@ export function MemoryBrowser({ open, onClose }: MemoryBrowserProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[55] animate-fade-in"
+        className="fixed inset-0 z-[var(--z-overlay)] animate-fade-in"
         style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)' }}
         onClick={onClose}
       />
 
       {/* Panel */}
       <div
-        className="fixed z-[60] animate-brain-in flex flex-col"
+        className="fixed z-[var(--z-modal)] animate-brain-in flex flex-col"
         style={{
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',

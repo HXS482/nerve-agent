@@ -219,7 +219,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     const text = getMessageText(message)
 
     return (
-      <div className="animate-fade-in flex flex-col items-end" style={{ marginBottom: sameRole ? 8 : 48 }}>
+      <div className="animate-fade-in flex flex-col items-end" style={{ marginBottom: sameRole ? 6 : 32 }}>
         {/* Image thumbnails */}
         {imageBlocks.length > 0 && (
           <div className="flex gap-1.5 mb-1.5">
@@ -252,7 +252,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
             className="rounded-lg"
             style={{
               background: 'var(--bg-surface-container)',
-              padding: '6px 10px',
+            padding: '5px 9px',
               border: '1px solid var(--border-subtle)',
               display: 'inline-block',
               maxWidth: '80%',
@@ -261,7 +261,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
           >
             {textBlocks.map((block, i) => (
               <p key={i} className="whitespace-pre-wrap"
-                style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
+                style={{ color: 'var(--text-on-surface)', fontSize: '12.5px', lineHeight: 1.55 }}>
                 <RichText text={block.text} />
               </p>
             ))}
@@ -306,7 +306,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
             marginTop: 4,
           }}
         >
-          <p className="whitespace-pre-wrap" style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.6 }}>
+          <p className="whitespace-pre-wrap" style={{ color: 'var(--text-on-surface)', fontSize: '12.5px', lineHeight: 1.55 }}>
             <RichText text={text} />
           </p>
         </div>
@@ -331,84 +331,102 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
   const imageBlockKeys = new Set(
     message.content.filter((b) => b.type === 'image' && b.src).map((b) => imageKey(b.src as string)),
   )
-  const renderBlocks = () => {
-    const groups = groupBlocks(message.content)
-    return groups.map((group, idx) => {
-      if (group.kind === 'toolflow') {
+  /*
+   * 图片从卡片里拿出来单独排。
+   *
+   * 事故现场：晨报这种一张 900×2400 的长图塞进气泡卡片，卡片有 8px/12px 的内边距
+   * 加描边，于是图片四周多出一圈深灰底色 —— 深灰框包着米白大图，两边都不像。
+   *
+   * 卡片是「一段话」的容器，图片是「一件东西」。混在一起时两种尺寸体系打架：
+   * 文字要窄边距才读得舒服，图片要撑满才显得完整。
+   */
+  const imageBlocks = message.content.filter((b) => b.type === 'image' && b.src)
+  const cardContent = message.content.filter((b) => b.type !== 'image')
+
+  /*
+   * 把一行消息切成「段」，而不是一律平铺。
+   *
+   * 参考形态（用户给的那张）：工具链**裸排**在页面背景上，正文则被一个
+   * 圆角卡片包住 —— 两段视觉性质不同的内容，各自用合适的容器：
+   *   · 工具链是「过程」，读的时候是扫一眼，越轻越好，不该有边框；
+   *   · 正文是「结论」，是用户真正要读的东西，需要一个边界把视线框住，
+   *     否则它会和上面的工具行连成一片、分不清哪句是总结。
+   *
+   * 连续的 inline 块（text / image 之外的所有块）合并进同一张卡片 ——
+   * 一句话被拆成多个 text block 是模型分段造成的，不该渲染成多个盒子。
+   */
+  type Segment =
+    | { kind: 'toolflow'; blocks: ContentBlock[] }
+    | { kind: 'card'; blocks: ContentBlock[] }
+
+  const segments: Segment[] = []
+  for (const group of groupBlocks(cardContent)) {
+    if (group.kind === 'toolflow') {
+      segments.push({ kind: 'toolflow', blocks: group.blocks })
+    } else {
+      const last = segments[segments.length - 1]
+      if (last && last.kind === 'card') last.blocks.push(group.block)
+      else segments.push({ kind: 'card', blocks: [group.block] })
+    }
+  }
+
+  const renderSegments = () =>
+    segments.map((seg, idx) => {
+      if (seg.kind === 'toolflow') {
         return (
           <ToolflowUnit
             key={`tf-${idx}`}
-            blocks={group.blocks}
+            blocks={seg.blocks}
             isStreaming={isStreaming}
             {...(thinkInfo ? { think: { open: thinkOpen, onToggle: () => { setThinkTouched(true); setThinkOpen((v) => !v) } } } : {})}
           />
         )
       }
       return (
-        <ContentBlockView
-          key={`in-${idx}`}
-          block={group.block}
-          skipImages={imageBlockKeys}
-        />
+        <div key={`card-${idx}`} className="assistant-card">
+          {seg.blocks.map((block, i) => (
+            <ContentBlockView key={`in-${i}`} block={block} skipImages={imageBlockKeys} />
+          ))}
+        </div>
       )
     })
-  }
-
   const fileRefs = message.content
     .filter((b) => b.type === 'tool_use' && (b.name === 'Write' || b.name === 'Edit'))
     .map((b) => b.input?.file_path as string)
     .filter(Boolean)
 
   return (
-      <div className="animate-fade-in flex justify-center group/msg" style={{ marginBottom: sameRole ? 8 : 48 }}>
-        <div style={{ maxWidth: 'var(--bubble-max-w)', width: '100%' }}>
-          {/*
-           * 一张卡片，不是散落的裸文本。
-           *
-           * 之前正文直接铺在背景上：没有边界、没有落款位置、也没有「这一段属于谁」
-           * 的视觉容器。多 Bot 之后这个问题被放大 —— 滚动时只能靠字号猜这是谁说的。
-           *
-           * 现在是一张浅色卡片：
-           *   - 卡片顶部一行 = 头像 + 名字 + 分组（换人时才画）；
-           *   - 卡内是正文与工具流；
-           *   - 卡外是操作按钮（复制/重试），不污染卡片本体。
-           *
-           * 用 inline-block 而不是撑满：短回答不该独占一整行，那看起来像公告栏。
-           */}
-          <div
-            style={{
-              display: 'inline-block',
-              maxWidth: '100%',
-              padding: '10px 14px',
-              borderRadius: 12,
-              background: 'var(--bg-surface-container)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            <SpeakerLine
-              {...(thinkInfo
-                ? {
-                    think: {
-                      working: thinkWorking,
-                      open: thinkOpen,
-                      onToggle: () => {
-                        setThinkTouched(true)
-                        setThinkOpen((v) => !v)
-                      },
-                    },
-                  }
-                : {})}
-            />
-            {renderBlocks()}
-            {fileRefs.length > 0 && (
-              <div className="mt-2 flex flex-col gap-2">
-                {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
-              </div>
-            )}
+    <div className="animate-fade-in" style={{ marginBottom: sameRole ? 14 : 34 }}>
+      <SpeakerLine
+        {...(thinkInfo
+          ? {
+              think: {
+                working: thinkWorking,
+                open: thinkOpen,
+                onToggle: () => {
+                  setThinkTouched(true)
+                  setThinkOpen((v) => !v)
+                },
+              },
+            }
+          : {})}
+        />
+
+      {/* 工具链裸排、正文装卡片 —— 见上面 segments 的说明 */}
+      <div className="toolflow-body">
+        {renderSegments()}
+        {fileRefs.length > 0 && (
+          <div className="mt-2 flex flex-col gap-2">
+            {[...new Set(fileRefs)].map((fp, i) => <FileReferenceCard key={i} filePath={fp} />)}
           </div>
-          <MessageActions message={message} onRetry={handleRetry} />
-        </div>
+        )}
+        {imageBlocks.map((b, i) => (
+          <ImageView key={`img-${i}`} src={b.src as string} />
+        ))}
       </div>
+
+      <MessageActions message={message} onRetry={handleRetry} />
+    </div>
   )
 })
 
@@ -446,11 +464,11 @@ function SpeakerLine({ think }: {
       }}
     >
       <BotAvatar bot={bot} size={20} animate={false} paper={isLight ? '#eeeeee' : '#201f1f'} />
-      <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--text-on-surface)' }}>
+      <span style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--text-on-surface)' }}>
         {bot.name}
       </span>
       {bot.group ? (
-        <span style={{ fontSize: 9, color: 'var(--text-outline-variant)' }}>· {bot.group}</span>
+        <span style={{ fontSize: 8.5, color: 'var(--text-outline-variant)' }}>· {bot.group}</span>
       ) : null}
       {think && <ThinkToggle {...think} />}
     </div>
@@ -562,7 +580,7 @@ function FileReferenceCard({ filePath }: { filePath: string }) {
       </svg>
       <span
         className="truncate"
-        style={{ fontSize: '12.5px', lineHeight: 1.35, color: 'var(--text-on-surface)' }}
+        style={{ fontSize: '11.5px', lineHeight: 1.35, color: 'var(--text-on-surface)' }}
       >
         {fileName}
       </span>
@@ -718,13 +736,13 @@ function ImageView({ src }: { src: string }) {
   const resolved = isLocal ? (localSrc ?? '') : src
 
   return (
-    <div className="my-3">
+    <div style={{ marginTop: 6 }}>
       {resolved && (
         <img
           src={resolved}
           alt={label}
           className="rounded-xl max-w-full max-h-[512px] object-contain"
-          style={{ border: '1px solid var(--border-subtle)' }}
+          style={{ border: '1px solid var(--border-subtle)', display: 'block' }}
           onError={() => setError(true)}
         />
       )}
@@ -903,7 +921,7 @@ const MARKDOWN_COMPONENTS = {
     </ul>
   ),
   li: ({ children }: any) => (
-    <li className="leading-relaxed mb-1" style={{ color: 'var(--text-on-surface)', fontSize: '13px' }}>
+    <li className="leading-relaxed mb-1" style={{ color: 'var(--text-on-surface)', fontSize: '12.5px' }}>
       {children}
     </li>
   ),
@@ -986,6 +1004,19 @@ export function ContentBlockView({ block, skipImages }: { block: ContentBlock; s
       // 屏幕上就会出现 "![晨报](" 这种残句。
       return clean
     })
+    /*
+     * 模型自己的引用标记：`[已生成图片: xxx.png]`。
+     *
+     * 无条件删掉，不比对文件名。原因：
+     *   - 这个标记是人写给**历史回放**看的（让模型知道生成过什么），不是给
+     *     界面看的；真正的图片由 image block 渲染，标记在任何情况下都是重复。
+     *   - 按文件名比对会漏：标记里可能只有一个裸文件名，而 image block 存的是
+     *     绝对路径，两边不一定对得上（曾经就是这样漏掉一行断头话）。
+     *   - 它必须排在下面那条「裸路径」规则**之前**。后者只认文件名，会把标记
+     *     里的路径抹掉却把 `[已生成图片: ` 留在屏幕上。
+     */
+    text = text.replace(/\[\s*已生成图片[:：][^\]]*\]/g, '')
+
     // 裸路径 / 反引号路径：按 token 逐个判断，命中就整段抹掉
     text = text.replace(/`?[\w\/:\-.]+\.(?:png|jpe?g|gif|webp|svg|bmp)`?/gi,
       (m: string) => (skipImages?.has(imageKey(m.replace(/`/g, ''))) ? '' : m),
@@ -1004,7 +1035,7 @@ export function ContentBlockView({ block, skipImages }: { block: ContentBlock; s
     const already = (src: string) => skipImages?.has(imageKey(src)) ?? false
     if (matches.some((m) => !already(m))) {
       return (
-        <div style={{ color: 'var(--text-on-surface)', fontSize: '13px', lineHeight: 1.7 }}>
+        <div style={{ color: 'var(--text-on-surface)', fontSize: '12.5px', lineHeight: 1.6 }}>
           {parts.map((part, i) => (
             <span key={i}>
               {part && (
@@ -1025,8 +1056,8 @@ export function ContentBlockView({ block, skipImages }: { block: ContentBlock; s
         className="prose"
         style={{
           color: 'var(--text-on-surface)',
-          fontSize: '13px',
-          lineHeight: 1.7,
+          fontSize: '12.5px',
+          lineHeight: 1.6,
         }}
       >
         <ReactMarkdown

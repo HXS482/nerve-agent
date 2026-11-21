@@ -82,7 +82,7 @@ function GalleryPreview({ img, onClose }: { img: GalleryImage; onClose: () => vo
   const src = useImageSrc(img.path)
   return (
     <div
-      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
+      className="fixed inset-0 z-[var(--z-nested)] flex items-center justify-center animate-fade-in"
       style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}
       onClick={onClose}
     >
@@ -137,14 +137,14 @@ export const Gallery = memo(function Gallery({ onClose }: GalleryProps) {
     <>
       {/* Backdrop — same as Settings */}
       <div
-        className="fixed inset-0 z-40 animate-fade-in"
+        className="fixed inset-0 z-[var(--z-overlay)] animate-fade-in"
         style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
         onClick={onClose}
       />
 
       {/* Modal — glass panel matching Settings */}
       <div
-        className="fixed z-50 animate-modal-in flex flex-col"
+        className="fixed z-[var(--z-modal)] animate-modal-in flex flex-col"
         onClick={(e) => e.stopPropagation()}
         style={{
           top: '50%',

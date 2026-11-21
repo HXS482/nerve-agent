@@ -552,7 +552,7 @@ export function RightSidebar() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: width + 8, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className="fixed top-0.5 bottom-0.5 right-0.5 z-40 flex flex-col overflow-hidden"
+          className="fixed top-0.5 bottom-0.5 right-0.5 z-[var(--z-panel)] flex flex-col overflow-hidden"
           style={{
             width,
             background: 'var(--bg-surface)',
@@ -563,7 +563,7 @@ export function RightSidebar() {
           {/* Resize handle — left edge */}
           <div
             onMouseDown={handleResizeStart}
-            className="absolute left-0 top-0 bottom-0 z-50 group/resize"
+            className="absolute left-0 top-0 bottom-0 z-[var(--z-panel-inner)] group/resize"
             style={{
               width: 8,
               cursor: 'col-resize',
@@ -580,7 +580,7 @@ export function RightSidebar() {
           </div>
           {/* Top Dock — glassmorphism style matching GradientButtonGroup */}
           <div
-            className="flex items-center justify-center gap-1.5 shrink-0 relative z-50"
+            className="flex items-center justify-center gap-1.5 shrink-0 relative z-[var(--z-panel-inner)]"
             style={{
               padding: '8px 10px',
             }}

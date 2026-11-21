@@ -99,7 +99,7 @@ export function ContextRing({ compact = false }: { compact?: boolean }) {
 
       {/* 用量弹层：贴用量环左上浮出（不压暗背景），点卡片外任意处关闭 */}
       {open && anchor && (
-        <div className="fixed inset-0 z-[200]" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[var(--z-panel-inner)]" onClick={() => setOpen(false)}>
           <div
             className="animate-fade-in"
             style={{

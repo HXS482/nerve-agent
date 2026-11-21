@@ -53,7 +53,7 @@ export function ResizeBorder() {
     onMouseLeave: () => { if (!dragRef.current) document.body.style.cursor = '' },
   })
 
-  const base = 'fixed z-[9999]'
+  const base = 'fixed z-[var(--z-resize)]'
   const style: React.CSSProperties = { pointerEvents: 'auto' }
 
   return (

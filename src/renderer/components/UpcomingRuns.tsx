@@ -67,9 +67,9 @@ export function UpcomingRuns({ routines, botId }: Props) {
     <div
       style={{
         margin: '0 10px 10px',
-        borderRadius: 10,
-        border: '1px solid rgba(255,255,255,0.06)',
-        background: 'var(--bg-surface-container)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border-subtle)',
+        background: 'var(--bg-background)',
         overflow: 'hidden',
       }}
     >
@@ -82,7 +82,7 @@ export function UpcomingRuns({ routines, botId }: Props) {
           gap: 8,
         }}
       >
-        <span className="text-[11px]" style={{ color: 'var(--text-on-surface-variant)', fontWeight: 500 }}>
+        <span className="text-[10px]" style={{ color: 'var(--text-on-surface-variant)', fontWeight: 500 }}>
           即将运行
         </span>
 
@@ -91,8 +91,8 @@ export function UpcomingRuns({ routines, botId }: Props) {
           style={{
             display: 'flex',
             padding: 2,
-            borderRadius: 7,
-            background: 'rgba(255,255,255,0.045)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-surface-container)',
             gap: 2,
           }}
         >
@@ -106,14 +106,14 @@ export function UpcomingRuns({ routines, botId }: Props) {
               onClick={() => setRange(opt.id)}
               style={{
                 minWidth: 26,
-                padding: '2px 6px',
+                padding: '2px 7px',
                 borderRadius: 5,
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: range === opt.id ? 600 : 400,
-                background: range === opt.id ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: range === opt.id ? 'var(--text-on-surface)' : 'var(--text-outline-variant)',
+                fontSize: 10,
+                fontWeight: range === opt.id ? 600 : 500,
+                background: range === opt.id ? 'var(--text-on-surface)' : 'transparent',
+                color: range === opt.id ? 'var(--bg-background)' : 'var(--text-outline)',
                 transition: 'background 0.12s, color 0.12s',
               }}
             >
@@ -124,7 +124,7 @@ export function UpcomingRuns({ routines, botId }: Props) {
       </div>
 
       {rows.length === 0 && disabled.length === 0 && (
-        <div className="text-[11px]" style={{ padding: '2px 12px 12px', color: 'var(--text-outline-variant)' }}>
+        <div className="text-[10px]" style={{ padding: '3px 12px 13px', color: 'var(--text-outline)' }}>
           {range === 'day' ? '今天没有要运行的任务' : range === 'week' ? '这一周没有要运行的任务' : '这 30 天没有要运行的任务'}
         </div>
       )}
@@ -140,16 +140,18 @@ export function UpcomingRuns({ routines, botId }: Props) {
           {/* 时间线圆点：第一行稍亮，其余保持同一节奏 */}
           <span
             style={{
-              width: 5,
-              height: 5,
+              width: 4,
+              height: 4,
               borderRadius: '50%',
               flexShrink: 0,
-              background: i === 0 ? '#7C5CD6' : 'rgba(124, 92, 214, 0.55)',
+              marginTop: 6,
+              background: 'var(--text-on-surface)',
+              opacity: i === 0 ? 1 : 0.5,
             }}
           />
 
           <div className="flex-1 min-w-0">
-            <div className="text-[12px] truncate" style={{ color: 'var(--text-on-surface)' }}>
+            <div className="text-[11px] truncate" style={{ color: 'var(--text-on-surface)' }}>
               {r.instruction}
             </div>
             <div className="text-[10px] truncate" style={{ color: 'var(--text-on-surface-variant)', marginTop: 1 }}>
@@ -200,11 +202,11 @@ export function UpcomingRuns({ routines, botId }: Props) {
 
       {/* 停用中的任务不占时间线，但必须能看到 —— 否则用户以为它消失了 */}
       {disabled.length > 0 && (
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', padding: '6px 12px 8px' }}>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '7px 12px 9px' }}>
           {disabled.map((r) => (
             <div key={r.id} className="flex items-center gap-2" style={{ padding: '3px 0' }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--text-outline-variant)', flexShrink: 0 }} />
-              <span className="text-[11px] flex-1 truncate" style={{ color: 'var(--text-outline-variant)' }}>
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--text-outline-variant)', flexShrink: 0, marginTop: 5 }} />
+              <span className="text-[10px] flex-1 truncate" style={{ color: 'var(--text-outline-variant)' }}>
                 {r.instruction}
               </span>
               <button
