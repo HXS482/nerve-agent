@@ -1,0 +1,13 @@
+{
+  "client_id": "https://cdn.jsdelivr.net/gh/HXS482/nerve-agent@master/oauth/client-metadata.json",
+  "client_name": "Nerve",
+  "client_uri": "https://github.com/HXS482/nerve-agent",
+  "redirect_uris": [
+    "http://127.0.0.1:39751/callback",
+    "http://localhost:39751/callback"
+  ],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "scope": "refs:read saves:write offline_access"
+}
