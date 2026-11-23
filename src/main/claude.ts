@@ -8,7 +8,7 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, PetState, SessionUsage, ProviderInfo, ToolApprovalResponse } from '../shared/types'
+import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, SessionUsage, ProviderInfo, ToolApprovalResponse } from '../shared/types'
 import { AgentCore } from './core/agent-core'
 import { IPCChannel } from './core/ipc-channel'
 import { FileSessionStore } from './session-store'
@@ -23,7 +23,6 @@ export class ClaudeService {
   private core: AgentCore
   private channel: IPCChannel
   private window: BrowserWindow
-  private petWindow: BrowserWindow | null = null
   private projectDir: string
   private sourceDir: string
   private settings: ClaudeSettings
@@ -50,11 +49,6 @@ export class ClaudeService {
     if (this.settings.defaultProvider) this.core.setProvider(this.settings.defaultProvider).catch(() => {})
   }
 
-  setPetWindow(petWin: BrowserWindow) {
-    this.petWindow = petWin
-    this.channel.setPetWindow(petWin)
-  }
-
   setMemoryCore(core: any) {
     this.core.setMemoryCore(core)
   }
@@ -73,16 +67,9 @@ export class ClaudeService {
     }
   }
 
-  private sendPetState(state: PetState) {
-    if (this.petWindow && !this.petWindow.isDestroyed()) {
-      this.petWindow.webContents.send(IPC_CHANNELS.PET_STATE_CHANGE, state)
-    }
-  }
-
   async sendMessage(payload: SendMessagePayload) {
     // 清理之前的流
     this.send(IPC_CHANNELS.STREAM_CLEAR, {})
-    this.sendPetState('jumping')
 
     // 调用 AgentCore
     await this.core.sendMessage(payload, this.channel)
@@ -90,7 +77,6 @@ export class ClaudeService {
 
   cancel(sessionId?: string) {
     this.core.cancel(sessionId)
-    this.sendPetState('idle')
   }
 
   handleToolApprovalResponse(response: ToolApprovalResponse) {
@@ -127,12 +113,6 @@ export class ClaudeService {
   setWindow(window: BrowserWindow) {
     this.window = window
     this.channel.setMainWindow(window)
-  }
-
-  setPetSkin(id: string) {
-    if (this.petWindow && !this.petWindow.isDestroyed()) {
-      this.petWindow.webContents.send(IPC_CHANNELS.PET_SKIN_CHANGED, id)
-    }
   }
 
   pushFlowItem(type: string, content: string, meta?: Record<string, any>) {

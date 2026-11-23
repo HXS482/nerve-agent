@@ -43,22 +43,6 @@ declare global {
       listSessions: () => Promise<any[]>
       getSessionMessages: (sessionId: string) => Promise<any[]>
       deleteSessionRemote: (sessionId: string) => Promise<void>
-      onPetStateChange: (callback: (state: string) => void) => () => void
-      petDragStart: (mouseX: number, mouseY: number) => void
-      petDragMove: (screenX: number, screenY: number) => void
-      petDragEnd: () => void
-      togglePet: () => Promise<boolean>
-      onPetStatus: (callback: (status: { visible: boolean; docked: boolean }) => void) => () => void
-      getPetState: () => Promise<{ visible: boolean; docked: boolean }>
-      sendPetColorScheme: (scheme: string) => void
-      onPetColorScheme: (callback: (scheme: string) => void) => () => void
-      undockPet: () => Promise<void>
-      setPetSidebarVisible: (visible: boolean) => void
-      listPetSkins: () => Promise<any[]>
-      importPetSkin: () => Promise<any | null>
-      deletePetSkin: (id: string) => Promise<boolean>
-      setPetSkin: (id: string) => Promise<void>
-      onPetSkinChanged: (callback: (skinId: string) => void) => () => void
       windowMinimize: () => void
       windowMaximize: () => void
       windowClose: () => void

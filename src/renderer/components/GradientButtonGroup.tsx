@@ -11,9 +11,7 @@ interface NavItem {
 
 interface GradientButtonGroupProps {
   onOpenGallery: () => void
-  onOpenCustomize: () => void
   onOpenMemory: () => void
-  customizeOpen: boolean
 }
 
 // Palette icon
@@ -39,9 +37,7 @@ const THEMES = [
 
 export function GradientButtonGroup({
   onOpenGallery,
-  onOpenCustomize,
   onOpenMemory,
-  customizeOpen,
 }: GradientButtonGroupProps) {
   const theme = useChatStore((s) => s.theme)
   const setTheme = useChatStore((s) => s.setTheme)
@@ -124,21 +120,6 @@ export function GradientButtonGroup({
           <path d="M17 7h.01" />
           <path d="M7 13l3.644-3.644a1.21 1.21 0 0 1 1.712 0l3.644 3.644" />
           <path d="M15 12l1.644-1.644a1.21 1.21 0 0 1 1.712 0l2.644 2.644" />
-        </svg>
-      ),
-    },
-{
-      id: "customize",
-      label: "Customize pet",
-      onClick: onOpenCustomize,
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-          <circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none" />
-          <circle cx="12" cy="7" r="1.5" fill="currentColor" stroke="none" />
-          <circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none" />
-          <circle cx="10" cy="14" r="1.5" fill="currentColor" stroke="none" />
-          <circle cx="14" cy="14" r="1.5" fill="currentColor" stroke="none" />
         </svg>
       ),
     },

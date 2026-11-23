@@ -104,45 +104,6 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.STREAM_CLEAR, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.STREAM_CLEAR, handler)
   },
-  // Pet
-  onPetStateChange: (callback: (state: string) => void) => {
-    const handler = (_event: any, state: string) => callback(state)
-    ipcRenderer.on(IPC_CHANNELS.PET_STATE_CHANGE, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.PET_STATE_CHANGE, handler)
-  },
-  petDragStart: (mouseX: number, mouseY: number) =>
-    ipcRenderer.send(IPC_CHANNELS.PET_DRAG_START, mouseX, mouseY),
-  petDragMove: (screenX: number, screenY: number) =>
-    ipcRenderer.send(IPC_CHANNELS.PET_DRAG_MOVE, screenX, screenY),
-  petDragEnd: () => ipcRenderer.send(IPC_CHANNELS.PET_DRAG_END),
-  togglePet: () => ipcRenderer.invoke(IPC_CHANNELS.PET_TOGGLE),
-  onPetStatus: (callback: (status: { visible: boolean; docked: boolean }) => void) => {
-    const handler = (_event: any, status: { visible: boolean; docked: boolean }) => callback(status)
-    ipcRenderer.on(IPC_CHANNELS.PET_STATUS, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.PET_STATUS, handler)
-  },
-  getPetState: () => ipcRenderer.invoke(IPC_CHANNELS.PET_GET_STATE),
-  sendPetColorScheme: (scheme: string) => ipcRenderer.send(IPC_CHANNELS.PET_COLOR_SCHEME, scheme),
-  onPetColorScheme: (callback: (scheme: string) => void) => {
-    const handler = (_event: any, scheme: string) => callback(scheme)
-    ipcRenderer.on(IPC_CHANNELS.PET_COLOR_SCHEME, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.PET_COLOR_SCHEME, handler)
-  },
-  undockPet: () => ipcRenderer.invoke(IPC_CHANNELS.PET_UNDOCK),
-  setPetSidebarVisible: (visible: boolean) =>
-    ipcRenderer.send(IPC_CHANNELS.PET_SIDEBAR_VISIBILITY, visible),
-  // Pet skins
-  listPetSkins: () => ipcRenderer.invoke(IPC_CHANNELS.PET_LIST_SKINS),
-  importPetSkin: () => ipcRenderer.invoke(IPC_CHANNELS.PET_IMPORT_SKIN),
-  deletePetSkin: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PET_DELETE_SKIN, id),
-  setPetSkin: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PET_SET_SKIN, id),
-  onPetSkinChanged: (callback: (skinId: string) => void) => {
-    const handler = (_event: any, skinId: string) => callback(skinId)
-    ipcRenderer.on(IPC_CHANNELS.PET_SKIN_CHANGED, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.PET_SKIN_CHANGED, handler)
-  },
-  petSetShape: (rects: { x: number; y: number; width: number; height: number }[]) =>
-    ipcRenderer.send(IPC_CHANNELS.PET_SET_SHAPE, rects),
   // Nerve settings
   getNerveSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GET_NERVE_SETTINGS),
   saveNerveSettings: (settings: any): Promise<SaveNerveSettingsResult> => ipcRenderer.invoke(IPC_CHANNELS.SAVE_NERVE_SETTINGS, settings),

@@ -10,7 +10,6 @@ import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ProjectPalette } from './components/ProjectPalette'
 import { Gallery } from './components/Gallery'
-import { PetView } from './components/PetView'
 import { ModelIsland } from './components/ModelIsland'
 import { SidebarToggleIcon } from './components/SidebarToggleIcon'
 import { ApprovalBar } from './components/ApprovalBar'
@@ -24,11 +23,6 @@ import { ResizeBorder } from './components/ResizeBorder'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 export default function App() {
-  // Hash routing: #/pet renders the pet window
-  if (window.location.hash === '#/pet') {
-    return <PetView />
-  }
-
   const claude = useClaude()
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
   const setSidebarOpen = useChatStore((s) => s.setSidebarOpen)
@@ -93,11 +87,6 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
-
-  // 同步侧边栏可见性给主进程：宠物吸附落点仅在侧边栏展开时生效（stage 模式侧边栏不存在）
-  useEffect(() => {
-    window.claude.setPetSidebarVisible?.(sidebarOpen && viewMode === 'chat')
-  }, [sidebarOpen, viewMode])
 
   return (
     <div

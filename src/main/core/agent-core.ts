@@ -480,9 +480,6 @@ export class AgentCore {
     const pendingToolCalls = ctx.pendingToolCalls
     const pendingApprovals = ctx.pendingApprovals
 
-    // 通知通道开始
-    if (isElectronChannel(channel)) channel.sendPetState('jumping')
-
     try {
       // 准备消息和系统提示
       const { messages, systemPrompt, mcpTools, bot, scopeKey } = await this.prepareMessages(payload, sessionId)
@@ -564,13 +561,11 @@ export class AgentCore {
       if (ctx.abort.signal.aborted) {
         // 被中断（用户取消 / 超时 / 同会话重发顶掉）≠ 跑完，收尾原因要如实上报
         channel.sendDone(sessionId, 0, 0, 'cancelled', payload.runId)
-        if (isElectronChannel(channel)) channel.sendPetState('idle')
         return
       }
       const errorMsg = err instanceof Error ? err.message : String(err)
       console.error('[AgentCore] sendMessage error:', errorMsg)
       channel.sendError(errorMsg, payload.runId)
-      if (isElectronChannel(channel)) channel.sendPetState('error')
     } finally {
       // 清理会话上下文（如果不再需要）
       // 注意：不删除上下文，因为可能还有后续消息
@@ -1623,7 +1618,6 @@ export class AgentCore {
       onTextDelta: (text) => {
         textDeltas.push(text)
         channel.sendStreamDelta(text)
-        if (isElectronChannel(channel)) channel.sendPetState('working')
       },
       onThinkingDelta: (thinking) => {
         fullThinkingParts.push(thinking)
@@ -1633,7 +1627,6 @@ export class AgentCore {
         allToolCalls.push({ id, name, input })
         pendingToolCalls.set(id, { name, input })
         channel.sendToolCall(id, name, input)
-        if (isElectronChannel(channel)) channel.sendPetState('running-left')
       },
       onToolApproval: cfg.permissionMode === 'bypassPermissions'
         ? undefined
@@ -1794,7 +1787,6 @@ export class AgentCore {
     // 循环在步边界被 break（用户取消）也会走到这里：别报成 complete
     const cancelled = ctx.abort.signal.aborted
     channel.sendDone(sessionId, cost, maxContextTokens, cancelled ? 'cancelled' : 'complete', payload.runId)
-    if (isElectronChannel(channel)) channel.sendPetState(cancelled ? 'idle' : 'happy')
   }
 
   /**

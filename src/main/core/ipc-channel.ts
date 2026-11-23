@@ -10,10 +10,7 @@ import type { DoneReason } from '../../shared/types'
 import type { OutputChannel } from './output-channel'
 
 export class IPCChannel implements OutputChannel {
-  constructor(
-    private mainWindow: BrowserWindow,
-    private petWindow: BrowserWindow | null = null,
-  ) {}
+  constructor(private mainWindow: BrowserWindow) {}
 
   private send(channel: string, data: unknown) {
     if (!this.mainWindow.isDestroyed()) {
@@ -73,12 +70,6 @@ export class IPCChannel implements OutputChannel {
     }
   }
 
-  sendPetState(state: string): void {
-    if (this.petWindow && !this.petWindow.isDestroyed()) {
-      this.petWindow.webContents.send(IPC_CHANNELS.PET_STATE_CHANGE, state)
-    }
-  }
-
   sendFlowItem(type: string, content: string, meta?: Record<string, unknown>): void {
     this.send(IPC_CHANNELS.FLOW_ITEM, { type, content, meta })
   }
@@ -103,10 +94,5 @@ export class IPCChannel implements OutputChannel {
   /** 更新主窗口引用（窗口重建时） */
   setMainWindow(window: BrowserWindow) {
     this.mainWindow = window
-  }
-
-  /** 更新宠物窗口引用 */
-  setPetWindow(window: BrowserWindow) {
-    this.petWindow = window
   }
 }

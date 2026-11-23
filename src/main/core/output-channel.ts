@@ -38,9 +38,6 @@ export interface OutputChannel {
  * 扩展核心 OutputChannel，添加 Electron/UI 特有的方法
  */
 export interface ElectronOutputChannel extends OutputChannel {
-  /** 发送宠物状态变化 */
-  sendPetState(state: string): void
-
   /** 发送 Flow 项目 */
   sendFlowItem(type: string, content: string, meta?: Record<string, unknown>): void
 
@@ -61,7 +58,7 @@ export interface ElectronOutputChannel extends OutputChannel {
  * 检查通道是否支持 Electron 特有功能
  */
 export function isElectronChannel(channel: OutputChannel): channel is ElectronOutputChannel {
-  return 'sendPetState' in channel && typeof channel.sendPetState === 'function'
+  return 'sendFlowItem' in channel && typeof (channel as ElectronOutputChannel).sendFlowItem === 'function'
 }
 
 /**

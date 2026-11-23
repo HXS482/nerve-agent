@@ -4,7 +4,6 @@ import { join, relative, extname, basename, resolve } from 'path'
 import { homedir, hostname } from 'os'
 import { IPC_CHANNELS, SendMessagePayload, ClaudeConfig, FileAttachment, ToolApprovalResponse } from '../shared/types'
 import { ClaudeService, testConnection, fetchModels, getSkills, toggleSkill, transcribeAudio } from './claude'
-import { PetSkinManager } from './pet-skins'
 import { NERVE_DIR, getNerveSettings, saveNerveSettings, getMcpServers, saveMcpServers, getAvailableModels, getChannels, saveChannels, getProxy, saveProxy, getGatewayPublicAccess, getGatewayToken, saveGatewayPublicAccess, loadMcpBridgeConfig, saveMcpBridgeConfig, isRemoteMcpConfig, getRecentProjects, type McpServerConfig } from './settings'
 import { saveImage, listImages, deleteImage, getImagePath, getImagesDir } from './images'
 import { scanMemoryBrowser, readMemoryContent } from './memory-browser'
@@ -13,7 +12,7 @@ import { NerveGateway } from './gateway'
 import { RoutineStore } from './store/routine-store'
 import { BotRegistry } from './core/bot-registry'
 
-export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManager: PetSkinManager, gitService: GitService, gateway?: NerveGateway,
+export function setupIPC(window: BrowserWindow, claude: ClaudeService, gitService: GitService, gateway?: NerveGateway,
   mcpBridge?: import('./mcp-bridge').McpBridgeServer,
   stores?: { routineStore?: RoutineStore; botRegistry?: BotRegistry },
 ) {
@@ -181,23 +180,6 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
 
   ipcMain.handle(IPC_CHANNELS.GET_USAGE_STATS, () => {
     return claude.getUsageStats()
-  })
-
-  // Pet skins
-  ipcMain.handle(IPC_CHANNELS.PET_LIST_SKINS, () => {
-    return skinManager.listSkins()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PET_IMPORT_SKIN, async () => {
-    return skinManager.importSkin(window)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PET_DELETE_SKIN, (_event, id: string) => {
-    return skinManager.deleteSkin(id)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PET_SET_SKIN, (_event, id: string) => {
-    claude.setPetSkin(id)
   })
 
   // Nerve settings
@@ -582,7 +564,7 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
   
   // ── Routines / Bots（bot 驱动改造）────────────────────────
   //
-  // setupIPC 会被调用两次（主窗口 + pet 窗口 / activate 重建），而 ipcMain.handle
+  // setupIPC 会被调用两次（主窗口 / activate 重建），而 ipcMain.handle
   // 对已注册的 channel 会抛 "Attempted to register a second handler"。
   // 这几个 channel 的 handler 只依赖模块级的 stores 参数与 claude，与具体窗口无关，
   // 所以第二次注册前先移除旧的即可（Electron 允许 removeHandler 后重新 handle）。
@@ -594,7 +576,7 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, skinManag
     ipcMain.removeHandler(ch)
   }
 
-  // stores 缺省时用一个惰性打开的 RoutineStore：老调用点（pet 窗口那条 setupIPC）不传，
+  // stores 缺省时用一个惰性打开的 RoutineStore：老调用点不传，
   // 也不能让 UI 一打开就崩。
   let fallbackStore: RoutineStore | null = null
   const routineStore = () => {

@@ -79,9 +79,6 @@ interface ChatState {
   // Session usage
   sessionUsage: SessionUsage | null
 
-  // Pet customization
-  petColorScheme: string
-  petSkinId: string
 
   // Right sidebar
   rightSidebarOpen: boolean
@@ -152,9 +149,6 @@ interface ChatState {
   // Usage actions
   setSessionUsage: (usage: SessionUsage | null) => void
 
-  // Pet actions
-  setPetColorScheme: (scheme: string) => void
-  setPetSkinId: (id: string) => void
 
   // Right sidebar actions
   setRightSidebarOpen: (open: boolean) => void
@@ -210,9 +204,6 @@ export const useChatStore = create<ChatState>()(
       // Session usage
       sessionUsage: null,
 
-      // Pet customization
-      petColorScheme: 'purple',
-      petSkinId: 'default',
 
       // Right sidebar
       rightSidebarOpen: false,
@@ -322,9 +313,6 @@ export const useChatStore = create<ChatState>()(
       // Usage actions
       setSessionUsage: (usage) => set({ sessionUsage: usage }),
 
-      // Pet actions
-      setPetColorScheme: (scheme) => set({ petColorScheme: scheme }),
-      setPetSkinId: (id) => set({ petSkinId: id }),
 
       // Right sidebar actions
       setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
@@ -358,8 +346,6 @@ export const useChatStore = create<ChatState>()(
         config: state.config,
         sidebarOpen: state.sidebarOpen,
         currentSessionId: state.currentSessionId,
-        petColorScheme: state.petColorScheme,
-        petSkinId: state.petSkinId,
         rightSidebarOpen: state.rightSidebarOpen,
         rightSidebarView: state.rightSidebarView,
         flowItems: state.flowItems.slice(-MAX_FLOW_ITEMS),

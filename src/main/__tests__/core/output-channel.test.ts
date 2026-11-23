@@ -107,7 +107,7 @@ describe('OutputChannel', () => {
       expect(isElectronChannel(channel)).toBe(false)
     })
 
-    it('should return true for channel with sendPetState', () => {
+    it('should return true for channel with sendFlowItem', () => {
       const channel = {
         sendStreamDelta: () => {},
         sendThinkingDelta: () => {},
@@ -116,7 +116,6 @@ describe('OutputChannel', () => {
         sendDone: () => {},
         sendError: () => {},
         isReady: () => true,
-        sendPetState: () => {},
         sendFlowItem: () => {},
         sendGitRefresh: () => {},
         sendToolApprovalRequest: () => {},

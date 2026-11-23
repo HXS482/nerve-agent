@@ -147,7 +147,7 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
       {groups.map(({ name, bots: groupBots }) => {
         const isCollapsed = collapsed.has(name)
         return (
-          <div key={name} style={{ marginBottom: 6 }}>
+          <div key={name} style={{ marginBottom: 3 }}>
             {/*
              * 分组标题 = 折叠开关。
              *
@@ -157,7 +157,7 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
             <button
               onClick={() => toggleGroup(name)}
               className="flex items-center gap-1.5 w-full text-left cursor-pointer transition-colors"
-              style={{ padding: '5px 4px', background: 'transparent', border: 'none', borderRadius: 5, marginBottom: 2 }}
+              style={{ padding: '3px 4px', background: 'transparent', border: 'none', borderRadius: 5, marginBottom: 1 }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-container)' }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             >
@@ -202,13 +202,13 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
                 <div
                   key={bot.id}
                   className="group/bot relative"
-                  style={{ marginBottom: 2 }}
+                  style={{ marginBottom: 1 }}
                 >
                 <button
                   onClick={() => openBot(bot)}
                   className="flex items-start gap-2.5 w-full text-left transition-colors cursor-pointer"
                   style={{
-                    padding: '7px 8px',
+                    padding: '3px 8px',
                     borderRadius: 9,
                     background: isActive ? 'var(--bg-surface-container-high)' : 'transparent',
                     border: 'none',
@@ -219,6 +219,9 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
                 >
                   <BotAvatar
                     bot={bot}
+                    /* 头像比文本块高，是这一行高度的实际决定者。
+                       上下内边距压到 3px 之后，头像从 30 放到 34 也不会把行撑散。 */
+                    size={34}
                     paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
                     /*
                      * 两层判断，故意不一样：
@@ -240,7 +243,7 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
                   />
                   <div className="flex-1 min-w-0" style={{ paddingTop: 1 }}>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface)', fontWeight: 600 }}>
+                      <span className="text-[12px] truncate" style={{ color: 'var(--text-on-surface)', fontWeight: 600, lineHeight: 1.25 }}>
                         {bot.name}
                       </span>
                       {/*
@@ -254,7 +257,7 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
                         {latest ? relTime(latest.updatedAt || latest.createdAt) : ''}
                       </span>
                     </div>
-                    <div className="text-[10px] truncate" style={{ color: 'var(--text-on-surface-variant)', marginTop: 1 }}>
+                    <div className="text-[10px] truncate" style={{ color: 'var(--text-on-surface-variant)', marginTop: 1, lineHeight: 1.3 }}>
                       {preview || 'No messages yet'}
                     </div>
                   </div>

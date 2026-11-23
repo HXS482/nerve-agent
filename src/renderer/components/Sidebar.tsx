@@ -1,9 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState } from 'react'
 import { useChatStore, Session } from '../stores/chatStore'
 import { BotList } from './BotList'
 import { SidebarToggleIcon } from './SidebarToggleIcon'
-import { PetPixelArt, ColorScheme } from './PetPixelArt'
-import { PetSkin } from '../../shared/types'
 import { GradientButtonGroup } from './GradientButtonGroup'
 import { MemoryBrowser } from './MemoryBrowser'
 import { UsageStatsPanel } from './UsageStatsPanel'
@@ -21,74 +19,14 @@ interface SidebarProps {
 export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onSelectSession, botStatus = 'idle' }: SidebarProps) {
   const config = useChatStore((s) => s.config)
   const currentSessionId = useChatStore((s) => s.currentSessionId)
-  const theme = useChatStore((s) => s.theme)
-  const toggleTheme = useChatStore((s) => s.toggleTheme)
-  const petColorScheme = useChatStore((s) => s.petColorScheme)
-  const setPetColorScheme = useChatStore((s) => s.setPetColorScheme)
-  const petSkinId = useChatStore((s) => s.petSkinId)
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const setSidebarWidth = useChatStore((s) => s.setSidebarWidth)
-  const setPetSkinId = useChatStore((s) => s.setPetSkinId)
-  const [skins, setSkins] = useState<PetSkin[]>([])
-  const [petState, setPetState] = useState<string>('idle')
-  const [petDocked, setPetDocked] = useState(false)
-  const [isHoveringDock, setIsHoveringDock] = useState(false)
-  const [customizeOpen, setCustomizeOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
-  const [petVisible, setPetVisible] = useState(true)
   /** 侧栏搜索框的查询串；空 = 不筛选。Esc 清空。 */
   const [query, setQuery] = useState('')
-  const customizeRef = useRef<HTMLDivElement>(null)
-
-  // Load available skins (refresh when customize panel opens)
-  useEffect(() => {
-    window.claude.listPetSkins().then((s: PetSkin[]) => setSkins(s)).catch(() => {})
-  }, [customizeOpen])
-
-  // Listen for pet state and status changes
-  useEffect(() => {
-    // Sync initial state from main process
-    window.claude.getPetState().then(({ visible, docked }: { visible: boolean; docked: boolean }) => {
-      setPetVisible(visible)
-      setPetDocked(docked)
-    }).catch(() => {})
-
-    const unsubState = window.claude.onPetStateChange((state: string) => {
-      setPetState(state)
-    })
-    const unsubStatus = window.claude.onPetStatus(({ visible, docked }: { visible: boolean; docked: boolean }) => {
-      setPetVisible(visible)
-      setPetDocked(docked)
-    })
-    return () => {
-      unsubState()
-      unsubStatus()
-    }
-  }, [])
-
-  const handleUndock = useCallback(() => {
-    window.claude.undockPet()
-  }, [])
-
-  const handleTogglePet = useCallback(async () => {
-    await window.claude.togglePet()
-  }, [])
-
   const handleSelectSession = (session: Session) => {
     onSelectSession(session.id)
   }
-
-  // Close customize panel on click outside
-  useEffect(() => {
-    if (!customizeOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (customizeRef.current && !customizeRef.current.contains(e.target as Node)) {
-        setCustomizeOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [customizeOpen])
 
   return (
     <aside
@@ -240,221 +178,17 @@ export function Sidebar({ onNewChat, onOpenSettings, onOpenGallery, onClose, onS
         />
       </div>
 
-      {/* Bottom area: pedestal + buttons */}
+      {/* 侧栏底部：工具按钮组 */}
       <div style={{ padding: '0 4px 14px 4px', marginTop: '0px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Pet dock pedestal */}
-        <div
-          className="relative"
-          style={{
-            width: '100%',
-            height: '56px',
-            cursor: petDocked && petVisible ? 'pointer' : 'default',
-          }}
-          onMouseEnter={() => setIsHoveringDock(true)}
-          onMouseLeave={() => setIsHoveringDock(false)}
-          onClick={petDocked && petVisible ? handleUndock : undefined}
-        >
-          <div className="absolute inset-0 flex items-end justify-center" style={{ paddingBottom: '30px', pointerEvents: 'none', opacity: petDocked && petVisible ? 0 : 1 }}>
-            <p className="text-[10px]" style={{ color: theme !== 'light' ? 'rgba(120, 130, 160, 0.25)' : 'rgba(80, 130, 180, 0.35)' }}>
-              Drop pet here
-            </p>
-          </div>
-
-          {petDocked && petVisible && (
-            <div
-              className="absolute"
-              style={{
-                left: '50%', bottom: '30px', transform: 'translateX(-50%)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-              }}
-            >
-              <div style={{ transform: 'scale(0.55)', transformOrigin: 'center bottom', marginBottom: '-14px', position: 'relative', zIndex: 1 }}>
-                <PetPixelArt state={petState as any} colorScheme={petColorScheme as ColorScheme} />
-              </div>
-              <div className="relative" style={{ zIndex: 2 }}>
-                <div
-                  className="absolute pointer-events-none"
-                  style={{
-                    width: '80px', height: '28px',
-                    top: '-14px', left: '50%', transform: 'translateX(-50%)',
-                    borderRadius: '50%',
-                    background: theme !== 'light'
-                      ? 'radial-gradient(ellipse, rgba(160,170,210,0.4) 0%, rgba(140,150,200,0.15) 40%, transparent 70%)'
-                      : 'radial-gradient(ellipse, rgba(100,160,220,0.35) 0%, rgba(80,140,200,0.12) 40%, transparent 70%)',
-                    animation: 'pedestal-glow 2s ease-in-out infinite',
-                  }}
-                />
-                <div
-                  className="rounded-full transition-all duration-300"
-                  style={{
-                    width: '64px', height: '10px',
-                    background: theme !== 'light'
-                      ? 'radial-gradient(ellipse, rgba(140,150,180,0.12) 0%, rgba(100,110,140,0.04) 60%, transparent 100%)'
-                      : 'radial-gradient(ellipse, rgba(100,160,220,0.1) 0%, rgba(80,140,200,0.03) 60%, transparent 100%)',
-                    boxShadow: isHoveringDock
-                      ? theme !== 'light'
-                        ? '0 0 12px rgba(140,150,200,0.15)'
-                        : '0 0 12px rgba(100,160,220,0.15)'
-                      : 'none',
-                  }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom bar: gradient button group */}
         <div style={{ paddingLeft: '2px' }}>
           <GradientButtonGroup
             onOpenGallery={onOpenGallery}
-            onOpenCustomize={() => setCustomizeOpen(!customizeOpen)}
             onOpenMemory={() => setMemoryOpen(!memoryOpen)}
-            customizeOpen={customizeOpen}
           />
         </div>
       </div>
 
-      {/* Customize floating panel */}
-      {customizeOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-[var(--z-overlay)] animate-fade-in"
-            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
-            onClick={() => setCustomizeOpen(false)}
-          />
-          <div
-            className="fixed z-[var(--z-modal)] animate-modal-in"
-            style={{
-              top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-              width: 240,
-              background: 'var(--dynamic-island-bg)',
-              backdropFilter: 'var(--dynamic-island-blur)',
-              WebkitBackdropFilter: 'var(--dynamic-island-blur)',
-              border: '1px solid var(--dynamic-island-border)',
-              borderRadius: 16,
-              boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset',
-              overflow: 'hidden',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="no-select" style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
-              <div className="text-[13px] font-semibold" style={{ color: 'var(--text-on-surface)' }}>Pet</div>
-            </div>
-            <div style={{ padding: 10 }}>
-              <div
-                className="flex items-center justify-between cursor-pointer transition-colors"
-                style={{ padding: '8px 10px', borderRadius: 10 }}
-                onClick={handleTogglePet}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <div className="flex items-center gap-2.5">
-                  {petVisible ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-outline)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
-                      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
-                      <path d="M14.12 14.12a3 3 0 11-4.24-4.24" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  )}
-                  <span className="text-[12px]" style={{ color: 'var(--text-on-surface)' }}>Show Pet</span>
-                </div>
-                <div
-                  className="rounded-full transition-all duration-200"
-                  style={{
-                    width: 30, height: 16, padding: 2,
-                    background: petVisible ? 'var(--accent-primary)' : 'var(--bg-surface-container-highest)',
-                  }}
-                >
-                  <div
-                    className="rounded-full transition-all duration-200"
-                    style={{
-                      width: 12, height: 12,
-                      background: petVisible ? 'var(--bg-surface)' : 'var(--text-outline)',
-                      transform: petVisible ? 'translateX(14px)' : 'translateX(0)',
-                    }}
-                  />
-                </div>
-              </div>
 
-              <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
-
-              <div className="flex items-center justify-between" style={{ padding: '8px 10px 4px' }}>
-                <span className="text-[10px] font-medium uppercase" style={{ color: 'var(--text-outline-variant)', letterSpacing: '0.6px' }}>Skin</span>
-                <button
-                  onClick={async () => {
-                    const skin = await window.claude.importPetSkin()
-                    if (skin) { setSkins((prev) => [...prev, skin]); setPetSkinId(skin.id); window.claude.setPetSkin(skin.id) }
-                  }}
-                  className="text-[10px] transition-colors cursor-pointer"
-                  style={{ color: 'var(--accent-primary)' }}
-                  title="Import skin"
-                >+ Import</button>
-              </div>
-
-              <div className="flex flex-col" style={{ gap: 2 }}>
-                {skins.map((skin) => {
-                  const isActive = petSkinId === skin.id
-                  return (
-                    <div
-                      key={skin.id}
-                      className="flex items-center gap-2 cursor-pointer transition-colors"
-                      style={{ padding: '6px 8px', borderRadius: 8, background: isActive ? 'var(--bg-surface-container-high)' : 'transparent' }}
-                      onClick={() => { setPetSkinId(skin.id); window.claude.setPetSkin(skin.id) }}
-                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                    >
-                      <span
-                        className={isActive ? 'animate-pulse-soft' : ''}
-                        style={{
-                          width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                          background: isActive ? '#27C93F' : 'var(--text-outline-variant)',
-                          display: 'block',
-                        }}
-                      />
-                      <span className="text-[12px] flex-1 truncate" style={{ color: isActive ? 'var(--text-on-surface)' : 'var(--text-on-surface-variant)', fontWeight: isActive ? 500 : 400 }}>
-                        {skin.displayName}
-                      </span>
-                      {!skin.isDefault && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            window.claude.deletePetSkin(skin.id).then((ok: boolean) => {
-                              if (ok) { setSkins((prev) => prev.filter((s) => s.id !== skin.id)); if (petSkinId === skin.id) { setPetSkinId('default'); window.claude.setPetSkin('default') } }
-                            })
-                          }}
-                          className="flex items-center justify-center rounded transition-all cursor-pointer"
-                          style={{ width: 20, height: 20, borderRadius: 4, color: 'var(--text-outline)', background: 'transparent', border: 'none' }}
-                          onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5f56' }}
-                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-outline)' }}
-                          title="Delete"
-                        >
-                          <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                            <path d="M4 4l8 8M12 4l-8 8" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              <div style={{ padding: '8px 0 4px', borderTop: '1px solid var(--border-subtle)', marginTop: 6 }}>
-                <div className="flex items-center justify-center">
-                  <div style={{ transform: 'scale(0.55)', transformOrigin: 'center' }}>
-                    <PetPixelArt state="idle" colorScheme={petColorScheme as ColorScheme} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Brain panel */}
       <MemoryBrowser open={memoryOpen} onClose={() => setMemoryOpen(false)} />
