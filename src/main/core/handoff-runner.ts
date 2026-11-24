@@ -69,7 +69,7 @@ export interface HandoffDelivery {
    * 把一段文本作为某个 Bot 说的话追加进会话（不跑模型）。
    *
    * 带 answeredBy，渲染层据此把气泡画成那个 Bot 的头像和名字 ——
-   * 这就是「看起来像 Grok Bot」的那一半。
+   * 这就是「看起来像头像在替它干活」的那一半。
    */
   appendBotMessage: (input: {
     sessionId: string

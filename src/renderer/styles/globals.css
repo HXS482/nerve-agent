@@ -29,6 +29,10 @@
   --bg-chat-surface: #0D0D0D;
   --bg-message-card: #201f1f;
 
+  /* 用户气泡：暗色下用白纸 —— 整个界面里唯一的纯白实心块，代表「我说的」 */
+  --bg-user-bubble: #ffffff;
+  --text-on-user-bubble: #0D0D0D;
+
   --text-on-surface: #e5e2e1;
   --text-on-surface-variant: #c2c6d6;
   --text-on-background: #e5e2e1;
@@ -109,6 +113,10 @@
   /* 见暗色主题同名注释：浅色下页面用柔灰、卡片用纯白，卡片才是「浮起来」的 */
   --bg-chat-surface: #f8f9fa;
   --bg-message-card: #ffffff;
+
+  /* 用户气泡：亮色下用墨块 —— 与页面完全反相，是本方唯一「重」的色块 */
+  --bg-user-bubble: #111111;
+  --text-on-user-bubble: #ffffff;
 
   --text-on-surface: #1a1a1a;
   --text-on-surface-variant: #49454f;
@@ -337,7 +345,7 @@ button, a, input, textarea, select {
   border: 1px solid var(--stage-border);
 }
 
-/* ===== 顶栏中央：Grok Bot 切换按钮（chat ↔ stage 共用同一个位置） ===== */
+/* ===== 顶栏中央：Bot 头像切换按钮（chat ↔ stage 共用同一个位置） ===== */
 .bot-switch-btn {
   position: absolute;
   left: 50%;
@@ -352,23 +360,12 @@ button, a, input, textarea, select {
   padding: 0;
   cursor: pointer;
 }
-.bot-switch-btn svg {
+/* 头像本体是 canvas / svg，悬停只压不透明度，不要动尺寸（会触发重排，动画会顿一下） */
+.bot-switch-btn > * {
   transition: opacity 0.15s ease;
 }
-.bot-switch-btn:hover svg {
+.bot-switch-btn:hover > * {
   opacity: 0.86;
-}
-
-/* ===== Grok Bot 状态徽标：出错红点（位置由组件内联给出，这里只管闪烁） ===== */
-.gb-error-dot {
-  transform-box: fill-box;
-  transform-origin: center;
-  filter: drop-shadow(0 0 4px rgba(255, 59, 48, 0.75));
-  animation: gb-error-flash 0.9s ease-in-out infinite;
-}
-@keyframes gb-error-flash {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.2; transform: scale(0.78); }
 }
 
 /* ===== Stage 产物空间 ===== */
@@ -2806,6 +2803,129 @@ button.tool-spot-all:hover {
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
   mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+}
+
+/* ===== 用户消息气泡 =====
+ *
+ * 与助手卡片刻意相反：助手用「比页面亮一点点的同色系」，用户气泡用
+ * 「和页面反相的实心块」—— 表达的是「这句是我说的」，语气上要比 AI 的输出重。
+ *
+ *   暗色主题：气泡 #ffffff（白纸）+ 文字 #0d0d0d（页面墨色）
+ *   亮色主题：气泡 #111111（墨块）+ 文字 #ffffff（纸色）
+ *
+ * 两者的对比都是 19:1 左右，远超 WCAG AAA。
+ */
+.user-bubble {
+  background: var(--bg-user-bubble);
+  color: var(--text-on-user-bubble);
+  border: none;
+}
+
+/* 气泡里的链接胶囊：颜色跟着气泡的文字色走（currentColor），
+   否则会套用页面级的 --bg-surface-container-high —— 那是给深底设计的，
+   放在白气泡里就是一块突兀的灰砖。 */
+.user-bubble a {
+  background: color-mix(in srgb, currentColor 10%, transparent) !important;
+  border-color: color-mix(in srgb, currentColor 20%, transparent) !important;
+  color: inherit !important;
+}
+
+/* ===== 对话滚动区（MessageScroller）=====
+ *
+ * 上下留白原来写在 ChatPanel 的内联样式里（32px / 80px），现在滚动容器是
+ * MessageScroller 的 <section>，内联够不着，挪到这里。
+ * 左右留白仍由内容层的 paddingInline 控制，跟输入胶囊同一条对齐线。
+ */
+.chat-scroll-viewport {
+  padding-top: 32px;
+  padding-bottom: 80px;
+}
+
+/*
+ * 正文列宽 —— 消息区和底部输入胶囊共用这一条，别再各写一份。
+ *
+ * 之前是两套规则：正文列 maxWidth 90%，输入胶囊 max-w-4xl(896px)。窗口一窄，
+ * 90% 先缩，胶囊还是 896，两个边缘对不上；窗口一宽，90% 撑到 810，正文行长
+ * 又太长、读起来要扭头。
+ *
+ * 现在是三道闸取最小值，宽度永远跟着窗口走：
+ *
+ *   1. 100%   —— 容器有多窄都不溢出（窗口拉到最小时的表现）
+ *   2. 84%    —— 按比例收，让左右留白随窗口一起长，不贴着侧栏和滚动条
+ *   3. 680px  —— 绝对上限：12.5px 汉字一行约 54 个，再多眼睛就要来回扫
+ *
+ * 设置面板的滑杆写的是第 3 条（--conversation-max），也就是「上限」而不是
+ * 「固定宽度」—— 定死像素才是「改窗口大小它不动」的根因。
+ */
+.chat-column {
+  width: 100%;
+  max-width: min(100%, 84%, var(--conversation-max, 660px));
+  margin-inline: auto;
+}
+
+.chat-scroll-content {
+  min-height: 100%;
+}
+
+/* ===== 消息导航轨的预览卡片 =====
+ *
+ * 数值来自对参考实现的逐像素测量（深色主题）：
+ *   页面 #151515 / 卡片 #1c1c1c → ΔL 极小，只靠明度差分离，不用描边
+ *   卡片宽 254px，圆角 10px
+ *   标题 12px/600 #ffffff，正文 12px/400 #999999
+ *   行高 16px（12 × 1.333），标题与正文间距 10px
+ *   内边距 12px 13px —— 左 13 是为了和标题首字的落点对齐
+ *
+ * 为什么不用 Tailwind 工具类直接写：一是这些值都很具体（13px、16px 行高），
+ * 二是要同时给亮色主题一套对应值，写成 CSS 变量比在 JSX 里塞一堆 [&_...] 清楚。
+ */
+.preview-rail-card {
+  width: 254px;
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: #1c1c1c;
+  /* 参考实现没有描边，卡片边界完全由背景明度差建立 */
+  border: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.preview-rail-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: #ffffff;
+  /* 单行截断：标题只预告「哪一条」，完整内容在正文里 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-rail-description {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  color: #999999;
+  /* 两行截断，和参考实现一致 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+[data-theme="light"] .preview-rail-card {
+  background: #ffffff;
+  /* 亮色下白卡贴白页，明度差撑不住边界，补一道极淡的描边 */
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+}
+
+[data-theme="light"] .preview-rail-title {
+  color: #111111;
+}
+
+[data-theme="light"] .preview-rail-description {
+  color: #6b6b6b;
 }
 
 /* ===== Markdown prose ===== */.prose {

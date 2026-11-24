@@ -114,6 +114,8 @@ const api = {
   getMcpServers: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MCP_SERVERS),
   saveMcpServers: (servers: any) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_MCP_SERVERS, servers),
   getMcpStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MCP_STATUS),
+  authorizeMcpServer: (name: string) => ipcRenderer.invoke(IPC_CHANNELS.MCP_AUTHORIZE, name),
+  getMcpOAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.MCP_OAUTH_STATUS),
   // Skills
   getSkills: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SKILLS),
   toggleSkill: (id: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_SKILL, id, enabled),
@@ -239,9 +241,9 @@ const api = {
   routineDelete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_DELETE, id),
   routineSweepStatus: () => ipcRenderer.invoke(IPC_CHANNELS.ROUTINE_SWEEP_STATUS),
   botList: () => ipcRenderer.invoke(IPC_CHANNELS.BOT_LIST),
-  botCreate: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) =>
+  botCreate: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_CREATE, input),
-  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }) =>
+  botUpdate: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }) =>
     ipcRenderer.invoke(IPC_CHANNELS.BOT_UPDATE, id, patch),
   sessionBindBot: (sessionId: string, botId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_BIND_BOT, sessionId, botId),

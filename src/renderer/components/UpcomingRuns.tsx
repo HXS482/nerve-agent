@@ -172,7 +172,6 @@ export function UpcomingRuns({ routines, botId }: Props) {
                 <BotAvatar
                   bot={bot}
                   size={22}
-                  paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
                 />
               </div>
             )}

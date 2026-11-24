@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BotStatus } from '../components/GrokBot/GrokBot'
-import { DONE_HOLD, ERROR_HOLD, deriveBotStatus } from '../components/GrokBot/botStatus'
+import type { BotStatus } from '../lib/botStatus'
+import { DONE_HOLD, ERROR_HOLD, deriveBotStatus } from '../lib/botStatus'
 import { useChatStore } from '../stores/chatStore'
 import { useSubagentTracker } from '../stores/subagentTracker'
 import { selectTodos, useTodoStore } from '../stores/todoStore'
 
 /**
- * 把"这一轮到底在干嘛"翻译成 Grok Bot 的状态：三点脉动是等模型，轨道环是真在干活，
+ * 把"这一轮到底在干嘛"翻译成头像的状态：三点脉动是等模型，环带扫过是真在干活，
  * 眨眼是刚收尾，红点是挂了。判定全落在时间窗上，所以既要被 store 变化叫醒，
  * 也要在窗口到期时自己补一次渲染（见下面那个 setTimeout）。
  */

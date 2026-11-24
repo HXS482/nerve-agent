@@ -9,6 +9,7 @@ import { is } from '@electron-toolkit/utils'
 import chokidar from 'chokidar'
 import { ClaudeService } from './claude'
 import { GitService } from './git'
+import { McpOAuthManager } from './mcp-oauth'
 import { setupIPC } from './ipc'
 import { IPC_CHANNELS } from '../shared/types'
 import { applyDwmFix } from './dwm'
@@ -186,7 +187,8 @@ app.whenReady().then(async () => {
   const projectDir = process.cwd()
   injectSettingsEnv()
   initImagesDir(projectDir)
-  const claude = new ClaudeService(mainWindow, projectDir)
+  const mcpOAuth = new McpOAuthManager()
+  const claude = new ClaudeService(mainWindow, projectDir, mcpOAuth)
   const gitService = new GitService()
 
   // Watch settings.json for external edits → hot reload soul/persona/providers
@@ -313,7 +315,7 @@ app.whenReady().then(async () => {
     mcpBridge.start().catch(err => console.error('[Nerve] MCP Bridge start failed:', err.message))
   }
 
-  setupIPC(mainWindow, claude, gitService, gateway, mcpBridge, { routineStore: routineStore ?? undefined, botRegistry: schedulerBots ?? undefined })
+  setupIPC(mainWindow, claude, gitService, gateway, mcpBridge, { routineStore: routineStore ?? undefined, botRegistry: schedulerBots ?? undefined }, mcpOAuth)
 
   // Handle nerve-file:// protocol for sandbox-safe local file access
   protocol.handle('nerve-file', async (request) => {
@@ -365,7 +367,7 @@ app.whenReady().then(async () => {
       const newWindow = createWindow()
       const gitService = new GitService()
       claude.setWindow(newWindow)
-      setupIPC(newWindow, claude, gitService)
+      setupIPC(newWindow, claude, gitService, undefined, undefined, undefined, mcpOAuth)
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         newWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
         newWindow.webContents.openDevTools()

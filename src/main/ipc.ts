@@ -11,10 +11,12 @@ import { GitService } from './git'
 import { NerveGateway } from './gateway'
 import { RoutineStore } from './store/routine-store'
 import { BotRegistry } from './core/bot-registry'
+import type { McpOAuthManager } from './mcp-oauth'
 
 export function setupIPC(window: BrowserWindow, claude: ClaudeService, gitService: GitService, gateway?: NerveGateway,
   mcpBridge?: import('./mcp-bridge').McpBridgeServer,
   stores?: { routineStore?: RoutineStore; botRegistry?: BotRegistry },
+  oauth?: McpOAuthManager,
 ) {
   // ── Forward gateway / mcp-bridge logs to renderer ──
   const forwardLog = (entry: { level: string; message: string; timestamp: number }) => {
@@ -238,6 +240,27 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, gitServic
 
   ipcMain.handle(IPC_CHANNELS.GET_MCP_STATUS, () => {
     return claude.getMcpStatus()
+  })
+
+  // MCP OAuth：触发一次授权（会在系统浏览器里打开 marked.dev 的登录页）
+  ipcMain.handle(IPC_CHANNELS.MCP_AUTHORIZE, async (_e, name: string) => {
+    if (!oauth) return { ok: false, error: 'OAuth 未启用' }
+    const servers = await getMcpServers()
+    const cfg = servers[name]
+    if (!cfg?.url) return { ok: false, error: `没有 ${name} 这个远端 server` }
+    const result = await oauth.authorize(name, cfg.url)
+    // 授权成功后立刻重连，让新 token 生效
+    if (result.ok) await claude.reloadMcpServers()
+    return result
+  })
+
+  // 哪些 server 已经有 token（UI 用来区分「Failed」和「Failed · 需要授权」）
+  ipcMain.handle(IPC_CHANNELS.MCP_OAUTH_STATUS, async () => {
+    if (!oauth) return {}
+    const servers = await getMcpServers()
+    const out: Record<string, boolean> = {}
+    for (const name of Object.keys(servers)) out[name] = oauth.hasTokens(name)
+    return out
   })
 
   // Skills
@@ -618,17 +641,18 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, gitServic
 
   ipcMain.handle(IPC_CHANNELS.BOT_LIST, async () => (await botRegistry()).list())
 
-  ipcMain.handle(IPC_CHANNELS.BOT_CREATE, async (_event, input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) =>
+  ipcMain.handle(IPC_CHANNELS.BOT_CREATE, async (_event, input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string }) =>
     (await botRegistry()).create({
       name: input.name,
       group: input.group ?? '',
       emoji: input.emoji ?? '',
       avatarColor: input.avatarColor ?? '',
-      avatarOrb: input.avatarOrb ?? true,
+      avatarShape: input.avatarShape ?? '',
+      avatarMaterial: input.avatarMaterial ?? (input.avatarOrb === false ? 'fluffy' : 'flat'),
       instructions: input.instructions ?? '',
     }))
 
-  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }) =>
+  ipcMain.handle(IPC_CHANNELS.BOT_UPDATE, async (_event, id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }) =>
     (await botRegistry()).update(id, patch))
 
   ipcMain.handle(IPC_CHANNELS.SESSION_BIND_BOT, async (_event, sessionId: string, botId: string) =>

@@ -37,7 +37,7 @@ interface ChatState {
   // Chat
   messages: ChatMessage[]
   isLoading: boolean
-  /** 最近一次运行期错误的时间戳（0 = 还没出过错）。Grok Bot 靠它闪红点，错误收尾不等于跑完 */
+  /** 最近一次运行期错误的时间戳（0 = 还没出过错）。头像靠它判 blocked，错误收尾不等于跑完 */
   lastRunErrorAt: number
   currentSessionId: string | null
   /** 侧栏当前选中的 Bot。新会话归属它，发消息时一并传给主进程。 */

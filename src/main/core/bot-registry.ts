@@ -13,10 +13,31 @@ export interface BotInfo {
   group: string
   /** 头像：单字 emoji。空 = 用名字首字。 */
   emoji: string
-  /** 头像本体颜色（GrokBot 墨色），空 = 按 id 散列取默认色。 */
+  /** 头像本体颜色，空 = 按 id 散列取默认色。 */
   avatarColor: string
-  /** 是否用动画圆球头像；false = emoji/首字方块。 */
-  avatarOrb: boolean
+  /**
+   * 头像形状 id（见 renderer/lib/bot-shapes.ts 的 SHAPE_IDS），空 = 按 id 散列。
+   *
+   * 存 id 而不是存整条 SVG path：path 有几百字符，塞进每个 Bot 的 JSON 里既难读
+   * 也没法在升级时统一换形状；id 是个稳定的短键，渲染层查表。
+   */
+  avatarShape: string
+  /**
+   * 头像材质：'flat' 平涂 / 'fluffy' 毛绒。
+   *
+   * 取代了原来的 `avatarOrb` 布尔量 —— 那个字段的 false 分支（emoji 方块）已删除，
+   * 现在两个选项都是同一套形状，只是材质不同。
+   */
+  avatarMaterial: 'flat' | 'fluffy'
+  /**
+   * 老字段，只读兼容。
+   *
+   * 以前 false = emoji 文字方块，那条渲染路径已经删掉；现在只用来迁移
+   * （false → fluffy）。新代码不要读写它，写操作会被 update() 主动清掉。
+   *
+   * @deprecated 用 avatarMaterial
+   */
+  avatarOrb?: boolean
   instructions: string
   isDefault: boolean
   homeSessionId: string
@@ -70,7 +91,16 @@ export class BotRegistry {
       group: raw.group ?? '',
       emoji: raw.emoji ?? '',
       avatarColor: raw.avatarColor ?? '',
-      avatarOrb: raw.avatarOrb ?? true,
+      avatarShape: raw.avatarShape ?? '',
+      // 材质：新字段合法时以它为准（否则 update() 写下的值会被老字段顶掉）；
+      // 否则回退到老字段迁移 —— avatarOrb === false 当年是「emoji 方块」，
+      // 那条路已删，落到毛绒上（用户当初选的就是「不要平涂的球」）。
+      avatarMaterial:
+        raw.avatarMaterial === 'flat' || raw.avatarMaterial === 'fluffy'
+          ? raw.avatarMaterial
+          : raw.avatarOrb === false
+            ? 'fluffy'
+            : 'flat',
       canAskBots: Array.isArray(grant)
         ? grant.filter((id): id is string => typeof id === 'string')
         : null,
@@ -124,7 +154,7 @@ export class BotRegistry {
     return this.create({ name: 'Assistant', isDefault: true })
   }
 
-  async create(input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; isDefault?: boolean; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }): Promise<BotInfo> {
+  async create(input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string; homeSessionId?: string; isDefault?: boolean; canAskBots?: string[] | null; boundSkills?: string[]; boundMcp?: string[] }): Promise<BotInfo> {
     const now = Date.now()
     const bot: BotInfo = {
       id: `bot_${randomUUID()}`,
@@ -132,7 +162,8 @@ export class BotRegistry {
       group: input.group ?? '',
       emoji: input.emoji ?? '',
       avatarColor: input.avatarColor ?? '',
-      avatarOrb: input.avatarOrb ?? true,
+      avatarShape: input.avatarShape ?? '',
+      avatarMaterial: input.avatarMaterial ?? (input.avatarOrb === false ? 'fluffy' : 'flat'),
       instructions: input.instructions ?? '',
       isDefault: input.isDefault ?? false,
       homeSessionId: input.homeSessionId ?? '',
@@ -146,10 +177,14 @@ export class BotRegistry {
     return bot
   }
 
-  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'avatarColor' | 'avatarOrb' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp' | 'canAskBots'>>): Promise<BotInfo> {
+  async update(id: string, patch: Partial<Pick<BotInfo, 'name' | 'group' | 'emoji' | 'avatarColor' | 'avatarShape' | 'avatarMaterial' | 'instructions' | 'homeSessionId' | 'boundSkills' | 'boundMcp' | 'canAskBots'>>): Promise<BotInfo> {
     const bot = await this.read(id)
     if (!bot) throw new Error(`Bot not found: ${id}`)
-    const updated: BotInfo = { ...bot, ...patch, updatedAt: Date.now() }
+    const merged: BotInfo = { ...bot, ...patch, updatedAt: Date.now() }
+    // avatarOrb 只是迁移用的老字段。一旦写入了新字段，老字段留着就会在下次
+    // normalize 时把 avatarMaterial 又拽回 fluffy —— 显式删掉它。
+    delete (merged as { avatarOrb?: boolean }).avatarOrb
+    const updated: BotInfo = merged
     await writeFile(this.path(id), JSON.stringify(updated, null, 2), 'utf-8')
     return updated
   }

@@ -32,8 +32,10 @@ export interface Bot {
   emoji: string
   /** 头像本体颜色；空 = 按 id 散列取默认色 */
   avatarColor: string
-  /** true = 动画圆球头像（GrokBot）；false = emoji 方块 */
-  avatarOrb: boolean
+  /** 头像形状 id，空 = 按 id 散列 */
+  avatarShape: string
+  /** 头像材质：'flat' 平涂 / 'fluffy' 毛绒 */
+  avatarMaterial: 'flat' | 'fluffy'
   instructions: string
   isDefault: boolean
   homeSessionId: string
@@ -69,8 +71,8 @@ interface RoutineState {
   setEnabled: (id: string, enabled: boolean) => Promise<void>
   remove: (id: string) => Promise<void>
   selectBot: (id: string) => void
-  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string; canAskBots?: string[] | null; boundSkills?: string[] }) => Promise<void>
-  createBot: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarOrb?: boolean; instructions?: string }) => Promise<string | null>
+  saveBot: (id: string, patch: { name?: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string; canAskBots?: string[] | null; boundSkills?: string[] }) => Promise<void>
+  createBot: (input: { name: string; group?: string; emoji?: string; avatarColor?: string; avatarShape?: string; avatarMaterial?: 'flat' | 'fluffy'; avatarOrb?: boolean; instructions?: string }) => Promise<string | null>
   clearError: () => void
 }
 

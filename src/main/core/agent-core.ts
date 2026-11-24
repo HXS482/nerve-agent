@@ -82,6 +82,8 @@ export interface AgentCoreConfig {
   projectDir: string
   sourceDir: string
   settings?: ClaudeSettings
+  /** MCP OAuth 授权管理器（远端 401 时用） */
+  oauth?: import('../mcp-oauth').McpOAuthManager
 }
 
 export class AgentCore {
@@ -252,7 +254,7 @@ export class AgentCore {
     }
 
     this.registry = new ProviderRegistry(this.settings)
-    this.mcpPool = new McpPool()
+    this.mcpPool = new McpPool(config.oauth)
     this.pluginBus = new PluginBus(this.sourceDir, this.projectDir)
   }
 
@@ -802,6 +804,49 @@ export class AgentCore {
     // Write 工具纪律：仅当用户明确要求保存/创建/修改文件时才落盘；
     // 文稿、文章、草稿等阅读型内容默认直接输出正文，不写文件
     systemPrompt += '\n\n## File Writing Discipline\nUse the `Write` tool ONLY when the user explicitly asks to save, create, or modify a file (or when doing coding work on files in the project). For essays, drafts, articles, plans, letters, and other readable content, output the full text directly in your reply as the response — do NOT write it to a file unless the user asks. Temporary or one-off content lives in the conversation, not on disk. When unsure whether to save, just reply with the content; the user can ask you to save it afterwards.'
+
+    /*
+     * ── 工具清单 ──
+     *
+     * 这一段存在的唯一原因：模型看不见自己手上有什么。
+     * 工具定义是通过 API 的 tools 参数给的，但**系统提示里没有任何一句话**
+     * 说明这些工具从哪来、属于哪个 MCP server —— 于是问「你有哪些 MCP」时，
+     * 它只能瞎猜。实测就出现过「一个 MCP 都没挂」+「Marked 是内置工具」这种
+     * 自相矛盾的回答：同一个东西，一遍说没有、一遍说原生自带。
+     *
+     * 把真实清单写进提示里，它就没有编造的余地了。
+     */
+    try {
+      const status = await this.mcpPool.getStatus()
+      const byServer = new Map<string, string[]>()
+      for (const t of mcpTools) {
+        const list = byServer.get(t.serverName) ?? []
+        list.push(t.finalName ?? t.toolName)
+        byServer.set(t.serverName, list)
+      }
+
+      const lines: string[] = []
+      for (const [name, tools] of byServer) {
+        lines.push(`- ${name} · 已连接 · 工具：${tools.join(', ')}`)
+      }
+      for (const [name, st] of Object.entries(status)) {
+        if (byServer.has(name)) continue
+        if (st.status === 'connecting') lines.push(`- ${name} · 连接中`)
+        else if (st.status === 'failed') lines.push(`- ${name} · 未连接（${st.error || '原因未知'}）`)
+      }
+
+      if (lines.length === 0) {
+        systemPrompt += '\n\n## MCP Servers\n当前没有注册任何 MCP server。如果用户问到，如实说没有。'
+      } else {
+        systemPrompt +=
+          '\n\n## MCP Servers\n' +
+          '以下是你**实际挂载的** MCP server 及其工具名。回答「你有哪些 MCP / 工具」时以这份清单为准，' +
+          '不要凭印象编造，也不要把 MCP 工具说成内置工具（内置工具是另一套，见前面的工具说明）：\n' +
+          lines.join('\n')
+      }
+    } catch (err) {
+      console.warn('[AgentCore] 读取 MCP 状态失败，本轮不注入工具清单:', err)
+    }
 
     return { messages, systemPrompt, mcpTools, bot, scopeKey }
   }

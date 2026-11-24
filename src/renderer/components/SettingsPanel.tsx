@@ -663,7 +663,10 @@ function ConversationWidthControl() {
         </span>
         {limited && <SecondaryButton onClick={() => setConversationWidth(0)}>Reset</SecondaryButton>}
       </div>
-      <Hint>Applies instantly. Drag the handle all the way left to follow the window again.</Hint>
+      <Hint>
+        This is the maximum width — the column always shrinks with the window and only
+        reaches this value on a wide screen. Drag the handle all the way left to remove the cap.
+      </Hint>
     </div>
   )
 }
@@ -1414,6 +1417,11 @@ function McpTab() {
   const [newHeaders, setNewHeaders] = useState('')
   const [saved, setSaved] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  /** 哪些远端 server 本地已存 OAuth token */
+  const [oauthMap, setOauthMap] = useState<Record<string, boolean>>({})
+  /** 正在走授权的 server（按钮转 pending） */
+  const [authorizing, setAuthorizing] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
     window.claude.getMcpServers().then((s: Record<string, McpServerConfig>) => {
@@ -1422,10 +1430,29 @@ function McpTab() {
     // 真实连接状态：挂载拉一次 + 5s 轮询（连接是异步的）
     let alive = true
     const pull = () => window.claude.getMcpStatus().then((s) => { if (alive) setStatusMap(s || {}) }).catch(() => {})
+    const pullOauth = () => window.claude.getMcpOAuthStatus().then((m) => { if (alive) setOauthMap(m || {}) }).catch(() => {})
     pull()
+    pullOauth()
     const timer = setInterval(pull, 5000)
     return () => { alive = false; clearInterval(timer) }
   }, [])
+
+  const handleAuthorize = async (name: string) => {
+    setAuthorizing(name)
+    setAuthError(null)
+    try {
+      const r = await window.claude.authorizeMcpServer(name)
+      if (!r.ok) setAuthError(`${name}：${r.error || '授权失败'}`)
+      else {
+        window.claude.getMcpOAuthStatus().then((m) => setOauthMap(m || {})).catch(() => {})
+        setTimeout(() => {
+          window.claude.getMcpStatus().then((s) => setStatusMap(s || {})).catch(() => {})
+        }, 800)
+      }
+    } finally {
+      setAuthorizing(null)
+    }
+  }
 
   const handleSave = async () => {
     await window.claude.saveMcpServers(servers)
@@ -1497,6 +1524,53 @@ function McpTab() {
                   {statusMap[name]?.status === 'failed' && (
                     <div style={{ color: 'var(--text-danger)', wordBreak: 'break-all' }}>
                       <span style={{ color: 'var(--text-outline)' }}>error</span> {statusMap[name].error}
+                    </div>
+                  )}
+                  {/*
+                   * 远端 MCP 的授权入口。
+                   *
+                   * 为什么需要它：marked.dev 这类服务端的 MCP 强制要求 OAuth，
+                   * 没 token 时连接只会拿到 401，状态里显示 Failed 却说不出原因。
+                   * 这里给出「未授权」和一次点击的授权按钮，走系统浏览器完成登录。
+                   */}
+                  {cfg.url && !oauthMap[name] && (
+                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button
+                        onClick={() => handleAuthorize(name)}
+                        disabled={authorizing === name}
+                        className="cursor-pointer"
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 'var(--radius-md)',
+                          fontSize: 11,
+                          background: 'var(--text-on-surface)',
+                          color: 'var(--bg-background)',
+                          border: 'none',
+                          opacity: authorizing === name ? 0.6 : 1,
+                        }}
+                      >
+                        {authorizing === name ? '等待浏览器授权…' : '授权（OAuth）'}
+                      </button>
+                      <span style={{ fontSize: 10, color: 'var(--text-outline)' }}>
+                        会在系统浏览器打开登录页，完成后自动回到这里
+                      </span>
+                    </div>
+                  )}
+                  {cfg.url && oauthMap[name] && (
+                    <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text-outline)' }}>
+                      已授权 · token 存在 ~/.nerve/mcp-auth/
+                      <button
+                        onClick={() => handleAuthorize(name)}
+                        className="cursor-pointer"
+                        style={{ marginLeft: 10, fontSize: 10, background: 'transparent', border: 'none', color: 'var(--accent-primary)' }}
+                      >
+                        重新授权
+                      </button>
+                    </div>
+                  )}
+                  {authError && authError.startsWith(name + '：') && (
+                    <div style={{ marginTop: 6, fontSize: 10, color: 'var(--text-danger)', wordBreak: 'break-all' }}>
+                      {authError.slice(name.length + 1)}
                     </div>
                   )}
                   {/* env / headers 都是键值对，凭证打码后展示 */}

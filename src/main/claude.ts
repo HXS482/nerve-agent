@@ -9,6 +9,7 @@ import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { IPC_CHANNELS, ClaudeConfig, SendMessagePayload, SessionUsage, ProviderInfo, ToolApprovalResponse } from '../shared/types'
+import type { McpOAuthManager } from './mcp-oauth'
 import { AgentCore } from './core/agent-core'
 import { IPCChannel } from './core/ipc-channel'
 import { FileSessionStore } from './session-store'
@@ -27,7 +28,7 @@ export class ClaudeService {
   private sourceDir: string
   private settings: ClaudeSettings
 
-  constructor(window: BrowserWindow, projectDir: string) {
+  constructor(window: BrowserWindow, projectDir: string, oauth?: McpOAuthManager) {
     this.window = window
     this.settings = loadSettings()
     this.sourceDir = projectDir
@@ -41,6 +42,7 @@ export class ClaudeService {
       projectDir: this.projectDir,
       sourceDir: this.sourceDir,
       settings: this.settings,
+      oauth,
     })
 
     // 从 settings 初始化 config (AgentCore already reads these in its own constructor;

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { useClaude } from '../../hooks/useClaude'
 import { useStageStore } from '../../stores/stageStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useRoutineStore } from '../../stores/routineStore'
 import { Stage } from './Stage'
 import { StageSessions } from './StageSessions'
 import { SidebarToggleIcon } from '../SidebarToggleIcon'
 import { StageAvatar } from './StageAvatar'
-import { GrokBot } from '../GrokBot/GrokBot'
+import { BotAvatar as AvatarFace } from '../BotAvatar/BotAvatar'
+import { SHAPES_BY_ID, shapeForBot } from '../../lib/bot-shapes'
 import { useBotStatus } from '../../hooks/useBotStatus'
 import { AccountPanel } from './AccountPanel'
 import { BgVideo, isVideoBg, isHtmlBg, BgHtml } from './StageBgMedia'
@@ -32,6 +34,22 @@ export function StageShell({ claude, onOpenSettings }: Props) {
   // 小球跟着本轮任务状态走：转环=真在干活，脉动=等模型，眨眼=刚收尾，红点=挂了
   const stageSessionId = useStageStore((s) => s.stageSessionId)
   const botStatus = useBotStatus(stageSessionId)
+
+  // stage 里那只头像跟随 stage 会话所属的 Bot（不是侧栏选中的那个）
+  const bots = useRoutineStore((s) => s.bots)
+  const stageBot = useMemo(() => {
+    const botId = useChatStore.getState().sessions.find((s) => s.id === stageSessionId)?.botId
+    return (botId ? bots.find((b) => b.id === botId) : null) ?? null
+  }, [bots, stageSessionId])
+  const stageShape = useMemo(
+    () =>
+      stageBot
+        ? (stageBot.avatarShape && SHAPES_BY_ID[stageBot.avatarShape]) || shapeForBot(stageBot.id)
+        : shapeForBot('nerve'),
+    [stageBot],
+  )
+  // 材质也要跟着那只 Bot，否则从侧栏点进 stage 会看到「毛绒在列表里、平涂在这儿」
+  const stageMaterial = stageBot?.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat'
 
   // 自愈：当前 stage 会话若无 mode 标记（历史丢失），进入 stage 时补上
   useEffect(() => {
@@ -84,18 +102,22 @@ export function StageShell({ claude, onOpenSettings }: Props) {
         </div>
       </div>
 
-        {/* 居中 Grok Bot 头像：点击返回 chat 模式（挂在 stage-shell 上，不进拖拽区） */}
+        {/* 居中 Bot 头像：点击返回 chat 模式（挂在 stage-shell 上，不进拖拽区） */}
         <button
           className="bot-switch-btn"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           onClick={() => setViewMode('chat')}
           title="返回聊天模式"
         >
-          <GrokBot
+          <AvatarFace
+            shape={stageShape}
             size={44}
             status={botStatus}
             color={isLight ? '#0a0a0c' : '#f1efe9'}
-            paper={isLight ? '#eef1f6' : '#0a0a0a'}
+            material={stageMaterial}
+            animate
+            followPointer
+            label="Bot"
           />
         </button>
 

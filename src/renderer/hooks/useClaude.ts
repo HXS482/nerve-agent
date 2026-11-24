@@ -61,6 +61,8 @@ declare global {
       getMcpServers: () => Promise<Record<string, any>>
       saveMcpServers: (servers: Record<string, any>) => Promise<void>
       getMcpStatus: () => Promise<Record<string, { status: 'connected' | 'connecting' | 'failed'; toolCount: number; error?: string }>>
+      authorizeMcpServer: (name: string) => Promise<{ ok: boolean; error?: string; authUrl?: string }>
+      getMcpOAuthStatus: () => Promise<Record<string, boolean>>
       getSkills: () => Promise<any[]>
       toggleSkill: (id: string, enabled: boolean) => Promise<void>
       transcribeAudio: (audioData: Uint8Array, mimeType: string) => Promise<{ ok: boolean; text?: string; error?: string }>
@@ -522,7 +524,7 @@ export function useClaude() {
       clearWatchdog()
       flushPendingText()
       useSubagentTracker.getState().completeAll()
-      // 标记这一轮是"挂了"而不是"跑完"：Grok Bot 的收尾判据（done vs error）靠它区分
+      // 标记这一轮是"挂了"而不是"跑完"：头像的收尾判据（done vs error）靠它区分
       useChatStore.getState().noteRunError()
       addMessage({
         id: `err-${Date.now()}`,

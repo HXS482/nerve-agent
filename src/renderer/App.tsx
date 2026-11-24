@@ -14,7 +14,8 @@ import { ModelIsland } from './components/ModelIsland'
 import { SidebarToggleIcon } from './components/SidebarToggleIcon'
 import { ApprovalBar } from './components/ApprovalBar'
 import { SelectionActions } from './components/SelectionActions'
-import { GrokBot } from './components/GrokBot/GrokBot'
+import { BotAvatar as AvatarFace } from './components/BotAvatar/BotAvatar'
+import { SHAPES_BY_ID, shapeForBot } from './lib/bot-shapes'
 import { useBotStatus } from './hooks/useBotStatus'
 import { useRoutineStore } from './stores/routineStore'
 import { botInk } from './lib/bot-avatar'
@@ -52,6 +53,11 @@ export default function App() {
     return bySession ?? bots.find((b) => b.isDefault) ?? bots[0] ?? null
   }, [bots, activeBotId, currentSessionId])
   const topInk = botInk(currentBot)
+  // 顶栏是"英雄位"：形状跟着当前 Bot，眼睛还跟鼠标转
+  const topShape = useMemo(() => {
+    if (!currentBot) return shapeForBot('nerve')
+    return (currentBot.avatarShape && SHAPES_BY_ID[currentBot.avatarShape]) || shapeForBot(currentBot.id)
+  }, [currentBot])
 
   // 顶部球的状态：当前 Bot 与当前会话所属 Bot 不一致时，不跟着跑状态（那只球不是它）
   const sessionBotId = useChatStore((s) =>
@@ -211,18 +217,23 @@ export default function App() {
           </div>
         </div>
 
-        {/* Grok Bot 头像：点击进入 Stage 模式（与 Stage 里返回 chat 的那只是同一只） */}
+        {/* Bot 头像：点击进入 Stage 模式（与 Stage 里返回 chat 的那只是同一只） */}
         <button
           className="bot-switch-btn"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           onClick={() => setViewMode('stage')}
           title="进入产物空间"
         >
-          <GrokBot
+          <AvatarFace
+            shape={topShape}
             size={44}
             status={topStatus}
             color={topInk ?? (theme === 'light' ? '#0a0a0c' : '#f1efe9')}
-            paper={theme === 'light' ? '#eef1f6' : '#0a0a0a'}
+            /* 材质跟着当前 Bot：顶栏这只和侧栏里那行必须是同一张脸（含毛发） */
+            material={currentBot?.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat'}
+            animate
+            followPointer
+            label={currentBot ? currentBot.name : 'Bot'}
           />
         </button>
 

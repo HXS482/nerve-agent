@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo, useCallback, Fragment } from 'react'
 import { ChatMessage } from '../../shared/types'
 import { MessageBubble } from './MessageBubble'
+import { MessageScroller } from './agents/message-scroller'
 import { useChatStore } from '../stores/chatStore'
 import ASCIIText from './ASCIIText'
 
@@ -43,12 +44,6 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
     [onSend, filteredMessages]
   )
 
-  // 只滚动聊天自己的容器，不能用 scrollIntoView 污染根窗口滚动位置
-  useEffect(() => {
-    const container = containerRef.current
-    container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-  }, [filteredMessages.length])
-
   if (filteredMessages.length === 0) {
     return (
       <div
@@ -68,14 +63,26 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-y-auto w-full"
-      data-chat-scroll
-      style={{ paddingTop: '32px', paddingBottom: '80px' }}
+    <MessageScroller
+      className="flex-1 w-full"
+      navigation="rail"
+      label="对话"
+      busy={isLoading}
+      followOutput
+      smooth
+      viewportClassName="chat-scroll-viewport"
+      contentClassName="chat-scroll-content"
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
-        <div style={{ maxWidth: conversationWidth > 0 ? conversationWidth : '90%', margin: '0 auto' }}>
+        {/* 列宽与输入胶囊共用 .chat-column（见 globals.css 的说明） */}
+        <div
+          className="chat-column"
+          style={
+            conversationWidth > 0
+              ? ({ '--conversation-max': `${conversationWidth}px` } as React.CSSProperties)
+              : undefined
+          }
+        >
           {filteredMessages.map((msg, i) => {
             const prev = i > 0 ? filteredMessages[i - 1] : undefined
             return (
@@ -86,6 +93,6 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
           })}
         </div>
       </div>
-    </div>
+    </MessageScroller>
   )
 }

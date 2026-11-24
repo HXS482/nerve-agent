@@ -201,7 +201,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
 
   if (isSystem) {
     return (
-      <div className="flex justify-center animate-fade-in py-2">
+      <div className="flex justify-center animate-fade-in py-2" data-slot="message" data-from="system">
         <span
           className="px-3 py-1 rounded-full"
           style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-outline)', background: 'var(--bg-surface-container)' }}
@@ -219,7 +219,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     const text = getMessageText(message)
 
     return (
-      <div className="animate-fade-in flex flex-col items-end" style={{ marginBottom: sameRole ? 6 : 32 }}>
+      <div className="animate-fade-in flex flex-col items-end" data-slot="message" data-from="user" style={{ marginBottom: sameRole ? 6 : 32 }}>
         {/* Image thumbnails */}
         {imageBlocks.length > 0 && (
           <div className="flex gap-1.5 mb-1.5">
@@ -249,11 +249,9 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
         {/* Text bubble */}
         {textBlocks.length > 0 && (
           <div
-            className="rounded-lg"
+            className="user-bubble rounded-lg"
             style={{
-              background: 'var(--bg-surface-container)',
-            padding: '5px 9px',
-              border: '1px solid var(--border-subtle)',
+              padding: '5px 9px',
               display: 'inline-block',
               maxWidth: '80%',
               wordBreak: 'break-word',
@@ -261,7 +259,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
           >
             {textBlocks.map((block, i) => (
               <p key={i} className="whitespace-pre-wrap"
-                style={{ color: 'var(--text-on-surface)', fontSize: '12.5px', lineHeight: 1.55 }}>
+                style={{ color: 'var(--text-on-user-bubble)', fontSize: '12.5px', lineHeight: 1.55 }}>
                 <RichText text={block.text} />
               </p>
             ))}
@@ -292,7 +290,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
   if (message.answeredBy) {
     const text = getMessageText(message)
     return (
-      <div className="animate-fade-in" style={{ marginBottom: sameRole ? 8 : 20 }}>
+      <div className="animate-fade-in" data-slot="message" data-from="assistant" style={{ marginBottom: sameRole ? 8 : 20 }}>
         <HandoffSpeaker botId={message.answeredBy} name={message.answeredByName} />
         <div
           className="rounded-lg"
@@ -396,7 +394,7 @@ export const MessageBubble = memo(function MessageBubble({ message, prevRole, on
     .filter(Boolean)
 
   return (
-    <div className="animate-fade-in" style={{ marginBottom: sameRole ? 14 : 34 }}>
+    <div className="animate-fade-in" data-slot="message" data-from="assistant" style={{ marginBottom: sameRole ? 14 : 34 }}>
       <SpeakerLine
         {...(thinkInfo
           ? {
@@ -451,7 +449,6 @@ function SpeakerLine({ think }: {
 }) {
   const activeBotId = useChatStore((s) => s.activeBotId)
   const bots = useRoutineStore((s) => s.bots)
-  const isLight = useChatStore((s) => s.theme) === 'light'
   const bot = activeBotId ? bots.find((b) => b.id === activeBotId) ?? null : null
   if (!bot) return null
   return (
@@ -463,7 +460,7 @@ function SpeakerLine({ think }: {
         marginBottom: 7,
       }}
     >
-      <BotAvatar bot={bot} size={20} animate={false} paper={isLight ? '#eeeeee' : '#201f1f'} />
+      <BotAvatar bot={bot} size={20} animate={false} />
       <span style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--text-on-surface)' }}>
         {bot.name}
       </span>
@@ -539,7 +536,7 @@ function HandoffSpeaker({ botId, name }: { botId: string; name?: string }) {
   return (
     <div className="flex items-center gap-1.5">
       {bot ? (
-        <BotAvatar bot={bot} size={18} animate={false} paper="var(--bg-surface)" />
+        <BotAvatar bot={bot} size={18} animate={false} />
       ) : (
         <div
           className="shrink-0 rounded-full flex items-center justify-center"
@@ -1054,6 +1051,7 @@ export function ContentBlockView({ block, skipImages }: { block: ContentBlock; s
     return (
       <div
         className="prose"
+        data-slot="message-bubble-content"
         style={{
           color: 'var(--text-on-surface)',
           fontSize: '12.5px',

@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { useRoutineStore } from '../stores/routineStore'
 import { UpcomingRuns } from './UpcomingRuns'
 import { BotAvatar, AVATAR_PALETTE } from './BotList'
+import { ALL_SHAPES, SHAPES_BY_ID } from '../lib/bot-shapes'
 
 function fmtTime(ts: number): string {
   const d = new Date(ts)
@@ -287,6 +288,96 @@ function ColorRow({ value, onChange }: { value: string; onChange: (c: string) =>
   )
 }
 
+/**
+ * 形状选择器。
+ *
+ * 每个格子是那个形状的真身（28px 的 BotAvatar 预览），不是名字列表 ——
+ * "Ghost / Cloud / Brain" 光看词根本选不出，看见脸才知道。
+ *
+ * 第一个格子是「自动」：清空 avatarShape，回到按 Bot id 散列的默认形状。
+ * 散列保证同一个 Bot 永远是同一张脸，所以「自动」不是「随便变」。
+ */
+function ShapeRow({
+  value,
+  color,
+  material,
+  onChange,
+}: {
+  value: string
+  color: string
+  /** 当前选中的材质：形状格子里的预览要用同一种，否则「选毛绒但格子全是平涂」 */
+  material: 'flat' | 'fluffy'
+  onChange: (id: string) => void
+}) {
+  const ink = color || '#7C5CD6'
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+      <button
+        onClick={() => onChange('')}
+        title="自动（按 Bot id 取形状）"
+        style={{
+          width: 34,
+          height: 34,
+          padding: 0,
+          borderRadius: 9,
+          cursor: 'pointer',
+          background: 'transparent',
+          border: value ? '1px dashed var(--border-default)' : '1px dashed var(--text-on-surface-variant)',
+          color: 'var(--text-outline)',
+          fontSize: 9,
+          lineHeight: 1,
+        }}
+      >
+        自动
+      </button>
+      {ALL_SHAPES.map((shape) => {
+        const on = value === shape.id
+        return (
+          <button
+            key={shape.id}
+            onClick={() => onChange(shape.id)}
+            title={shape.name}
+            style={{
+              width: 34,
+              height: 34,
+              padding: 0,
+              borderRadius: 9,
+              cursor: 'pointer',
+              background: on ? 'var(--bg-surface-container-high)' : 'transparent',
+              border: on ? '1px solid var(--text-on-surface-variant)' : '1px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <BotAvatar
+              bot={{
+                id: shape.id,
+                name: shape.name,
+                group: '',
+                emoji: '',
+                avatarColor: ink,
+                avatarShape: shape.id,
+                avatarMaterial: material,
+                instructions: '',
+                isDefault: false,
+                homeSessionId: '',
+                boundSkills: [],
+                boundMcp: [],
+                canAskBots: null,
+                createdAt: 0,
+                updatedAt: 0,
+              }}
+              size={28}
+              animate={false}
+            />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ 主视图 */
 
 type Tab = 'routines' | 'look'
@@ -326,9 +417,9 @@ export function RoutinesView() {
   const [botName, setBotName] = useState('')
   const [botInstructions, setBotInstructions] = useState('')
   const [botGroup, setBotGroup] = useState('')
-  const [botEmoji, setBotEmoji] = useState('')
   const [botAvatarColor, setBotAvatarColor] = useState('')
-  const [botAvatarOrb, setBotAvatarOrb] = useState(true)
+  const [botAvatarMaterial, setBotAvatarMaterial] = useState<'flat' | 'fluffy'>('flat')
+  const [botAvatarShape, setBotAvatarShape] = useState('')
   /**
    * 交接授权：这个 Bot 能把活派给谁。
    *
@@ -387,9 +478,9 @@ export function RoutinesView() {
     setBotName(activeBot.name)
     setBotInstructions(activeBot.instructions)
     setBotGroup(activeBot.group ?? '')
-    setBotEmoji(activeBot.emoji ?? '')
     setBotAvatarColor(activeBot.avatarColor ?? '')
-    setBotAvatarOrb(activeBot.avatarOrb !== false)
+    setBotAvatarShape(activeBot.avatarShape ?? '')
+    setBotAvatarMaterial(activeBot.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat')
     setBotCanAsk(activeBot.canAskBots ?? null)
     setBotSkills(activeBot.boundSkills ?? [])
     setDirty(false)
@@ -410,9 +501,9 @@ export function RoutinesView() {
     setBotName(activeBot.name)
     setBotInstructions(activeBot.instructions)
     setBotGroup(activeBot.group ?? '')
-    setBotEmoji(activeBot.emoji ?? '')
     setBotAvatarColor(activeBot.avatarColor ?? '')
-    setBotAvatarOrb(activeBot.avatarOrb !== false)
+    setBotAvatarShape(activeBot.avatarShape ?? '')
+    setBotAvatarMaterial(activeBot.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat')
     setBotCanAsk(activeBot.canAskBots ?? null)
     setBotSkills(activeBot.boundSkills ?? [])
     setDirty(false)
@@ -431,7 +522,6 @@ export function RoutinesView() {
     const id = await createBot({
       name,
       ...(tpl?.instructions ? { instructions: tpl.instructions } : {}),
-      ...(tpl && tpl.id !== 'blank' ? { emoji: tpl.emoji } : {}),
     })
     if (!id) return
     setNewBotName('')
@@ -682,13 +772,12 @@ export function RoutinesView() {
                   bot={{
                     ...activeBot,
                     name: botName || activeBot.name,
-                    emoji: botEmoji,
                     avatarColor: botAvatarColor,
-                    avatarOrb: botAvatarOrb,
+                    avatarShape: botAvatarShape,
+                    avatarMaterial: botAvatarMaterial,
                   }}
                   size={38}
                   animate
-                  paper="var(--bg-background)"
                 />
                 <div style={{ minWidth: 0 }}>
                   <div className="truncate" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-on-surface)' }}>
@@ -716,16 +805,6 @@ export function RoutinesView() {
                       />
                     </Field>
                   </div>
-                  <div style={{ width: 48 }}>
-                    <Field label="标记">
-                      <input
-                        value={botEmoji}
-                        onChange={(e) => touch(setBotEmoji)(e.target.value.slice(0, 2))}
-                        placeholder="🙂"
-                        style={{ ...BOX, textAlign: 'center', fontSize: 11 }}
-                      />
-                    </Field>
-                  </div>
                 </div>
                 <Field label="角色设定" hint="拼进系统提示的 bot 层，决定这个 Bot 是谁、负责什么">
                   <textarea
@@ -739,14 +818,29 @@ export function RoutinesView() {
               </Section>
 
               <Section title="外观">
-                <Field label="头像形式">
+                <Field label="材质" hint="毛绒走 WebGL 画毛发；没有 WebGL 的机器会自动退回平涂">
                   <Segmented
-                    value={botAvatarOrb ? 'orb' : 'block'}
-                    onChange={(v) => touch(setBotAvatarOrb)(v === 'orb')}
+                    value={botAvatarMaterial}
+                    onChange={(v) => touch(setBotAvatarMaterial)(v === 'fluffy' ? 'fluffy' : 'flat')}
                     options={[
-                      { value: 'orb', label: '动画圆球' },
-                      { value: 'block', label: '文字方块' },
+                      { value: 'flat', label: '平涂' },
+                      { value: 'fluffy', label: '毛绒' },
                     ]}
+                  />
+                </Field>
+                <Field
+                  label="形状"
+                  hint={
+                    botAvatarShape
+                      ? (SHAPES_BY_ID[botAvatarShape]?.name ?? botAvatarShape)
+                      : '自动：按 Bot id 取一个稳定的形状'
+                  }
+                >
+                  <ShapeRow
+                    value={botAvatarShape}
+                    color={botAvatarColor}
+                    material={botAvatarMaterial}
+                    onChange={touch(setBotAvatarShape)}
                   />
                 </Field>
                 <Field label="颜色" hint={botAvatarColor || '自动：按 Bot id 取一个稳定的颜色'}>
@@ -898,9 +992,9 @@ export function RoutinesView() {
                     await saveBot(activeBot.id, {
                       name: botName.trim() || activeBot.name,
                       group: botGroup.trim(),
-                      emoji: botEmoji.trim(),
                       avatarColor: botAvatarColor,
-                      avatarOrb: botAvatarOrb,
+                      avatarShape: botAvatarShape,
+                      avatarMaterial: botAvatarMaterial,
                       instructions: botInstructions,
                       canAskBots: botCanAsk,
                       boundSkills: botSkills,

@@ -25,6 +25,8 @@ export const IPC_CHANNELS = {
   GET_MCP_SERVERS: 'nerve:get-mcp-servers',
   SAVE_MCP_SERVERS: 'nerve:save-mcp-servers',
   GET_MCP_STATUS: 'nerve:get-mcp-status',
+  MCP_AUTHORIZE: 'nerve:mcp-authorize',
+  MCP_OAUTH_STATUS: 'nerve:mcp-oauth-status',
   // Skills
   GET_SKILLS: 'nerve:get-skills',
   TOGGLE_SKILL: 'nerve:toggle-skill',

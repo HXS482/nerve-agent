@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useChatStore, type Session } from '../stores/chatStore'
 import { useRoutineStore, type Bot } from '../stores/routineStore'
-import { GrokBot } from './GrokBot/GrokBot'
+import { BotAvatar as AvatarFace } from './BotAvatar/BotAvatar'
 import { AVATAR_PALETTE, avatarColor } from '../lib/bot-avatar'
+import { SHAPES_BY_ID, shapeForBot } from '../lib/bot-shapes'
 export { AVATAR_PALETTE }
 
 function relTime(ts: number): string {
@@ -16,47 +17,46 @@ function relTime(ts: number): string {
 }
 
 
+/**
+ * Bot 的头像。
+ *
+ * 三件事决定长相：
+ *   - 形状：bot.avatarShape 显式指定优先，否则按 id 散列（同一个 Bot 永远是同一张脸）
+ *   - 颜色：bot.avatarColor 显式指定优先，否则同样按 id 散列
+ *   - 材质：bot.avatarMaterial —— 'flat' 平涂 / 'fluffy' 毛绒
+ *
+ * 原来还有一个「emoji 文字方块」分支（avatarOrb === false），已按需求删掉：
+ * 现在两个选项都是同一套形状，区别只在材质。老 Bot 文件里的 avatarOrb=false
+ * 由主进程 normalize() 迁移成 'fluffy'。
+ */
 export function BotAvatar({
   bot,
   size = 34,
   animate = false,
-  paper = '#0a0a0a',
   status = 'idle',
+  followPointer = false,
 }: {
   bot: Bot
   size?: number
   /** 是否播放动画；列表里只让当前 Bot 动，其余画静帧（几十个 rAF 会卡主线程） */
   animate?: boolean
-  /** 头像所在容器的底色：眼睛是轮廓上的洞，靠这层垫住，传错会透出背景 */
-  paper?: string
   status?: 'idle' | 'thinking' | 'busy' | 'done' | 'error'
+  /** 眼睛/身体是否跟着鼠标转（只在英雄位开） */
+  followPointer?: boolean
 }) {
   const ink = bot.avatarColor || avatarColor(bot.id)
-
-  if (bot.avatarOrb !== false) {
-    return (
-      <div className="flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
-        <GrokBot size={size} color={ink} paper={paper} animate={animate} status={status} />
-      </div>
-    )
-  }
+  const shape = (bot.avatarShape && SHAPES_BY_ID[bot.avatarShape]) || shapeForBot(bot.id)
 
   return (
-    <div
-      className="flex items-center justify-center shrink-0"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: Math.round(size * 0.3),
-        background: ink,
-        fontSize: Math.round(size * 0.46),
-        lineHeight: 1,
-        color: '#fff',
-        fontWeight: 600,
-      }}
-    >
-      {bot.emoji || bot.name.slice(0, 1)}
-    </div>
+    <AvatarFace
+      shape={shape}
+      size={size}
+      color={ink}
+      material={bot.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat'}
+      status={status}
+      animate={animate}
+      followPointer={followPointer}
+    />
   )
 }
 
@@ -222,7 +222,6 @@ export function BotList({ onSelectSession, onNewChat, status = 'idle', query = '
                     /* 头像比文本块高，是这一行高度的实际决定者。
                        上下内边距压到 3px 之后，头像从 30 放到 34 也不会把行撑散。 */
                     size={34}
-                    paper={theme === 'light' ? '#eeeeee' : '#201f1f'}
                     /*
                      * 两层判断，故意不一样：
                      *

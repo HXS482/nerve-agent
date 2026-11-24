@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { loadMcpServerConfigs, isRemoteMcpConfig, McpServerConfig } from './settings'
+import type { McpOAuthManager } from './mcp-oauth'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -86,6 +87,11 @@ export function isPoolableConfig(config: McpServerConfig): boolean {
 
 export class McpPool {
   private pool = new Map<string, PooledClient>()
+  /**
+   * OAuth 授权管理器（可选）。远端 MCP 返回 401 时靠它弹浏览器走授权码流程；
+   * 传 undefined 时行为与改造前一致（只透传静态 headers）。
+   */
+  constructor(private oauth?: McpOAuthManager) {}
   private healthTimer: ReturnType<typeof setInterval> | null = null
   private connectPromise: Promise<void> | null = null
   private closed = false
@@ -200,8 +206,19 @@ export class McpPool {
 
     // 远端 MCP：直连 URL，不起本地进程；headers 里的凭证原样带走
     if (isRemoteMcpConfig(config)) {
+      /*
+       * 两条路：
+       *   - 配了静态 Authorization 头 → 直接用，不碰 OAuth（兼容已有配置）；
+       *   - 没配凭证 → 挂 authProvider。SDK 会先试已存的 token，401 时自动刷新，
+       *     都没有才走授权码流程。未授权时会抛 UnauthorizedError，由上面那层
+       *     记为 failed，UI 显示 Failed 并提供一次授权入口。
+       */
+      const hasStaticAuth = !!config.headers?.Authorization || !!config.headers?.authorization
       const transport = new StreamableHTTPClientTransport(new URL(config.url!), {
         requestInit: { headers: config.headers },
+        ...(hasStaticAuth || !this.oauth
+          ? {}
+          : { authProvider: this.oauth.createProvider(name) }),
       })
       await client.connect(transport)
       return client
