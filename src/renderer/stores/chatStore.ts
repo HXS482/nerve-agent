@@ -84,7 +84,7 @@ interface ChatState {
   rightSidebarOpen: boolean
   rightSidebarWidth: number
   /** 与 RightSidebar 的 RightSidebarView 保持一致。'diff' 是历史遗留值，仍接受以免刷新时被清掉。 */
-  rightSidebarView: 'flow' | 'folder' | 'git' | 'gateway' | 'tasks' | 'routines' | 'diff'
+  rightSidebarView: 'flow' | 'folder' | 'git' | 'gateway' | 'routines' | 'diff'
 
   // Flow event stream
   flowItems: FlowItem[]
@@ -153,7 +153,7 @@ interface ChatState {
   // Right sidebar actions
   setRightSidebarOpen: (open: boolean) => void
   setRightSidebarWidth: (width: number) => void
-  setRightSidebarView: (view: 'flow' | 'folder' | 'git' | 'gateway' | 'tasks' | 'routines' | 'diff') => void
+  setRightSidebarView: (view: 'flow' | 'folder' | 'git' | 'gateway' | 'routines' | 'diff') => void
   toggleRightSidebar: () => void
 
   // Flow actions
@@ -359,7 +359,7 @@ export const useChatStore = create<ChatState>()(
             document.documentElement.setAttribute('data-theme', t)
           }
           // Sanitize stale persisted view values
-          const validViews = ['flow', 'folder', 'git', 'gateway', 'tasks', 'routines', 'diff']
+          const validViews = ['flow', 'folder', 'git', 'gateway', 'routines', 'diff']
           if (state?.rightSidebarView && !validViews.includes(state.rightSidebarView)) {
             state.rightSidebarView = 'flow'
           }
