@@ -12,10 +12,10 @@ interface Props {
   onSend: (prompt: string, files?: FileAttachment[]) => void
   onCancel: () => void
   isLoading: boolean
-  // Stage 模式注入：模型岛嵌在胶囊右侧；不传则不渲染（chat 模式模型岛在顶栏）
+  // 模型岛嵌在胶囊右侧；不传则不渲染
   currentModel?: string
   onSelectModel?: (model: string, providerId?: string) => void
-  // Stage 模式注入：状态行左半的「Local checkout / 当前分支」
+  // 状态行左半的「Local checkout / 当前分支」
   workingDirectory?: string
 }
 
@@ -71,6 +71,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
+  const rightSidebarView = useChatStore((s) => s.rightSidebarView)
   const rightSidebarWidth = useChatStore((s) => s.rightSidebarWidth)
   const setRightSidebarView = useChatStore((s) => s.setRightSidebarView)
   const setRightSidebarOpen = useChatStore((s) => s.setRightSidebarOpen)
@@ -82,6 +83,8 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   // Stage 模式下侧边栏不存在，输入栏不预留其宽度
   const effectiveSidebarOpen = viewMode === 'stage' ? false : sidebarOpen
   const effectiveRightOpen = viewMode === 'stage' ? false : rightSidebarOpen
+  // 定时任务面板是否正开着：既是「开着」也是「停在 routines 视图」，两者都满足才算
+  const routinesActive = rightSidebarOpen && rightSidebarView === 'routines'
 
   // 状态行的当前分支：只在 gitStore 的 cwd 与 stage 工作目录一致时可信
   //（chat 模式的 git 面板会往同一个 store 写自己的 cwd）
@@ -95,18 +98,18 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
     ? gitStatus?.current || gitBranches.find((branch) => branch.current)?.name || ''
     : ''
 
-  // gitStore 的 cwd 是单例：进 stage 时把它指向 stage 的工作目录，否则 fetch* 会打到旧目录
+  // gitStore 的 cwd 是单例：把它指向当前工作目录，否则 fetch* 会打到旧目录
   useEffect(() => {
-    if (viewMode === 'stage' && workingDirectory && gitCwd !== workingDirectory) {
+    if (workingDirectory && gitCwd !== workingDirectory) {
       setGitCwd(workingDirectory)
     }
-  }, [viewMode, workingDirectory, gitCwd, setGitCwd])
+  }, [workingDirectory, gitCwd, setGitCwd])
 
   useEffect(() => {
-    if (viewMode === 'stage' && workingDirectory && gitCwd === workingDirectory) {
+    if (workingDirectory && gitCwd === workingDirectory) {
       void Promise.all([fetchGitStatus(), fetchGitBranches()])
     }
-  }, [viewMode, workingDirectory, gitCwd, fetchGitStatus, fetchGitBranches])
+  }, [workingDirectory, gitCwd, fetchGitStatus, fetchGitBranches])
 
   const voice = useVoiceInput((text) => {
     setHasVoice(true)
@@ -298,7 +301,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
       {/* 思考强度弹出条：挂在 InputBar 根层级（与输入胶囊同层级、同为 z-50 根内直接子元素），
           不嵌在 glass-dock 里——backdrop-filter 胶囊会成为 fixed/absolute 后代的采样屏障，
           嵌在里面 blur 采不到壁纸，观感发虚。现在 blur 直接吃壁纸，与输入胶囊同一质感 */}
-      {viewMode === 'stage' && effortMenuOpen && (
+      {effortMenuOpen && (
         <div ref={effortRootRef} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
           <div
             className="effort-slider-track"
@@ -338,31 +341,51 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
           }
         >
           {/* Main Input Container */}
+          {/* 内边距必须写内联：globals.css 顶部的 `* { padding: 0 }` 不在 @layer 里，
+              优先级压过 Tailwind 的 utilities 层，`p-1.5` 实际算出来是 0，胶囊里所有
+              间距全靠零散 margin 拼，结果左边 5px、右边 11px。这里显式给 0 6px，
+              并把下面按钮的 marginLeft 小补丁一起删掉 */}
           <div
-            className="glass-dock rounded-full p-1.5 flex items-center gap-2 transition-all duration-300 group w-full h-9"
+            className="glass-dock rounded-full flex items-center transition-all duration-300 group w-full h-9"
             style={{
+              padding: '0 6px',
+              gap: 4,
               boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
               border: voice.isRecording ? '1px solid var(--error)' : undefined,
             }}
           >
             {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar（弹条挂在根层级，见上） */}
-            {/* Routines 入口：打开右侧栏并切到 Routines 视图 */}
-            <button
-              className="stage-icon-btn"
-              title="定时任务"
-              style={{ borderRadius: 999, marginLeft: 4 }}
-              onClick={() => {
-                void loadBots()
-                setRightSidebarView('routines')
-                setRightSidebarOpen(true)
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            </button>
-            <div className="inputbar-plus-root" ref={plusRootRef} style={{ marginLeft: 4 }}>
+            {/* Routines 入口：点击开右栏并切到 Routines 视图，再点一次收起。
+                判断用「右栏开着 且 视图是 routines」而不是单纯 toggle —— 右栏可能停在
+                别的 tab（flow/git…），那时这一点应该是「切过去」而不是「整个关掉」。
+                Stage 模式右栏根本不渲染，按钮留着就是死键，所以整块不画。 */}
+            {viewMode === 'chat' && (
+              <button
+                className="stage-icon-btn"
+                title={routinesActive ? '收起定时任务' : '定时任务'}
+                aria-pressed={routinesActive}
+                style={{
+                  borderRadius: 999,
+                  background: routinesActive ? 'var(--bg-surface-container-high)' : undefined,
+                  color: routinesActive ? 'var(--text-on-surface)' : undefined,
+                }}
+                onClick={() => {
+                  if (routinesActive) {
+                    setRightSidebarOpen(false)
+                    return
+                  }
+                  void loadBots()
+                  setRightSidebarView('routines')
+                  setRightSidebarOpen(true)
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </button>
+            )}
+            <div className="inputbar-plus-root" ref={plusRootRef}>
               <button
                 className="stage-icon-btn"
                 onClick={togglePlusMenu}
@@ -377,7 +400,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
             </div>
 
             {/* Input Field */}
-            <div className="flex-1 flex items-center" style={{ paddingLeft: '8px', paddingRight: '16px' }}>
+            <div className="flex-1 flex items-center" style={{ paddingLeft: 4, paddingRight: 8 }}>
               <input
                 ref={inputRef}
                 type="text"
@@ -392,25 +415,23 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
             </div>
 
             {/* Right Actions */}
-            <div className="flex items-center gap-1.5" style={{ paddingRight: '10px', paddingLeft: '4px' }}>
+            <div className="flex items-center" style={{ gap: 4, padding: 0 }}>
               {/* 思考强度入口按钮：弹出条挂在 InputBar 根层级（见上方 effortMenuOpen 块） */}
-              {viewMode === 'stage' && (
-                <div className="inputbar-plus-root" ref={effortRootRef}>
-                  <button
-                    className="stage-icon-btn"
-                    onClick={() => setEffortMenuOpen((v) => !v)}
-                    title={`思考强度: ${EFFORT_LABELS[effort] ?? effort}`}
-                    style={{ borderRadius: 999, fontSize: 10, fontWeight: 600, width: 'auto', padding: '0 8px', gap: 3 }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 3a6 6 0 016 6c0 2.2-1.2 3.6-2.2 4.8-.6.7-1 1.3-1.2 2.2h-5.2c-.2-.9-.6-1.5-1.2-2.2C7.2 12.6 6 11.2 6 9a6 6 0 016-6z" />
-                      <path d="M9.5 19h5" />
-                      <path d="M10.5 21.5h3" />
-                    </svg>
-                    {EFFORT_LABELS[effort] ?? effort}
-                  </button>
-                </div>
-              )}
+              <div className="inputbar-plus-root" ref={effortRootRef}>
+                <button
+                  className="stage-icon-btn"
+                  onClick={() => setEffortMenuOpen((v) => !v)}
+                  title={`思考强度: ${EFFORT_LABELS[effort] ?? effort}`}
+                  style={{ borderRadius: 999, fontSize: 10, fontWeight: 600, width: 'auto', padding: '0 8px', gap: 3 }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3a6 6 0 016 6c0 2.2-1.2 3.6-2.2 4.8-.6.7-1 1.3-1.2 2.2h-5.2c-.2-.9-.6-1.5-1.2-2.2C7.2 12.6 6 11.2 6 9a6 6 0 016-6z" />
+                    <path d="M9.5 19h5" />
+                    <path d="M10.5 21.5h3" />
+                  </svg>
+                  {EFFORT_LABELS[effort] ?? effort}
+                </button>
+              </div>
               {currentModel && onSelectModel && (
                 <ModelIsland
                   currentModel={currentModel}
@@ -422,10 +443,11 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
               {isLoading ? (
                 <button
                   onClick={onCancel}
-                  className="p-2 rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--error)] hover:bg-white/5 transition-all"
+                  className="stage-icon-btn"
+                  style={{ borderRadius: 999 }}
                   title="Stop generating"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="6" y="6" width="12" height="12" rx="2" />
                   </svg>
                 </button>
@@ -433,21 +455,29 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
                 <button
                   onClick={voice.toggle}
                   disabled={voice.isTranscribing}
-                  className={`p-2 rounded-full transition-all ${
+                  className={`stage-icon-btn ${
                     voice.isRecording
-                      ? 'text-[var(--error)] voice-recording'
+                      ? 'voice-recording'
                       : voice.isTranscribing
-                        ? 'text-[var(--accent-primary)] animate-pulse-soft'
-                        : 'text-[var(--text-on-surface-variant)] hover:text-[var(--accent-primary)] hover:bg-white/5'
+                        ? 'animate-pulse-soft'
+                        : ''
                   }`}
+                  style={{
+                    borderRadius: 999,
+                    color: voice.isRecording
+                      ? 'var(--error)'
+                      : voice.isTranscribing
+                        ? 'var(--accent-primary)'
+                        : undefined,
+                  }}
                   title={voice.isRecording ? 'Stop recording' : 'Voice input'}
                 >
                   {voice.isTranscribing ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                       <path d="M21 12a9 9 0 11-6.219-8.56" />
                     </svg>
                   ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
                       <path d="M19 10v2a7 7 0 01-14 0v-2" />
                       <line x1="12" y1="19" x2="12" y2="23" />
@@ -459,9 +489,9 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
             </div>
           </div>
 
-        {/* 状态行（仅 stage）：左半 Local checkout + 当前分支，右半 context 用量环。
+        {/* 状态行：左半 Local checkout + 当前分支，右半 context 用量环。
             宽度扣掉 12px 两侧内边距，和胶囊的视觉边缘对齐 */}
-        {viewMode === 'stage' && (
+        {workingDirectory && (
           <div
             className="flex items-center justify-between"
             style={{ minHeight: 20, width: 'calc(100% - 24px)', margin: '0 12px' }}

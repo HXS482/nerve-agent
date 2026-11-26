@@ -1,19 +1,17 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useChatStore } from '../stores/chatStore'
-import { SidebarToggleIcon } from './SidebarToggleIcon'
 
 interface Props {
   currentModel: string
   onSelectModel: (model: string, providerId?: string) => void
-  sidebarOpen?: boolean
-  onToggleSidebar?: () => void
   // 下拉贴哪一侧：输入胶囊里靠右边缘，要右对齐；顶栏里靠左缘，保持左对齐
   dropdownAlign?: 'left' | 'right'
   // 下拉朝哪边弹：输入框在窗口底部，向上弹才不出屏
   dropDirection?: 'down' | 'up'
 }
 
-export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggleSidebar, dropdownAlign = 'left', dropDirection = 'down' }: Props) {
+export function ModelIsland({ currentModel, onSelectModel, dropdownAlign = 'left', dropDirection = 'down' }: Props) {
   const providers = useChatStore((s) => s.providers)
   const availableModels = useChatStore((s) => s.availableModels)
   const providerModels = useChatStore((s) => s.providerModels)
@@ -22,6 +20,31 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
 
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  // 弹层走 portal 挂到 body：胶囊自己就是 backdrop-filter 层，子层的 blur 采不到壁纸，
+  // 只会糊成一块灰。挪到根上（和思考强度滑轨同款做法）blur 才吃得到背后的壁纸。
+  // 所以位置得自己算——打开瞬间量按钮的视口坐标，换算成 fixed 值。
+  const [anchor, setAnchor] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null)
+  const measure = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setAnchor({
+      ...(dropDirection === 'up'
+        ? { bottom: window.innerHeight - r.top + 4 }
+        : { top: r.bottom + 4 }),
+      ...(dropdownAlign === 'right'
+        ? { right: window.innerWidth - r.right }
+        : { left: r.left }),
+    })
+  }, [dropDirection, dropdownAlign])
+  // 窗口尺寸变化 / 滚动时重新对齐，避免弹层和胶囊脱位
+  useEffect(() => {
+    if (!open) return
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [open, measure])
 
   // Use config.provider as authoritative, then settings defaultProvider, then prefix detection
   const detectProvider = (model: string): string => {
@@ -59,7 +82,9 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const inTrigger = ref.current?.contains(e.target as Node)
+      const inMenu = menuRef.current?.contains(e.target as Node)
+      if (!inTrigger && !inMenu) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -71,7 +96,7 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
     <div className="relative shrink-0" ref={ref}>
       {/* Single pill: provider ▾ */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => { if (open) { setOpen(false) } else { measure(); setOpen(true) } }}
         className="flex items-center gap-1.5 transition-colors cursor-pointer glass-dock"
         style={{
           padding: '3px 8px',
@@ -82,42 +107,27 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
           color: 'var(--text-on-surface-variant)',
         }}
       >
-        {!sidebarOpen && onToggleSidebar && (
-          <>
-            {/* 与侧栏头部共用同一枚图标（SidebarToggleIcon），同尺寸 */}
-            <span
-              className="flex items-center cursor-pointer hover:text-[var(--text-on-surface)] transition-colors shrink-0"
-              style={{ marginLeft: -4 }}
-              onClick={(e) => { e.stopPropagation(); onToggleSidebar() }}
-              title="Open sidebar"
-            >
-              <SidebarToggleIcon />
-            </span>
-            <div className="w-px h-3 shrink-0" style={{ background: 'var(--border-default)' }} />
-          </>
-        )}
         <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#27C93F', display: 'block', flexShrink: 0 }} />
         {label}
         <span style={{ color: 'var(--text-outline)', fontSize: 9 }}>{dropDirection === 'up' ? '▴' : '▾'}</span>
       </button>
 
-      {/* Dropdown */}
-      {open && (
+      {/* Dropdown：portal 到 body，复用思考强度滑轨那套毛玻璃（--stage-glass + blur(12px)）。
+          挂在胶囊内部时 blur 采不到壁纸只会糊成灰，挪到根层级才有真磨砂 */}
+      {open && anchor && createPortal(
         <div
+          ref={menuRef}
           className="animate-expand-in"
           style={{
-            position: 'absolute',
-            ...(dropDirection === 'up'
-              ? { bottom: '100%', marginBottom: 4 }
-              : { top: '100%', marginTop: 4 }),
-            ...(dropdownAlign === 'right' ? { right: 0 } : { left: 0 }),
-            minWidth: 220, zIndex: 100, padding: 4,
+            position: 'fixed',
+            ...anchor,
+            minWidth: 220, zIndex: 200, padding: 4,
             borderRadius: 12,
-            background: 'rgba(255, 255, 255, 0.05)',
+            background: 'var(--stage-glass)',
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            border: '1px solid var(--stage-border)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
           }}
         >
           {/* Models grouped by provider */}
@@ -136,11 +146,11 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
                     style={{
                       gap: 8, padding: '6px 8px', borderRadius: 8, fontSize: 12,
                       fontWeight: isActive ? 600 : 400,
-                      background: isActive ? 'rgba(173, 198, 255, 0.12)' : 'transparent',
+                      background: isActive ? 'color-mix(in srgb, var(--accent-primary) 14%, transparent)' : 'transparent',
                       color: isActive ? 'var(--accent-primary)' : 'var(--text-on-surface-variant)',
                       border: 'none',
                     }}
-                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--stage-hover)' }}
                     onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
                     <span style={{
@@ -160,7 +170,8 @@ export function ModelIsland({ currentModel, onSelectModel, sidebarOpen, onToggle
               })}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
