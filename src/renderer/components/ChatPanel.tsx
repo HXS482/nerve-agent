@@ -62,6 +62,11 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
     )
   }
 
+  // 滚动容器必须继续带 data-chat-scroll（交给 viewportProps）：
+  //   1) globals.css 的 [data-chat-scroll] 顶部多段渐隐挂在它身上 —— 内容自己淡出，
+  //      覆盖层 blur 才有东西可糊。换 MessageScroller 时这个属性丢了，内容边缘是实心的，
+  //      只剩上面那层 blur 遮罩，两者交界处就露出一条缝。
+  //   2) SelectionActions 靠 closest('[data-chat-scroll]') 判定划选生效区域。
   return (
     <MessageScroller
       className="flex-1 w-full"
@@ -72,6 +77,7 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
       smooth
       viewportClassName="chat-scroll-viewport"
       contentClassName="chat-scroll-content"
+      viewportProps={{ 'data-chat-scroll': '' }}
     >
       <div style={{ paddingInline: 'var(--sp-md)' }}>
         {/* 列宽与输入胶囊共用 .chat-column（见 globals.css 的说明） */}

@@ -10,9 +10,9 @@ import { RightSidebar } from './components/RightSidebar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ProjectPalette } from './components/ProjectPalette'
 import { Gallery } from './components/Gallery'
-import { ModelIsland } from './components/ModelIsland'
 import { SidebarToggleIcon } from './components/SidebarToggleIcon'
 import { ApprovalBar } from './components/ApprovalBar'
+import { EdgeBlur } from './components/ui/EdgeBlur'
 import { SelectionActions } from './components/SelectionActions'
 import { BotAvatar as AvatarFace } from './components/BotAvatar/BotAvatar'
 import { SHAPES_BY_ID, shapeForBot } from './lib/bot-shapes'
@@ -171,27 +171,32 @@ export default function App() {
           className="absolute top-0 left-0 right-0 z-[var(--z-topbar)] flex items-center no-select"
           style={{ padding: '6px 7px', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
-          {/* Left: model island (with sidebar toggle when collapsed) */}
-          <div
-            className="flex items-center gap-1.5 shrink-0"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-          >
-            <ModelIsland
-              currentModel={claude.config.model || 'sonnet'}
-              onSelectModel={(model, providerId) => claude.updateConfig({ model, ...(providerId ? { provider: providerId } : {}) })}
-              sidebarOpen={sidebarOpen}
-              onToggleSidebar={() => setSidebarOpen(true)}
-            />
-          </div>
+          {/* Left: 侧栏收起时留一个开侧栏按钮（模型岛已移到底部输入胶囊内，两模式统一）。
+              圆形胶囊：和圆角矩形相比没有「横向多出来的空白」，24×24 装一枚图标刚好 */}
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="glass-dock flex shrink-0 items-center justify-center cursor-pointer text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
+              style={{ width: 24, height: 24, padding: 0, borderRadius: 999, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Open sidebar"
+            >
+              {/* 16px 而非默认 18：与右侧胶囊里的图标同尺寸，两个控件的图形留白才对得上 */}
+              <SidebarToggleIcon size={16} />
+            </button>
+          )}
 
           {/* Center spacer */}
           <div className="flex-1" />
 
           {/* Right: toggle sidebar + settings + cmd */}
+          {/* 内边距统一 3px：原来左右 8px、上下 3px，图标横向缩进几乎是纵向的三倍，
+              看着就偏。改成 2px 水平内边距（加 1px 描边 = 3px）+ 16px 图标，
+              上下 (22-16)/2 = 3px，四周等距 */}
           <div
-            className="flex items-center gap-1.5 shrink-0 glass-dock"
+            className="flex items-center shrink-0 glass-dock"
             style={{
-              padding: '3px 8px',
+              padding: '0 3px',
+              gap: 4,
               borderRadius: 9,
               height: 24,
               WebkitAppRegion: 'no-drag',
@@ -199,15 +204,17 @@ export default function App() {
           >
             <button
               onClick={toggleRightSidebar}
-              className="p-1.5 rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
+              className="flex items-center justify-center rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
+              style={{ width: 16, height: 16, padding: 0 }}
               title="Toggle right sidebar"
             >
-              <SidebarToggleIcon />
+              <SidebarToggleIcon size={16} />
             </button>
-            <div className="w-px h-3" style={{ background: 'var(--border-default)' }} />
+            <div className="w-px shrink-0" style={{ height: 10, background: 'var(--border-default)' }} />
             <button
               onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
+              className="flex items-center justify-center rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
+              style={{ width: 16, height: 16, padding: 0 }}
               title="Settings"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -237,11 +244,12 @@ export default function App() {
           />
         </button>
 
-        {/* Chat area */}
-        <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 0 }}>
-          {/* iOS 风格顶部渐隐：progressive blur */}
-          <div className="chat-top-fade" />
+        {/* Chat area
+            这一层是「框架」：EdgeBlur 的模糊层必须是滚动容器的兄弟节点，
+            才能钉在框上不跟着内容滚（见 components/ui/EdgeBlur.tsx 顶部说明） */}
+        <div className="chat-frame flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 0 }}>
           <ChatPanel messages={claude.messages} isLoading={claude.isLoading} onSend={claude.send} />
+          <EdgeBlur position="top" height={64} maxBlur={12} />
           <ApprovalBar />
         </div>
       </main>
@@ -251,14 +259,15 @@ export default function App() {
       {/* 选中文字的上下文 AI 操作条（仅 chat 模式） */}
       {viewMode === 'chat' && <SelectionActions onAction={claude.send} />}
 
-      {/* InputBar outside main so backdrop-filter blurs through the page background */}
+      {/* InputBar outside main so backdrop-filter blurs through the page background.
+          stage / chat 共用同一套输入区 UI：模型岛、思考强度、状态行两种模式都渲染 */}
       <InputBar
         onSend={claude.send}
         onCancel={claude.cancel}
         isLoading={claude.isLoading}
-        currentModel={viewMode === 'stage' ? claude.config.model || 'sonnet' : undefined}
-        onSelectModel={viewMode === 'stage' ? (model, providerId) => claude.updateConfig({ model, ...(providerId ? { provider: providerId } : {}) }) : undefined}
-        workingDirectory={viewMode === 'stage' ? claude.config.cwd : undefined}
+        currentModel={claude.config.model || 'sonnet'}
+        onSelectModel={(model, providerId) => claude.updateConfig({ model, ...(providerId ? { provider: providerId } : {}) })}
+        workingDirectory={claude.config.cwd}
       />
 
       {/* Settings modal */}

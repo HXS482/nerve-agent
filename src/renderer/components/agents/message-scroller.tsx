@@ -98,7 +98,9 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<'div'> {
   contentClassName?: string
   railClassName?: string
   viewportRef?: Ref<HTMLElement>
-  viewportProps?: Omit<ComponentPropsWithRef<'section'>, 'children' | 'className' | 'ref'>
+  // 允许透传 data-* （例如 data-chat-scroll）：TS 的 HTMLAttributes 不含任意 data 属性
+  viewportProps?: Omit<ComponentPropsWithRef<'section'>, 'children' | 'className' | 'ref'> &
+    Record<`data-${string}`, string | undefined>
   contentProps?: Omit<ComponentPropsWithRef<'div'>, 'children' | 'className' | 'ref'>
   labels?: Partial<MessageScrollerMessages>
 }

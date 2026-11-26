@@ -2789,20 +2789,12 @@ button.tool-spot-all:hover {
     black 36px);
 }
 
-/* iOS 风格顶部渐隐：progressive blur 覆盖层 */
-.chat-top-fade {
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  right: 1px;
-  height: 56px;
-  border-radius: calc(var(--app-shell-radius) - 1px) calc(var(--app-shell-radius) - 1px) 0 0;
-  z-index: 20;
-  pointer-events: none;
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+/* 聊天区「框架」：EdgeBlur 的模糊层是滚动容器的兄弟，
+   需要这一层给出裁剪上下文 + isolate，模糊才被裁在框内、不和别的层抢合成顺序。
+   （旧的单层 .chat-top-fade 已被 components/ui/EdgeBlur.tsx 取代） */
+.chat-frame {
+  overflow: hidden;
+  isolation: isolate;
 }
 
 /* ===== 用户消息气泡 =====
@@ -2838,7 +2830,9 @@ button.tool-spot-all:hover {
  */
 .chat-scroll-viewport {
   padding-top: 32px;
-  padding-bottom: 80px;
+  /* 80 + 20：输入胶囊下方多了与 stage 同款的状态行（Local checkout / 分支 / 用量环），
+     留白得把那一行的 20px 一起让出来，否则最后一条消息会被压住 */
+  padding-bottom: 100px;
 }
 
 /*
@@ -4596,3 +4590,33 @@ pre.hljs {
   transform: scale(0.94);
 }
 
+/* ===== EdgeBlur：边缘渐进模糊（components/ui/EdgeBlur.tsx）=====
+ *
+ * 结构：一个 absolute 容器贴住边缘，里面叠 N 层各自带渐变 mask 的 backdrop-filter。
+ * 越靠边缘参与叠加的层越多、模糊越强，往里逐级减少 —— 得到的是一条衰减曲线，
+ * 而不是单层「高斯 + 线性遮罩」那种一刀切的直线过渡。
+ *
+ * 容器必须 pointer-events: none，滚轮/触摸继续落到下面的滚动区；
+ * 层级压在内容之上、弹层之下，别盖住下拉菜单。
+ */
+.edge-blur {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  pointer-events: none;
+  overflow: hidden;
+}
+.edge-blur[data-position='top'] {
+  top: 0;
+}
+.edge-blur[data-position='bottom'] {
+  bottom: 0;
+}
+/* 每层都铺满整条带，靠自己的 mask 决定露出哪一段 */
+.edge-blur > span {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
