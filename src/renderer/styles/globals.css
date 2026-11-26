@@ -316,10 +316,124 @@ button, a, input, textarea, select {
   outline: none;
   box-shadow: none;
 }
+/* textarea 也要一并抑制：输入框从 input 换成 textarea 后，全局的
+   :focus-visible 描边（2px accent）会在这块多行框上画出一圈亮框，
+   而规矩本来就是「聚焦不改变容器外观」 */
 .glass-dock input:focus,
-.glass-dock input:focus-visible {
+.glass-dock input:focus-visible,
+.glass-dock textarea:focus,
+.glass-dock textarea:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+/* ===== 输入胶囊：单行 / 展开两种排布 =====
+ *
+ * 单行：左按钮组 · 文字 · 右按钮组，三块并排，胶囊高 36。
+ * 展开：文字独占一整行、从胶囊左内缘起排；两个按钮组落到第二行（左一组贴左、
+ *       右一组贴右）。这样多行文字整块宽度可用，不会因为左边两个按钮的存在
+ *       而整体右移、右边又提前截断 —— 也就是「两边同时留空」的观感。
+ *
+ * 切态由 data-expanded 决定（InputBar 里按内容高度判，超过一行就为 true）。
+ * 用 flex-wrap + order + flex-basis 100% 实现，而不是两套 JSX：
+ * 换行位置交给布局引擎，DOM 保持一份，按钮的事件与状态都不用重建。
+ */
+/* 胶囊自己是 flex 容器（原来靠 Tailwind 的 flex/items-end，换成语义类后必须显式声明） */
+.inputbar-dock {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  /* 4 是同一行里相邻控件的间隔。写在样式表而非内联，是因为内联 gap 是简写，
+     会把 row-gap 一起锁死，展开态就没法单独调行间距了。 */
+  gap: 4px;
+}
+
+.inputbar-left,
+.inputbar-right {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.inputbar-right {
+  gap: 4px;
+}
+
+/* 文字容器：单行态下吃掉剩余宽度，左右各留一点呼吸 */
+.inputbar-field {
+  display: flex;
+  align-items: flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 4px;
+  padding-right: 8px;
+}
+
+/* 输入框内部的滚动条：只留那根圆角滑块，不要轨道方框和两端箭头。
+ *
+ * 之前 textarea 上写着 scrollbar-width: thin —— 这条标准属性一出现，
+ * Chromium 就会把 ::-webkit-scrollbar 那套自定义样式整个忽略，回退成系统原生滚动条：
+ * 一条带上下三角的直角长条。想要细圆角滑块就不能碰 scrollbar-width，
+ * 只能用 webkit 伪元素自己画。
+ *
+ * 轨道透明无边框、滑块 6px 圆角胶囊，hover 才加深，平时不抢注意力。
+ */
+.inputbar-dock textarea::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.inputbar-dock textarea::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+}
+.inputbar-dock textarea::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: none;
+}
+.inputbar-dock textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+/* 两端不要箭头占位 */
+.inputbar-dock textarea::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+}
+.inputbar-dock textarea::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 展开态：文字换到第一行整行，按钮组到第二行。
+ *
+ * row-gap 归 0，让按钮行直接接在文字块下缘后面：
+ *   首行墨迹 → 上边框 = 3(胶囊内边距) + 1(描边) + 5(textarea 上内边距) + 3(行内余量) = 12
+ *   末行墨迹 → 按钮行顶 = 3(行内余量) + 5(textarea 下内边距) + row-gap = 8
+ *   按钮底 → 下边框 = 3 + 1 = 4
+ * 再叠一个 4 的行间距，末行到按钮就会变成 12，和上方 12 一样 —— 但那正是
+ * 之前「按钮行悬在中间」的来源：文字与按钮之间被撑开，而按钮与底边只有 4。
+ * 归 0 后上下节奏是 12 / 8 / 4，由外到内收紧，读起来才是一整块。
+ * 列间距仍由 .inputbar-dock 的 gap 提供。 */
+.inputbar-dock[data-expanded='true'] {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.inputbar-dock[data-expanded='true'] .inputbar-field {
+  order: 1;
+  /* 100% 而不是 flex: 1：必须独占一行，否则还会试图和按钮挤在同一行 */
+  flex: 0 0 100%;
+  /* 水平内边距要和「文字到上边框」的距离对齐。
+     文字墨迹到上边框 = 胶囊内边距 3 + 描边 1 + textarea 上内边距 5 + 行内半行距 3 = 12。
+     左边同理要有 12：3 + 1 + 这里 7 + 字形自身留白 1 ≈ 12。
+     原来写 0 会让文字贴着左边框（实测 5px）而上边 12px，视觉上明显偏。 */
+  padding-left: 7px;
+  padding-right: 7px;
+}
+.inputbar-dock[data-expanded='true'] .inputbar-left {
+  order: 2;
+}
+.inputbar-dock[data-expanded='true'] .inputbar-right {
+  order: 3;
+  /* 顶到第二行右端 */
+  margin-left: auto;
 }
 
 /* ===== Glass panel ===== */
@@ -2830,9 +2944,12 @@ button.tool-spot-all:hover {
  */
 .chat-scroll-viewport {
   padding-top: 32px;
-  /* 80 + 20：输入胶囊下方多了与 stage 同款的状态行（Local checkout / 分支 / 用量环），
-     留白得把那一行的 20px 一起让出来，否则最后一条消息会被压住 */
-  padding-bottom: 100px;
+  /* 底部留白跟着输入栏的实际高度走：InputBar 用 ResizeObserver 把整列
+     （胶囊 + 状态行）的高度写到 --input-dock-height 上，输入框长高多少，
+     留白就自动多多少 —— 否则最后一条消息会被撑高后的胶囊盖住。
+     没有该变量时回落到 60（单行态：胶囊 36 + 间距 4 + 状态行 20）+ 40 的呼吸余量 = 100，
+     和原来的固定值是同一个数。 */
+  padding-bottom: calc(var(--input-dock-height, 60px) + 40px);
 }
 
 /*

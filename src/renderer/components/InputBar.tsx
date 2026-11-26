@@ -19,6 +19,44 @@ interface Props {
   workingDirectory?: string
 }
 
+// 输入框自增高的排版参数。三者必须自洽：
+//   单行内容高 = LINE_HEIGHT(18) + 上下 padding(5+5) = 28，正好等于按钮高，
+//   所以「单行态」胶囊仍是 1+3+28+3+1 = 36，和改造前完全一致；
+//   多行时只有高度变，水平内边距不动，圆弧依旧同心。
+//   12 号字 / 18 行高是量出来的：13/20 时中文墨迹上下各占 12px 而左右只 4px，
+//   看着挤；12 配 18 的留白才对得上。
+const LINE_HEIGHT = 18
+const INPUT_PAD_Y = 5
+const MAX_INPUT_ROWS = 3
+const INPUT_MAX_HEIGHT = LINE_HEIGHT * MAX_INPUT_ROWS + INPUT_PAD_Y * 2
+
+/**
+ * 算出胶囊在两种排布下能给 textarea 的宽度。
+ *
+ * 收起态 = 内容宽 - 两侧按钮组 - 两道列间距 - field 自己的左右内边距
+ * 展开态 = 内容宽 - field 展开时的左右内边距（按钮已换到第二行，不占宽度）
+ *
+ * 判定展开只能用 collapsedWidth：它和当前是否展开无关，因而判定是幂等的。
+ * 若拿「当前实际宽度」去判，就会掉进「收起→变窄→换行→展开→变宽→又一行→收起」的死循环。
+ */
+function widthsOf(pill: HTMLElement) {
+  const cs = getComputedStyle(pill)
+  const contentWidth = pill.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+  const leftW = (pill.querySelector('.inputbar-left') as HTMLElement | null)?.offsetWidth ?? 0
+  const rightW = (pill.querySelector('.inputbar-right') as HTMLElement | null)?.offsetWidth ?? 0
+  const gap = parseFloat(cs.columnGap) || 0
+  return {
+    collapsedWidth: contentWidth - leftW - rightW - gap * 2 - (FIELD_PAD_X.left + FIELD_PAD_X.right),
+    expandedWidth: contentWidth - FIELD_PAD_X_EXPANDED * 2,
+  }
+}
+
+// field 容器的水平内边距。收起态 4/8（文字离左按钮一点距离、右侧给光标留余量），
+// 展开态左右各 7（和「文字到上边框的 12px」对齐）。判定展开时要用它算可用宽度，
+// 所以必须和 CSS 里的数值同源 —— 改这里就等于改了样式。
+const FIELD_PAD_X = { left: 4, right: 8 }
+const FIELD_PAD_X_EXPANDED = 7
+
 // 思考强度档位：存的是 API enum，显示说人话
 const EFFORT_LABELS: Record<string, string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max',
@@ -50,6 +88,9 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   const [hasVoice, setHasVoice] = useState(false)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  // 是否已「展开」（内容超过一行）。展开后布局从「按钮与文字同一行」切成
+  // 「文字独占整行 + 按钮落在下面一行」，见下方胶囊的 data-expanded。
+  const [expanded, setExpanded] = useState(false)
   const plusRootRef = useRef<HTMLDivElement>(null)
   // + 弹条几何：打开瞬间实测 + 按钮相对根的偏移（弹条挂在根层级，见下方 JSX 注释）。
   // 写死数字会飘位——按钮距根左缘受胶囊内边距影响，chat 模式根还有侧边栏 marginLeft
@@ -67,7 +108,9 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
   }
   const [effortMenuOpen, setEffortMenuOpen] = useState(false)
   const effortRootRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  // 整列（胶囊 + 状态行）的高度要报给滚动区，否则输入框长高会把最后一条消息盖住
+  const columnRef = useRef<HTMLDivElement>(null)
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
   const sidebarWidth = useChatStore((s) => s.sidebarWidth)
   const rightSidebarOpen = useChatStore((s) => s.rightSidebarOpen)
@@ -118,6 +161,73 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
 
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  // 自动增高 + 展开判定。两件事必须分开量，否则会形成死循环：
+  //
+  // 展开会改变输入框可用宽度（收起态两侧有按钮占位，展开态按钮换到第二行），
+  // 一条「在宽处刚好一行、在窄处要两行」的文字，就会让状态来回翻：
+  //   收起 → 变窄 → 换行 → 量到两行 → 展开 → 变宽 → 变回一行 → 收起 → …
+  //
+  // 所以判定一律用「收起态的宽度」量。那个宽度只由两侧按钮组决定，与当前是否
+  // 展开无关，判定结果因此稳定。高度则按「这套布局真正会给的宽度」量，
+  // 免得按旧宽度算出的高度把文字裁掉。
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    let raf = 0
+    raf = requestAnimationFrame(() => {
+      const pill = el.closest('.inputbar-dock') as HTMLElement | null
+      const oneLine = LINE_HEIGHT + INPUT_PAD_Y * 2
+      // 单行内容高 = 行高 + 上下内边距 = 28，正好等于按钮高
+
+      // 量某个宽度下的内容高度：临时改宽 → 归零高度 → 读 scrollHeight → 复原。
+      // 高度必须先归位成 auto，否则浏览器拿上一次的内联 height 当内容高度，只增不减。
+      const measureAt = (width: number | null) => {
+        const prevWidth = el.style.width
+        const prevHeight = el.style.height
+        if (width) el.style.width = `${width}px`
+        el.style.height = 'auto'
+        const h = el.scrollHeight
+        el.style.width = prevWidth
+        el.style.height = prevHeight
+        return h
+      }
+
+      let needExpanded: boolean
+      let targetWidth: number | null = null
+      if (pill) {
+        const { collapsedWidth, expandedWidth } = widthsOf(pill)
+        needExpanded = collapsedWidth > 0
+          ? measureAt(collapsedWidth) > oneLine
+          : el.scrollHeight > oneLine
+        targetWidth = needExpanded ? expandedWidth : collapsedWidth
+      } else {
+        needExpanded = el.scrollHeight > oneLine
+      }
+
+      if (needExpanded !== expanded) setExpanded(needExpanded)
+
+      const contentHeight = measureAt(targetWidth)
+      el.style.height = `${Math.min(contentHeight, INPUT_MAX_HEIGHT)}px`
+      // 没到顶不显示滚动条（否则单行态也会留一条细缝）；到顶之后才允许内部滚
+      el.style.overflowY = contentHeight > INPUT_MAX_HEIGHT ? 'auto' : 'hidden'
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [input, expanded])
+
+  // 把整列高度写到根上：滚动区底部留白按它算，输入框长高多少，留白就多多少
+  useEffect(() => {
+    const el = columnRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      document.documentElement.style.setProperty('--input-dock-height', `${el.offsetHeight}px`)
+    })
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      document.documentElement.style.removeProperty('--input-dock-height')
+    }
   }, [])
 
   // 菜单开着时点外面就收起：document mousedown 而非全屏遮罩。
@@ -223,7 +333,11 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
     setAttachments([])
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 中文/日文输入法选词时按回车是在确认候选词，绝不能当发送
+    //（isComposing 在部分输入法下会晚一帧落，再兜一层 keyCode 229）
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
+    // Shift+Enter 换行由 textarea 自己处理，不拦
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
@@ -333,6 +447,7 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
       <div className="flex justify-center items-center gap-3 w-full">
         {/* 与正文列共用 .chat-column：宽度只有一个来源，边缘才对得上 */}
         <div
+          ref={columnRef}
           className="chat-column flex flex-col gap-1 min-w-0"
           style={
             conversationWidth > 0
@@ -343,17 +458,31 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
           {/* Main Input Container */}
           {/* 内边距必须写内联：globals.css 顶部的 `* { padding: 0 }` 不在 @layer 里，
               优先级压过 Tailwind 的 utilities 层，`p-1.5` 实际算出来是 0，胶囊里所有
-              间距全靠零散 margin 拼，结果左边 5px、右边 11px。这里显式给 0 6px，
-              并把下面按钮的 marginLeft 小补丁一起删掉 */}
+              间距全靠零散 margin 拼，结果左边 5px、右边 11px。
+
+              水平内边距 3px 是算出来的，不是凑的：胶囊 h36 → 圆角 18；里面按钮 28 → 圆角 14；
+              (36-28)/2 = 4 是上下留白。两条圆弧要「等间距」必须同心，即按钮圆心落在胶囊
+              左半圆圆心上 —— 圆心在 x=18 处，按钮半径 14，所以按钮左边距必须是 18-14=4。
+              扣掉 1px 描边，水平 padding 就是 3px（原来 6px + 描边 = 7px，比上下多 3px，
+              圆弧最窄处只剩 1px、最宽处 7px，肉眼就是「间距不均」）。 */}
           <div
-            className="glass-dock rounded-full flex items-center transition-all duration-300 group w-full h-9"
+            data-expanded={expanded}
+            className="glass-dock inputbar-dock transition-all duration-300 group w-full"
             style={{
-              padding: '0 6px',
-              gap: 4,
+              minHeight: 36,
+              // 竖直 3 = (36-28)/2 - 1px 描边；水平 3 同理。四边「padding + 描边」都是 4，
+              // 于是按钮的圆心和胶囊左半圆圆心的距离 = 18-14 = 4，圆弧等间距。
+              // 圆角封顶 18 而不是 rounded-full：单行时 18 就是半高、观感和全圆一致；
+              // 长高后保持 18，才是「圆角矩形」而不是跑道形
+              padding: '3px',
+              borderRadius: 18,
               boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
               border: voice.isRecording ? '1px solid var(--error)' : undefined,
             }}
           >
+            {/* 左侧按钮组。展开态下这一组整块落到第二行（见 globals.css 的
+                .inputbar-dock[data-expanded] 规则），所以外层必须有自己的盒子 */}
+            <div className="inputbar-left">
             {/* + 按钮（容器内左侧）：点开向上弹 Add photo & files bar（弹条挂在根层级，见上） */}
             {/* Routines 入口：点击开右栏并切到 Routines 视图，再点一次收起。
                 判断用「右栏开着 且 视图是 routines」而不是单纯 toggle —— 右栏可能停在
@@ -398,24 +527,36 @@ export function InputBar({ onSend, onCancel, isLoading, currentModel, onSelectMo
                 </svg>
               </button>
             </div>
+            </div>
 
-            {/* Input Field */}
-            <div className="flex-1 flex items-center" style={{ paddingLeft: 4, paddingRight: 8 }}>
-              <input
+            {/* Input Field
+                用 textarea 而不是 input：只有 textarea 能真正换行（input 再怎么撑高
+                也是一条长线）。行高 22 + 上下 padding 3 = 28，正好等于按钮高，
+                所以单行态整条胶囊仍是 36 —— 和改造前像素一致。
+                resize 关掉、overflow-y 交给 JS 判（见上面的自动增高 effect）：
+                没到 MAX_INPUT_ROWS 时是 hidden，到顶后才变 auto 内部滚动。 */}
+            <div className="inputbar-field">
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={getPlaceholder()}
-                className="bg-transparent border-none focus:ring-0 text-[var(--text-on-surface)] placeholder-[var(--text-outline)] w-full text-[14px] outline-none focus:outline-none"
-                style={{ caretColor: 'var(--accent-primary)' }}
+                className="bg-transparent border-none focus:ring-0 text-[var(--text-on-surface)] placeholder-[var(--text-outline)] w-full text-[12px] outline-none focus:outline-none"
+                style={{
+                  caretColor: 'var(--accent-primary)',
+                  lineHeight: `${LINE_HEIGHT}px`,
+                  padding: `${INPUT_PAD_Y}px 0`,
+                  resize: 'none',
+                  overflowY: 'hidden',
+                }}
                 disabled={isLoading || voice.isTranscribing}
               />
             </div>
 
-            {/* Right Actions */}
-            <div className="flex items-center" style={{ gap: 4, padding: 0 }}>
+            {/* Right Actions：展开态下落第二行右端（margin-left: auto 顶到右边） */}
+            <div className="inputbar-right">
               {/* 思考强度入口按钮：弹出条挂在 InputBar 根层级（见上方 effortMenuOpen 块） */}
               <div className="inputbar-plus-root" ref={effortRootRef}>
                 <button
