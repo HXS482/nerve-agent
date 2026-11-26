@@ -3,7 +3,7 @@ import { ChatMessage } from '../../shared/types'
 import { MessageBubble } from './MessageBubble'
 import { MessageScroller } from './agents/message-scroller'
 import { useChatStore } from '../stores/chatStore'
-import ASCIIText from './ASCIIText'
+import { EmptyState } from './EmptyState'
 
 interface Props {
   messages: ChatMessage[]
@@ -46,18 +46,8 @@ export function ChatPanel({ messages, isLoading, onSend }: Props) {
 
   if (filteredMessages.length === 0) {
     return (
-      <div
-        ref={containerRef}
-        className="flex-1 flex items-center justify-center"
-        style={{ paddingInline: 'var(--sp-md)' }}
-      >
-        <div className="flex flex-col items-center justify-center py-20 gap-3" style={{ position: 'relative', width: '100%', height: '300px' }}>
-          <ASCIIText
-            text="Hey!"
-            enableWaves
-            asciiFontSize={4}
-          />
-        </div>
+      <div ref={containerRef} className="flex-1 flex">
+        <EmptyState />
       </div>
     )
   }

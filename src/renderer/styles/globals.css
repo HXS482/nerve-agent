@@ -459,6 +459,57 @@ button, a, input, textarea, select {
   border: 1px solid var(--stage-border);
 }
 
+/* ===== 空会话占位：当前 Bot 的小人 =====
+ *
+ * 不画卡片、不加边框 —— 空会话的留白本身就是设计，套一个方框它就成了「一块面板」。
+ * 只有三样东西：一层极淡的墨色光晕、96px 的头像、下面一行名字。
+ */
+.empty-state {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+  min-height: 300px;
+}
+
+/* 光晕放在头像下面一层，尺寸大于头像本身，靠模糊把边缘化开。
+   opacity 压到 0.12：这是墨色的「雾」，不是发光体，太亮会抢头像 */
+.empty-state-glow {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  filter: blur(46px);
+  opacity: 0.12;
+  pointer-events: none;
+  /* 和头像中心对齐：头像 96 + 名字行高 + gap 18，光晕往上挪半个名字块 */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -62%);
+}
+
+.empty-state-avatar {
+  position: relative;
+  z-index: 1;
+  /* 上游是 canvas，尺寸由 size 决定；这层只负责居中与「悬空感」 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.28));
+}
+
+.empty-state-name {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text-on-surface-variant);
+  user-select: none;
+}
+
 /* ===== 顶栏中央：Bot 头像切换按钮（chat ↔ stage 共用同一个位置） ===== */
 .bot-switch-btn {
   position: absolute;

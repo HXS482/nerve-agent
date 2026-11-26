@@ -17,6 +17,7 @@ import { ToolSpot } from './ToolSpot'
 import { UserLogTerminal } from './UserLogTerminal'
 import { ApprovalBar } from '../ApprovalBar'
 import { SelectionActions } from '../SelectionActions'
+import { useAvatarFlightStore } from '../../stores/avatarFlightStore'
 
 interface Props {
   claude: ReturnType<typeof useClaude>
@@ -27,6 +28,8 @@ interface Props {
 // 顶栏（交通灯 + 会话抽屉 + 小球返回 + 模型 + 设置）+ 产物空间 + 固定状态点
 export function StageShell({ claude, onOpenSettings }: Props) {
   const setViewMode = useStageStore((s) => s.setViewMode)
+  // 头像飞行中：顶栏这只先隐身（与 chat 顶栏同一处理）
+  const flying = useAvatarFlightStore((s) => s.flight !== null)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const stageBg = useChatStore((s) => s.stageBg)
@@ -109,16 +112,23 @@ export function StageShell({ claude, onOpenSettings }: Props) {
           onClick={() => setViewMode('chat')}
           title="返回聊天模式"
         >
-          <AvatarFace
-            shape={stageShape}
-            size={44}
-            status={botStatus}
-            color={isLight ? '#0a0a0c' : '#f1efe9'}
-            material={stageMaterial}
-            animate
-            followPointer
-            label="Bot"
-          />
+          {/* data-avatar-slot：空会话头像飞上来时的落点（chat 顶栏那只同款标记）。
+              飞行途中先隐身，落地那一刻再淡入真身 */}
+          <div
+            data-avatar-slot
+            style={{ display: 'flex', opacity: flying ? 0 : 1, transition: 'opacity 140ms linear' }}
+          >
+            <AvatarFace
+              shape={stageShape}
+              size={44}
+              status={botStatus}
+              color={isLight ? '#0a0a0c' : '#f1efe9'}
+              material={stageMaterial}
+              animate
+              followPointer
+              label="Bot"
+            />
+          </div>
         </button>
 
       {/* 会话抽屉 */}

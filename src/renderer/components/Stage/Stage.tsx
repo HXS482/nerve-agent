@@ -10,7 +10,7 @@ import { TaskRows } from './TaskRows'
 import { WritingCard } from './WritingCard'
 import { NarrationLayer } from './NarrationLayer'
 import { CardCoverFlow } from './CardCoverFlow'
-import ASCIIText from '../ASCIIText'
+import { EmptyState } from '../EmptyState'
 
 // ─── 可拖拽卡片（外层出生飞入，内层拖拽偏移） ───
 
@@ -253,11 +253,7 @@ export function Stage({ messages, onSend }: { messages: ChatMessage[]; onSend?: 
         </div>
       )}
       {showEmptyState ? (
-        <div className="flex-1 flex items-center justify-center" style={{ paddingInline: 'var(--sp-md)' }}>
-          <div className="flex flex-col items-center justify-center py-20 gap-3" style={{ position: 'relative', width: '100%', height: '300px' }}>
-            <ASCIIText text="Hey!" enableWaves asciiFontSize={4} />
-          </div>
-        </div>
+        <EmptyState />
       ) : (
         <div ref={canvasRef} className="stage-canvas flex-1 overflow-y-auto w-full" data-chat-scroll>
           <div className="stage-masonry">

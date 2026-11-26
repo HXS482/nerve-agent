@@ -12,6 +12,8 @@ import { ProjectPalette } from './components/ProjectPalette'
 import { Gallery } from './components/Gallery'
 import { SidebarToggleIcon } from './components/SidebarToggleIcon'
 import { ApprovalBar } from './components/ApprovalBar'
+import { AvatarFlight } from './components/AvatarFlight'
+import { beginAvatarFlight, useAvatarFlightStore } from './stores/avatarFlightStore'
 import { EdgeBlur } from './components/ui/EdgeBlur'
 import { SelectionActions } from './components/SelectionActions'
 import { BotAvatar as AvatarFace } from './components/BotAvatar/BotAvatar'
@@ -20,11 +22,24 @@ import { useBotStatus } from './hooks/useBotStatus'
 import { useRoutineStore } from './stores/routineStore'
 import { botInk } from './lib/bot-avatar'
 import { AskUserCard } from './components/AskUserCard'
+import type { FileAttachment } from '../shared/types'
 import { ResizeBorder } from './components/ResizeBorder'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 export default function App() {
   const claude = useClaude()
+  // 头像飞行中：顶栏那只先隐身，让替身落地后接管（见 components/AvatarFlight.tsx）
+  const flying = useAvatarFlightStore((s) => s.flight !== null)
+  // 发消息前先起飞。包一层而不是改 useClaude：飞行是纯展示的事，
+  // 数据层不该知道渲染层有没有动画在播。量矩形必须发生在 send 之前 ——
+  // send 会立刻改 session 状态，空会话占位随之卸载，之后就没有起点可量了。
+  const sendWithFlight = useCallback(
+    (prompt: string, files?: FileAttachment[]) => {
+      beginAvatarFlight()
+      void claude.send(prompt, files)
+    },
+    [claude.send],
+  )
   const sidebarOpen = useChatStore((s) => s.sidebarOpen)
   const setSidebarOpen = useChatStore((s) => s.setSidebarOpen)
   const viewMode = useStageStore((s) => s.viewMode)
@@ -38,6 +53,15 @@ export default function App() {
   const currentSessionId = useChatStore((s) => s.currentSessionId)
   // 小球跟着本轮任务状态走（与 Stage 同一套派生：转环/脉动/眨眼/红点）
   const botStatus = useBotStatus(currentSessionId)
+  // 空会话里正文中间已经有一只在等你了，顶栏就不该再放一只 —— 否则新建会话
+  // 的画面上是「两个 Bot 头像」。判定和 ChatPanel 的空态同源：这个会话没有消息。
+  const isEmptySession = useMemo(() => {
+    if (!currentSessionId) return true
+    return !claude.messages.some((m) => m.sessionId === currentSessionId)
+  }, [claude.messages, currentSessionId])
+  // 顶栏那只什么时候隐身：飞行中（替身在路上）或空会话（中间那只才是主角）
+  const hideTopAvatar = flying || isEmptySession
+
 
   // 顶部球的颜色跟随「当前 Bot」：侧栏选中的优先，否则用当前会话绑定的那个
   const bots = useRoutineStore((s) => s.bots)
@@ -231,17 +255,28 @@ export default function App() {
           onClick={() => setViewMode('stage')}
           title="进入产物空间"
         >
-          <AvatarFace
-            shape={topShape}
-            size={44}
-            status={topStatus}
-            color={topInk ?? (theme === 'light' ? '#0a0a0c' : '#f1efe9')}
-            /* 材质跟着当前 Bot：顶栏这只和侧栏里那行必须是同一张脸（含毛发） */
-            material={currentBot?.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat'}
-            animate
-            followPointer
-            label={currentBot ? currentBot.name : 'Bot'}
-          />
+          {/* data-avatar-slot 是飞行动画的终点标记。飞行途中先隐身：替身落地的那一刻
+              它再淡入，看起来才是「同一只落位」，而不是两只短暂重叠 */}
+          <div
+            data-avatar-slot
+            style={{
+              display: 'flex',
+              opacity: hideTopAvatar ? 0 : 1,
+              transition: 'opacity 140ms linear',
+            }}
+          >
+            <AvatarFace
+              shape={topShape}
+              size={44}
+              status={topStatus}
+              color={topInk ?? (theme === 'light' ? '#0a0a0c' : '#f1efe9')}
+              /* 材质跟着当前 Bot：顶栏这只和侧栏里那行必须是同一张脸（含毛发） */
+              material={currentBot?.avatarMaterial === 'fluffy' ? 'fluffy' : 'flat'}
+              animate
+              followPointer
+              label={currentBot ? currentBot.name : 'Bot'}
+            />
+          </div>
         </button>
 
         {/* Chat area
@@ -256,13 +291,16 @@ export default function App() {
         </>
       )}
 
+      {/* 空会话头像飞向顶栏的替身（portal 到 body，跨层级） */}
+      <AvatarFlight />
+
       {/* 选中文字的上下文 AI 操作条（仅 chat 模式） */}
-      {viewMode === 'chat' && <SelectionActions onAction={claude.send} />}
+      {viewMode === 'chat' && <SelectionActions onAction={sendWithFlight} />}
 
       {/* InputBar outside main so backdrop-filter blurs through the page background.
           stage / chat 共用同一套输入区 UI：模型岛、思考强度、状态行两种模式都渲染 */}
       <InputBar
-        onSend={claude.send}
+        onSend={sendWithFlight}
         onCancel={claude.cancel}
         isLoading={claude.isLoading}
         currentModel={claude.config.model || 'sonnet'}
