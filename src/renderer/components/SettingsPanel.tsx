@@ -1725,7 +1725,7 @@ function SkillsTab() {
 function VoiceTab() {
   const [endpoint, setEndpoint] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const [model, setModel] = useState('mimo-v2.5')
+  const [model, setModel] = useState('whisper-1')
   const [showKey, setShowKey] = useState(false)
   const [saved, setSaved] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
@@ -1735,7 +1735,7 @@ function VoiceTab() {
     window.claude.getNerveSettings().then((s: any) => {
       setEndpoint(s.sttEndpoint || '')
       setApiKey(s.sttApiKey || '')
-      setModel(s.sttModel || 'mimo-v2.5')
+      setModel(s.sttModel || 'whisper-1')
       setProviderInfo({ baseURL: s.baseURL || '', hasKey: !!s.authToken })
     }).catch(() => {})
   }, [])
@@ -1782,13 +1782,13 @@ function VoiceTab() {
     <div>
       <Section
         title="Voice input"
-        hint="Transcribes dictation with an audio-capable LLM. Leave these empty to reuse the Provider endpoint and key."
+        hint="Records audio in the app and posts it to an OpenAI-compatible /v1/audio/transcriptions endpoint (Whisper API). No ffmpeg needed — webm/opus is uploaded as-is. Leave these empty to reuse the Provider endpoint and key."
       >
         <Row label="Endpoint" stack>
           <TextInput
             value={endpoint}
             onChange={setEndpoint}
-            placeholder="https://api.xiaomimimo.com"
+            placeholder="https://api.openai.com/v1"
             mono
           />
           {fallbackNote && <Hint>{fallbackNote}</Hint>}
@@ -1812,8 +1812,8 @@ function VoiceTab() {
           />
         </Row>
 
-        <Row label="Model" hint="Must accept audio input — mimo-v2.5, mimo-v2-omni." stack>
-          <TextInput value={model} onChange={setModel} placeholder="mimo-v2.5" mono />
+        <Row label="Model" hint="Transcription model name — whisper-1 for OpenAI-compatible services, or your gateway's equivalent." stack>
+          <TextInput value={model} onChange={setModel} placeholder="whisper-1" mono />
         </Row>
       </Section>
 
