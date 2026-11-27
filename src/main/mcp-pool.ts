@@ -218,7 +218,19 @@ export class McpPool {
         requestInit: { headers: config.headers },
         ...(hasStaticAuth || !this.oauth
           ? {}
-          : { authProvider: this.oauth.createProvider(name) }),
+          : {
+              /*
+               * 授权参数按 server 传：scope / 预注册 client / 资源元数据地址
+               * 都存在 config 上（见 settings.ts 的 McpServerConfig）。
+               * 不传的话会用 marked.dev 那套默认 scope —— 其它平台直接拒。
+               */
+              authProvider: this.oauth.createProvider(name, {
+                scope: config.oauthScope,
+                clientId: config.clientId,
+                clientSecret: config.clientSecret,
+                resourceMetadataUrl: config.resourceMetadataUrl,
+              }),
+            }),
       })
       await client.connect(transport)
       return client

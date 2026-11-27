@@ -12,6 +12,19 @@
  *   2. 授权码回调走固定端口的 loopback http 服务（127.0.0.1:39751）；
  *   3. token / client 信息 / PKCE verifier / discovery 状态都落在
  *      ~/.nerve/mcp-auth/<server>.json，重启后不用重新授权。
+ *
+ * 但「一个 client 打通所有平台」是做不到的 —— 实测下来 MCP 的授权分三种形态：
+ *
+ *   a. 支持动态注册（Linear / Sentry / Figma）：SDK 自己 POST /register 拿
+ *      client_id，URL 型 client_id 那条路用不上。此时要**屏蔽 clientMetadataUrl**，
+ *      否则 SDK 只要看到服务端声明 client_id_metadata_document_supported 就会
+ *      优先用 URL 型 id，而有些平台两者都声明、只认注册出来的那个。
+ *   b. 不支持动态注册（GitHub / Slack / Asana / Stripe）：必须用预注册的
+ *      OAuth App，也就是用户填的 clientId / clientSecret；没有就只能粘 token。
+ *   c. scope 各家不同。写死 marked.dev 那套会被别家直接拒掉。
+ *
+ * 所以 scope / clientId / resourceMetadataUrl 全部改成「按 server 从配置里取」，
+ * 缺省时才回落到 marked.dev 那套（保持老配置照旧能授权）。
  */
 
 import { createServer, type Server } from 'http'
@@ -40,7 +53,11 @@ const CALLBACK_URL = `http://127.0.0.1:${CALLBACK_PORT}${CALLBACK_PATH}`
 const CLIENT_METADATA_URL =
   'https://cdn.jsdelivr.net/gh/HXS482/nerve-agent@master/oauth/client-metadata.json'
 
-const REQUESTED_SCOPE = 'refs:read saves:write offline_access'
+/**
+ * marked.dev 那套 scope。只在 server 没配 oauthScope 时兜底 ——
+ * 它是历史上唯一接过的平台，保持默认值能让老配置一字不改继续用。
+ */
+const DEFAULT_SCOPE = 'refs:read saves:write offline_access'
 
 const AUTH_DIR = join(homedir(), '.nerve', 'mcp-auth')
 const AUTH_TIMEOUT = 5 * 60 * 1000
@@ -76,6 +93,24 @@ function writeStored(serverName: string, data: StoredAuth) {
   writeFileSync(authFile(serverName), JSON.stringify(data, null, 2), 'utf-8')
 }
 
+/** 单个 server 的授权参数。全部可选，缺省时用 marked.dev 那套。 */
+export interface OAuthProviderOptions {
+  /** 请求的 scope，空格分隔 */
+  scope?: string
+  /** 预注册 OAuth App 的 client_id */
+  clientId?: string
+  /** 预注册 OAuth App 的 client_secret（Slack 这类必须） */
+  clientSecret?: string
+  /**
+   * 是否允许 SEP-991 的 URL 型 client_id。默认允许。
+   * 平台明确不认 URL 型 id、又不给动态注册时置 false —— 那样授权会直接
+   * 报「需要预注册的 client」，比让服务端返回一个模糊的 400 清楚。
+   */
+  useUrlClientId?: boolean
+  /** 资源元数据地址（主动 auth() 时没有 401 响应可读，只能显式给） */
+  resourceMetadataUrl?: string
+}
+
 /** 每个 server 一份 provider，状态落在 ~/.nerve/mcp-auth/<server>.json */
 class FileOAuthProvider implements OAuthClientProvider {
   /** 授权 URL 生成后由外部接管（打开浏览器 / 透传给 UI） */
@@ -93,7 +128,18 @@ class FileOAuthProvider implements OAuthClientProvider {
    */
   stateValue: string = randomState()
 
-  constructor(private serverName: string) {}
+  /**
+   * 这个 server 的授权参数。全部可选，缺省时回落到 marked.dev 那一套：
+   *   scope         —— 请求的权限范围，各家不同
+   *   clientId      —— 预注册 OAuth App 的 id（平台不支持动态注册时必填）
+   *   clientSecret  —— 同上，配合 token_endpoint_auth_method 用
+   *   useUrlClientId—— 是否允许用 SEP-991 的 URL 型 client_id
+   */
+  readonly opts: OAuthProviderOptions
+
+  constructor(private serverName: string, opts: OAuthProviderOptions = {}) {
+    this.opts = opts
+  }
 
   state() {
     return this.stateValue
@@ -103,24 +149,45 @@ class FileOAuthProvider implements OAuthClientProvider {
     return CALLBACK_URL
   }
 
+  /**
+   * URL 型 client_id 的元数据地址。
+   *
+   * 只有「既没有预注册 clientId、平台又没被标记为不支持 URL 型 id」时才给。
+   * 返回 undefined 会让 SDK 走动态注册那条路 —— Linear / Sentry / Figma 它们
+   * 有 registration_endpoint，正是需要这条路。
+   */
   get clientMetadataUrl() {
+    if (this.opts.clientId) return undefined
+    if (this.opts.useUrlClientId === false) return undefined
     return CLIENT_METADATA_URL
   }
 
   get clientMetadata(): OAuthClientMetadata {
+    const secret = !!this.opts.clientSecret
     return {
       client_name: 'Nerve',
       client_uri: 'https://github.com/HXS482/nerve-agent',
       redirect_uris: [CALLBACK_URL],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-      scope: 'refs:read saves:write offline_access',
+      // Slack 只收 client_secret_post；其余平台用 none（公共客户端 + PKCE）即可
+      token_endpoint_auth_method: secret ? 'client_secret_post' : 'none',
+      scope: this.opts.scope || DEFAULT_SCOPE,
     }
   }
 
+  /** 预注册的 App：client 信息是已知的，直接给 SDK，省掉一次注册请求 */
+  get presetClientInformation(): OAuthClientInformationMixed | undefined {
+    if (!this.opts.clientId) return undefined
+    return this.opts.clientSecret
+      ? { client_id: this.opts.clientId, client_secret: this.opts.clientSecret }
+      : { client_id: this.opts.clientId }
+  }
+
   clientInformation() {
-    return readStored(this.serverName).clientInformation
+    // 预注册 App 优先：平台后台配的那份永远比本地缓存的更可信
+    // （本地缓存可能是上一次用别的 client 授权留下的）
+    return this.presetClientInformation ?? readStored(this.serverName).clientInformation
   }
 
   saveClientInformation(info: OAuthClientInformationMixed) {
@@ -250,10 +317,11 @@ export class McpOAuthManager {
   async authorize(
     serverName: string,
     serverUrl: string,
+    opts: OAuthProviderOptions = {},
   ): Promise<{ ok: true } | { ok: false; error: string; authUrl?: string }> {
     await this.ensureLoopback()
 
-    const provider = new FileOAuthProvider(serverName)
+    const provider = new FileOAuthProvider(serverName, opts)
     // 必须先生成 state 再跑 discovery，否则授权 URL 里没有 state，回调对不上等待者
     provider.stateValue = randomState()
     let authUrl: string | undefined
@@ -265,11 +333,24 @@ export class McpOAuthManager {
     // 第一段：discovery + 拼授权 URL
     try {
       /*
-       * 显式传 scope：不传的话 SDK 会退回 resource metadata 的 scopes_supported
-       * （只有 refs:read saves:write），offline_access 被丢掉，于是没有 refresh_token，
-       * token 一过期就得重新授权。
+       * scope 与 resourceMetadataUrl 都按 server 传：
+       *
+       *   - scope：各家权限名完全不同（GitHub 是 repo / read:org，Linear 是
+       *     read / write）。不传的话 SDK 会退回服务端元数据里的 scopes_supported，
+       *     那样 offline_access 会丢，于是没有 refresh_token，token 一过期就得
+       *     重新授权。
+       *   - resourceMetadataUrl：主动调 auth() 没有先发请求，也就拿不到 401 里
+       *     的 WWW-Authenticate。SDK 的默认回落是在 origin 根上找
+       *     /.well-known/oauth-protected-resource，对 GitHub（挂在 /mcp/ 下）
+       *     和 Sentry 这类都是 404。
        */
-      const result = await auth(provider, { serverUrl, scope: REQUESTED_SCOPE })
+      const result = await auth(provider, {
+        serverUrl,
+        scope: opts.scope || DEFAULT_SCOPE,
+        ...(opts.resourceMetadataUrl
+          ? { resourceMetadataUrl: new URL(opts.resourceMetadataUrl) }
+          : {}),
+      })
       if (result === 'AUTHORIZED') return { ok: true }
     } catch (err) {
       // 没有生成授权 URL 就说明是真失败；否则只是「等用户去浏览器」
@@ -293,9 +374,17 @@ export class McpOAuthManager {
 
     if (code instanceof Error) return { ok: false, error: code.message, authUrl }
 
-    // 第二段：用授权码换 token
+    // 第二段：用授权码换 token。scope 不必再传（用的是已存 discovery 状态），
+    // 但 resourceMetadataUrl 要带 —— 换 token 前 SDK 会校验授权服务器是否与
+    // 资源元数据里声明的一致
     try {
-      const result = await auth(provider, { serverUrl, authorizationCode: code })
+      const result = await auth(provider, {
+        serverUrl,
+        authorizationCode: code,
+        ...(opts.resourceMetadataUrl
+          ? { resourceMetadataUrl: new URL(opts.resourceMetadataUrl) }
+          : {}),
+      })
       if (result !== 'AUTHORIZED') return { ok: false, error: '换取 token 失败', authUrl }
       return { ok: true }
     } catch (err) {
@@ -304,8 +393,12 @@ export class McpOAuthManager {
   }
 
   /** 给 McpPool 用：连接时挂上，已授权就直接走 token，未授权则弹浏览器 */
-  createProvider(serverName: string, onAuthUrl?: (url: string) => void): OAuthClientProvider {
-    const provider = new FileOAuthProvider(serverName)
+  createProvider(
+    serverName: string,
+    opts: OAuthProviderOptions = {},
+    onAuthUrl?: (url: string) => void,
+  ): OAuthClientProvider {
+    const provider = new FileOAuthProvider(serverName, opts)
     /*
      * 池里用到的 provider 只负责「带着已有 token 连」和「token 过期时刷新」。
      * 万一没 token，SDK 会走 redirectToAuthorization —— 这里默认什么都不做，

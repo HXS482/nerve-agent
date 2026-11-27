@@ -192,6 +192,28 @@ export interface McpServerConfig {
   url?: string
   /** 远端 MCP 的请求头（如 Authorization），原样透传 */
   headers?: Record<string, string>
+
+  // ── 以下是「一键接入平台」需要的附加信息，全部可选：
+  //    手写配置的老 server 不填也能照旧工作。
+
+  /** 该 server 来自哪个平台预设（mcp-platforms.ts 的 id），仅用于 UI 回显 */
+  preset?: string
+  /** 请求的 OAuth scope，空格分隔。留空 = 交给服务端元数据 */
+  oauthScope?: string
+  /**
+   * 授权服务器的资源元数据地址。
+   * 主动调 auth() 时没有 401 响应可读，而 SDK 的默认回落
+   * （origin 根下的 /.well-known/oauth-protected-resource）对元数据挂在
+   * /mcp/ 子路径的平台是 404，所以必须能显式给。
+   */
+  resourceMetadataUrl?: string
+  /**
+   * 预注册 OAuth App 的 client_id / secret。
+   * GitHub / Slack 这类不提供动态注册，只能先在平台后台建应用。
+   * 两者都不填时，走 SEP-991 的 URL 型 client_id（我们自己那份元数据文档）。
+   */
+  clientId?: string
+  clientSecret?: string
 }
 
 /** 是否是远端（HTTP）MCP：以「有没有 url」为准，不看 type 字符串 —— 各家写法不一（http / sse / streamablehttp） */

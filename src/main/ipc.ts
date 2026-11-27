@@ -248,7 +248,13 @@ export function setupIPC(window: BrowserWindow, claude: ClaudeService, gitServic
     const servers = await getMcpServers()
     const cfg = servers[name]
     if (!cfg?.url) return { ok: false, error: `没有 ${name} 这个远端 server` }
-    const result = await oauth.authorize(name, cfg.url)
+    // 授权参数按 server 取：scope / 预注册 App / 资源元数据地址都存在配置上
+    const result = await oauth.authorize(name, cfg.url, {
+      scope: cfg.oauthScope,
+      clientId: cfg.clientId,
+      clientSecret: cfg.clientSecret,
+      resourceMetadataUrl: cfg.resourceMetadataUrl,
+    })
     // 授权成功后立刻重连，让新 token 生效
     if (result.ok) await claude.reloadMcpServers()
     return result

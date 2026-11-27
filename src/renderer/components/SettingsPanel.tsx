@@ -6,6 +6,12 @@ import {
 import { ClaudeConfig, GatewayChannel, ChannelPlatform, CHANNEL_FIELDS, CHANNEL_PLATFORM_LABELS } from '../../shared/types'
 import { useChatStore, CONVERSATION_WIDTH_MIN, CONVERSATION_WIDTH_MAX } from '../stores/chatStore'
 import { isVideoBg, isHtmlBg, htmlForIframe } from './Stage/StageBgMedia'
+import {
+  MCP_PLATFORM_PRESETS,
+  MCP_PRESETS_BY_ID,
+  platformSupportsOAuth,
+  type McpPlatformPreset,
+} from '../../shared/mcp-platforms'
 
 interface Props {
   config: ClaudeConfig
@@ -1373,6 +1379,17 @@ interface McpServerConfig {
   /** 远端 MCP 地址：有 url 就走 HTTP，不起本地进程 */
   url?: string
   headers?: Record<string, string>
+
+  // 一键接入平台用的附加信息（与 settings.ts 的 McpServerConfig 对齐）
+  /** 来自哪个平台预设 id */
+  preset?: string
+  /** 请求的 OAuth scope */
+  oauthScope?: string
+  /** 资源元数据地址（主动授权时 SDK 没法自己发现） */
+  resourceMetadataUrl?: string
+  /** 预注册 OAuth App 的 client_id / secret */
+  clientId?: string
+  clientSecret?: string
 }
 
 /** 键名像凭证的，展示时打码（env 与 headers 共用） */
@@ -1422,6 +1439,95 @@ function McpTab() {
   /** 正在走授权的 server（按钮转 pending） */
   const [authorizing, setAuthorizing] = useState<string | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  /**
+   * 一键接入的展开状态：点哪个平台就展开哪个的输入区。
+   * GitHub 这类「OAuth 要么没配 App、要么得粘 PAT」的平台，展开后给两条路。
+   */
+  const [connectOpen, setConnectOpen] = useState<string | null>(null)
+  /** 各平台表单草稿：{ 平台 id → { token, clientId, clientSecret } } */
+  const [drafts, setDrafts] = useState<Record<string, { token?: string; clientId?: string; clientSecret?: string }>>({})
+  /** 正在接入的平台（按钮转 pending） */
+  const [connecting, setConnecting] = useState<string | null>(null)
+  const [connectError, setConnectError] = useState<string | null>(null)
+
+  const setDraft = (id: string, patch: Partial<{ token: string; clientId: string; clientSecret: string }>) =>
+    setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }))
+
+  /** server 名：用平台 id，重名时加后缀避免覆盖已有配置 */
+  const serverNameFor = (preset: McpPlatformPreset) => {
+    if (!servers[preset.id]) return preset.id
+    let i = 2
+    while (servers[`${preset.id}-${i}`]) i++
+    return `${preset.id}-${i}`
+  }
+
+  /**
+   * 接入一个平台。三条路按优先级：
+   *   1. 粘了 token → 直接写 Authorization 头，不走 OAuth（最省事、最可靠）
+   *   2. 填了 clientId → 保存后立刻发起一次 OAuth 授权
+   *   3. 什么都没有、平台又支持动态注册 → 保存后立刻授权，SDK 自己注册客户端
+   */
+  const handleConnect = async (preset: McpPlatformPreset, mode: 'token' | 'oauth') => {
+    const draft = drafts[preset.id] || {}
+    setConnectError(null)
+
+    const name = serverNameFor(preset)
+    const base: McpServerConfig = {
+      type: 'http',
+      url: preset.url,
+      preset: preset.id,
+      ...(preset.scope ? { oauthScope: preset.scope } : {}),
+      ...(preset.resourceMetadataUrl ? { resourceMetadataUrl: preset.resourceMetadataUrl } : {}),
+    }
+
+    let cfg: McpServerConfig
+    if (mode === 'token') {
+      const token = (draft.token || '').trim()
+      if (!token) {
+        setConnectError(`${preset.label}：先填 token`)
+        return
+      }
+      // 已经带 Bearer 前缀就原样用，否则补上 —— 用户多半只复制了 ghp_xxx
+      cfg = {
+        ...base,
+        headers: {
+          Authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}`,
+        },
+      }
+    } else {
+      cfg = {
+        ...base,
+        ...(draft.clientId?.trim() ? { clientId: draft.clientId.trim() } : {}),
+        ...(draft.clientSecret?.trim() ? { clientSecret: draft.clientSecret.trim() } : {}),
+      }
+    }
+
+    setConnecting(preset.id)
+    try {
+      const next = { ...servers, [name]: cfg }
+      await window.claude.saveMcpServers(next)
+      setServers(next)
+
+      // token 模式到此为止；OAuth 模式紧接着弹浏览器
+      if (mode === 'oauth') {
+        const r = await window.claude.authorizeMcpServer(name)
+        if (!r.ok) {
+          setConnectError(`${preset.label}：${r.error || '授权失败'}`)
+        }
+      }
+
+      // 状态与授权态各刷新一次
+      setTimeout(() => {
+        window.claude.getMcpStatus().then((m) => setStatusMap(m || {})).catch(() => {})
+        window.claude.getMcpOAuthStatus().then((m) => setOauthMap(m || {})).catch(() => {})
+      }, 900)
+
+      setDrafts((d) => ({ ...d, [preset.id]: {} }))
+      setConnectOpen(null)
+    } finally {
+      setConnecting(null)
+    }
+  }
 
   useEffect(() => {
     window.claude.getMcpServers().then((s: Record<string, McpServerConfig>) => {
@@ -1488,9 +1594,134 @@ function McpTab() {
   }
 
   const entries = Object.entries(servers)
+  /** 已经接进来的平台 id（用来把对应卡片标成「已连接」） */
+  const connectedPresets = new Set(
+    Object.values(servers).map((c) => c.preset).filter((p): p is string => !!p),
+  )
 
   return (
     <div>
+      {/*
+       * 一键接入：列出实测能连的平台。点开哪个就填哪个的参数 ——
+       * 每个平台的授权形态不一样（有的能自己注册客户端、有的必须先在后台建
+       * OAuth App、有的只能粘 token），所以卡片里按平台能力给不同入口，
+       * 而不是让用户自己去别的文档里查 scope 和端点。
+       */}
+      <Section
+        title="Connect a platform"
+        hint="One click sets the endpoint, scope and auth for you. Token mode works immediately; OAuth opens your browser."
+      >
+        {MCP_PLATFORM_PRESETS.map((preset) => {
+          const isOpen = connectOpen === preset.id
+          const isConnected = connectedPresets.has(preset.id)
+          const draft = drafts[preset.id] || {}
+          const canOAuth = platformSupportsOAuth(preset)
+          const canToken = preset.auth === 'token' || preset.auth === 'oauth-static-or-token'
+          const busy = connecting === preset.id
+          return (
+            <div key={preset.id}>
+              <div
+                className="settings-list-row"
+                onClick={() => { setConnectOpen(isOpen ? null : preset.id); setConnectError(null) }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-on-surface)', minWidth: 74 }}>
+                  {preset.label}
+                </span>
+                <span className="truncate" style={{ fontSize: 11, color: 'var(--text-outline)', flex: 1 }}>
+                  {preset.hint}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    flexShrink: 0,
+                    minWidth: 66,
+                    textAlign: 'right',
+                    color: isConnected ? 'var(--text-success)' : 'var(--text-outline)',
+                  }}
+                >
+                  {isConnected ? 'Added' : canOAuth ? 'OAuth' : 'Token'}
+                </span>
+              </div>
+
+              {isOpen && (
+                <div className="settings-list-expand" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-outline)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                    {preset.url}
+                  </div>
+
+                  {/* 预注册 App 的两个输入框：只在不支持动态注册时才需要 */}
+                  {canOAuth && preset.auth === 'oauth-static' && (
+                    <>
+                      <Row label="Client ID" hint="这个平台不支持动态注册，需要在它后台建一个 OAuth App。">
+                        <TextInput
+                          value={draft.clientId || ''}
+                          onChange={(v) => setDraft(preset.id, { clientId: v })}
+                          placeholder="client id"
+                          mono
+                        />
+                      </Row>
+                      <Row label="Client Secret" hint="Slack 这类必须；填了走 client_secret_post。">
+                        <TextInput
+                          value={draft.clientSecret || ''}
+                          onChange={(v) => setDraft(preset.id, { clientSecret: v })}
+                          placeholder="client secret（可留空）"
+                          type="password"
+                          mono
+                        />
+                      </Row>
+                    </>
+                  )}
+
+                  {canToken && (
+                    <Row
+                      label={canOAuth ? 'Access token（更省事）' : 'Access token'}
+                      hint={preset.tokenHelp}
+                    >
+                      <TextInput
+                        value={draft.token || ''}
+                        onChange={(v) => setDraft(preset.id, { token: v })}
+                        placeholder={preset.tokenHint || 'token'}
+                        type="password"
+                        mono
+                      />
+                    </Row>
+                  )}
+
+                  <div className="flex items-center" style={{ gap: 8, flexWrap: 'wrap' }}>
+                    {canToken && (
+                      <PrimaryButton onClick={() => handleConnect(preset, 'token')} disabled={busy}>
+                        {busy ? '连接中…' : '用 token 连接'}
+                      </PrimaryButton>
+                    )}
+                    {canOAuth && (
+                      <SecondaryButton onClick={() => handleConnect(preset, 'oauth')} disabled={busy}>
+                        {busy ? '连接中…' : preset.auth === 'oauth-dcr' ? '用浏览器授权' : '用 OAuth 授权'}
+                      </SecondaryButton>
+                    )}
+                  </div>
+
+                  {canOAuth && preset.auth === 'oauth-dcr' && (
+                    <div style={{ fontSize: 10, color: 'var(--text-outline)' }}>
+                      这个平台支持动态注册客户端，不用填任何 id，点授权就会开浏览器。
+                    </div>
+                  )}
+                  {canOAuth && preset.auth === 'oauth-static' && (
+                    <div style={{ fontSize: 10, color: 'var(--text-outline)' }}>
+                      它不提供动态注册，所以要么填上面两个 id，要么直接用 token。
+                    </div>
+                  )}
+                  {connectError && connectError.startsWith(preset.label + '：') && (
+                    <div style={{ fontSize: 10, color: 'var(--text-danger)', wordBreak: 'break-all' }}>
+                      {connectError.slice(preset.label.length + 1)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </Section>
+
       <Section title="Servers" hint="Status is polled live; the Gateway reloads a few seconds after you save.">
         {entries.map(([name, cfg]) => {
           const status = MCP_STATUS_META[statusMap[name]?.status ?? 'connecting']
