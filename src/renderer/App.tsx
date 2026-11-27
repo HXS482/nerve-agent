@@ -14,7 +14,6 @@ import { SidebarToggleIcon } from './components/SidebarToggleIcon'
 import { ApprovalBar } from './components/ApprovalBar'
 import { AvatarFlight } from './components/AvatarFlight'
 import { beginAvatarFlight, useAvatarFlightStore } from './stores/avatarFlightStore'
-import { EdgeBlur } from './components/ui/EdgeBlur'
 import { SelectionActions } from './components/SelectionActions'
 import { BotAvatar as AvatarFace } from './components/BotAvatar/BotAvatar'
 import { SHAPES_BY_ID, shapeForBot } from './lib/bot-shapes'
@@ -167,7 +166,7 @@ export default function App() {
           marginLeft: sidebarOpen ? `${sidebarWidth + 2}px` : '2px',
           marginRight: rightSidebarOpen ? `${rightSidebarWidth + 4}px` : '2px',
           background: 'var(--bg-chat-surface)',
-          border: '1px solid var(--border-subtle)',
+          border: 'var(--chat-frame-border-w) solid var(--chat-frame-border)',
           borderRadius: 'var(--app-shell-radius)',
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
         }}
@@ -196,15 +195,16 @@ export default function App() {
           style={{ padding: '6px 7px', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* Left: 侧栏收起时留一个开侧栏按钮（模型岛已移到底部输入胶囊内，两模式统一）。
-              圆形胶囊：和圆角矩形相比没有「横向多出来的空白」，24×24 装一枚图标刚好 */}
+              圆形胶囊：和圆角矩形相比没有「横向多出来的空白」，26×26 装一枚图标刚好。
+              尺寸与右侧胶囊对齐（同一高度、同一图标大小），两个控件的图形留白才一致；
+              顶栏左右各留 7px 内边距，26 的圆塞进去不顶边也不显空 */}
           {!sidebarOpen && (
             <button
               onClick={() => setSidebarOpen(true)}
               className="glass-dock flex shrink-0 items-center justify-center cursor-pointer text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
-              style={{ width: 24, height: 24, padding: 0, borderRadius: 999, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              style={{ width: 26, height: 26, padding: 0, borderRadius: 999, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               title="Open sidebar"
             >
-              {/* 16px 而非默认 18：与右侧胶囊里的图标同尺寸，两个控件的图形留白才对得上 */}
               <SidebarToggleIcon size={16} />
             </button>
           )}
@@ -213,16 +213,15 @@ export default function App() {
           <div className="flex-1" />
 
           {/* Right: toggle sidebar + settings + cmd */}
-          {/* 内边距统一 3px：原来左右 8px、上下 3px，图标横向缩进几乎是纵向的三倍，
-              看着就偏。改成 2px 水平内边距（加 1px 描边 = 3px）+ 16px 图标，
-              上下 (22-16)/2 = 3px，四周等距 */}
+          {/* 内边距 3px：按钮 16×16、胶囊高 26，上下留白 (26-16)/2 = 5 = 3 + 1px 描边，
+              水平同理，四周等距。圆角 10 = 26/2 - 3，和 32→13、28→11 是同一套比例 */}
           <div
             className="flex items-center shrink-0 glass-dock"
             style={{
               padding: '0 3px',
               gap: 4,
-              borderRadius: 9,
-              height: 24,
+              borderRadius: 10,
+              height: 26,
               WebkitAppRegion: 'no-drag',
             } as React.CSSProperties}
           >
@@ -234,7 +233,7 @@ export default function App() {
             >
               <SidebarToggleIcon size={16} />
             </button>
-            <div className="w-px shrink-0" style={{ height: 10, background: 'var(--border-default)' }} />
+            <div className="w-px shrink-0" style={{ height: 11, background: 'var(--border-default)' }} />
             <button
               onClick={() => setSettingsOpen(true)}
               className="flex items-center justify-center rounded-full text-[var(--text-on-surface-variant)] hover:text-[var(--text-on-surface)] transition-colors"
@@ -279,12 +278,12 @@ export default function App() {
           </div>
         </button>
 
-        {/* Chat area
-            这一层是「框架」：EdgeBlur 的模糊层必须是滚动容器的兄弟节点，
-            才能钉在框上不跟着内容滚（见 components/ui/EdgeBlur.tsx 顶部说明） */}
-        <div className="chat-frame flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 0 }}>
+        {/* Chat area */}
+        <div className="flex-1 flex flex-col min-h-0 relative" style={{ marginTop: 0 }}>
+          {/* iOS 风格顶部渐隐：progressive blur 覆盖层（内缩与圆角随
+              --chat-frame-border-w 派生，改描边粗细时不用手改） */}
+          <div className="chat-top-fade" />
           <ChatPanel messages={claude.messages} isLoading={claude.isLoading} onSend={claude.send} />
-          <EdgeBlur position="top" height={64} maxBlur={12} />
           <ApprovalBar />
         </div>
       </main>

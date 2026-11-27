@@ -64,6 +64,12 @@
   --border-default: #2A2A2A;
   --border-strong: #3a3a3a;
   --border-subtle: rgba(255, 255, 255, 0.06);
+  /* 聊天面板描边单独一档。单独开变量是为了不动 border-subtle —— 那个还管着
+     几十处细分隔线，一起加深会把界面弄脏。
+     0.22 是量出来的：暗色下 0.10 的边框亮度只有 38（背景 13、窗口外框 42），
+     比窗口那圈 #2A2A2A 还暗，等于「内框比外框还不显眼」——反的。
+     0.22 实测亮度 66，落在窗口框之上、正文之下，才是「嵌在窗口里的一块面板」。 */
+  --chat-frame-border: rgba(255, 255, 255, 0.22);
 
   /* 状态色：成功取全 app 已在用的 #34d399，失败/警告沿用设置面板原有值，仅提到 token */
   --text-success: #34d399;
@@ -149,6 +155,9 @@
   --border-default: #e0e0e0;
   --border-strong: rgba(0, 0, 0, 0.15);
   --border-subtle: rgba(0, 0, 0, 0.06);
+  /* 见暗色主题同名注释。亮色下 0.13 已经是「清楚但不吵」的档位：
+     背景 #f8f9fa（248）上实测暗到 217，与窗口框 #e0e0e0（224）同量级。 */
+  --chat-frame-border: rgba(0, 0, 0, 0.13);
 
   /* 白底上 #34d399/#ff5f56 只有 ~2:1 对比度，浅色主题改用同色系深一档 */
   --text-success: #1a7f37;
@@ -190,6 +199,13 @@
   --radius-full: 9999px;
   --app-window-radius: 17px;
   --app-shell-radius: 16px;
+  /* 聊天面板（main）的描边宽度。抽成变量是因为它有两处必须同步：
+     面板自己的 border，以及顶部渐隐层的内缩 + 圆角补偿 ——
+     渐隐层要正好贴在描边内侧，弧线才和描边同一条。
+     取 1.5px：2px 在 1x 屏上是一整条又黑又粗的框，太抢眼；1.5px 会被抗锯齿
+     摊成 ~1px 的实际行，再配 --chat-frame-border 那一档略深的颜色，
+     细但看得清 —— 想要的是「勾了一条线」，不是「套了个框」。 */
+  --chat-frame-border-w: 1.5px;
 
   /*
    * ===== 层级（z-index）=====
@@ -2954,12 +2970,28 @@ button.tool-spot-all:hover {
     black 36px);
 }
 
-/* 聊天区「框架」：EdgeBlur 的模糊层是滚动容器的兄弟，
-   需要这一层给出裁剪上下文 + isolate，模糊才被裁在框内、不和别的层抢合成顺序。
-   （旧的单层 .chat-top-fade 已被 components/ui/EdgeBlur.tsx 取代） */
-.chat-frame {
-  overflow: hidden;
-  isolation: isolate;
+/* iOS 风格顶部渐隐：progressive blur 覆盖层
+ *
+ * 几个数字都是量出来的，别随手改：
+ *   top/left/right 内缩 = 描边宽度 —— 贴着 main 的描边内侧，不压线。
+ *   border-radius = main 圆角 - 描边宽度，弧线才和描边同一条；写大了会在角上
+ *   露缝，写小了两条弧错开半像素发毛。两者都由 --chat-frame-border-w 派生，
+ *   改描边粗细时不用再手改这里。
+ *   z-index 20 在内容之上、顶栏（30）之下：遮住滚上去的内容，但不挡按钮。
+ */
+.chat-top-fade {
+  position: absolute;
+  top: var(--chat-frame-border-w);
+  left: var(--chat-frame-border-w);
+  right: var(--chat-frame-border-w);
+  height: 56px;
+  border-radius: calc(var(--app-shell-radius) - var(--chat-frame-border-w)) calc(var(--app-shell-radius) - var(--chat-frame-border-w)) 0 0;
+  z-index: 20;
+  pointer-events: none;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
 }
 
 /* ===== 用户消息气泡 =====
@@ -4756,35 +4788,4 @@ pre.hljs {
 }
 .selection-bar-send:active {
   transform: scale(0.94);
-}
-
-/* ===== EdgeBlur：边缘渐进模糊（components/ui/EdgeBlur.tsx）=====
- *
- * 结构：一个 absolute 容器贴住边缘，里面叠 N 层各自带渐变 mask 的 backdrop-filter。
- * 越靠边缘参与叠加的层越多、模糊越强，往里逐级减少 —— 得到的是一条衰减曲线，
- * 而不是单层「高斯 + 线性遮罩」那种一刀切的直线过渡。
- *
- * 容器必须 pointer-events: none，滚轮/触摸继续落到下面的滚动区；
- * 层级压在内容之上、弹层之下，别盖住下拉菜单。
- */
-.edge-blur {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  pointer-events: none;
-  overflow: hidden;
-}
-.edge-blur[data-position='top'] {
-  top: 0;
-}
-.edge-blur[data-position='bottom'] {
-  bottom: 0;
-}
-/* 每层都铺满整条带，靠自己的 mask 决定露出哪一段 */
-.edge-blur > span {
-  position: absolute;
-  inset: 0;
-  display: block;
-  pointer-events: none;
 }
